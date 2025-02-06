@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  php:
+    image: php:8.3-fpm
+    container_name: php_fpm_project
+    volumes:
+      - ./:/var/www/html
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx_server
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/var/www/html
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - php
+    networks:
+      - app-network
+
+networks:
+  app-network:
