@@ -13,6 +13,6 @@ if (!empty($_SERVER['HTTP_REFERER'])) {
     header("Location: " . $_SERVER['HTTP_REFERER']);
     exit();
 } else {
-    header("Location: index.php"); // Перенаправлення на головну, якщо HTTP_REFERER недоступний
+    header("Location: index.html"); // Перенаправлення на головну, якщо HTTP_REFERER недоступний
     exit();
 }

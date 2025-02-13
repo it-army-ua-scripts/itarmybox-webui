@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="/image/ukraine.png" rel="icon">
     <title>ITUA</title>
     <!-- Import Google Font -->
@@ -23,12 +23,13 @@
             align-items: center;
             justify-content: center;
             color: #333;
+            padding: 20px;
         }
 
         .container {
             background: #fff;
             max-width: 960px;
-            width: 90%;
+            width: 100%;
             padding: 30px;
             border-radius: 10px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
@@ -52,11 +53,10 @@
             padding: 0;
             gap: 20px;
             flex-wrap: wrap;
+            margin-bottom: 30px;
         }
 
-        .menu li {
-            /* You can add additional styling if desired */
-        }
+        .menu li { }
 
         .menu a {
             display: inline-block;
@@ -76,8 +76,68 @@
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
         }
 
-        .content {
+        .form-container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-container h2 {
             text-align: center;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            border-color: #2c3e50;
+            outline: none;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .submit-btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background: #2c3e50;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .submit-btn:hover {
+            background: #1a252f;
         }
 
         @media (max-width: 600px) {
@@ -88,18 +148,15 @@
     </style>
 </head>
 <body>
+
 <div class="container">
-    <div class="header">
-        <img src="/image/logo.png" alt="logo" style="width: 50px">
-        <h1>Main Menu</h1>
-    </div>
     <div class="content">
-        <ul class="menu">
-            <li><a href="/status.php">Status</a></li>
-            <li><a href="tools_list.php">Tools</a></li>
-            <li><a href="update.php">Update</a></li>
-        </ul>
-    </div>
-</div>
+        <h1>Update log:</h1>
+        <?php
+        echo nl2br(shell_exec("/bin/bash update.sh 2>&1"));
+        ?>
+        <div class="menu">
+            <a href="/">Back</a>
+        </div
 </body>
 </html>
