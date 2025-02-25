@@ -6,7 +6,7 @@
     <link href="/image/ukraine.png" rel="icon">
     <title>ITUA</title>
     <!-- Import Google Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
     <style>
         /* Reset some default browser styles */
         * {
@@ -56,7 +56,8 @@
             margin-bottom: 30px;
         }
 
-        .menu li { }
+        .menu li {
+        }
 
         .menu a {
             display: inline-block;
@@ -145,6 +146,21 @@
                 flex-direction: column;
             }
         }
+        .checkbox_container {
+            margin-top: 50px;
+        }
+        /* Make checkbox bigger */
+        #autoRefreshCheckbox {
+            width: 15px;
+            height: 15px;
+            transform: scale(1.8); /* Makes it 80% bigger */
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        label {
+            font-size: 20px; /* Larger label text */
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -152,6 +168,13 @@
 <div class="container">
     <div class="content">
         <h1>Tools status:</h1>
+        <div class="checkbox_container">
+            <label>
+                <input type="checkbox" id="autoRefreshCheckbox">
+                Enable Auto Refresh (Every 5 Seconds)
+            </label>
+        </div>
+        <br/><br/>
         <?php
         $config = require 'config/config.php';
         foreach ($config['daemonNames'] as $daemon) {
@@ -167,11 +190,50 @@
             echo "Fetching logs from journalctl:<br/>";
             echo nl2br(shell_exec("sudo journalctl -u $daemon --no-pager -n 5"));
         }
-	echo "<br/>Common logs:<br/>";
-	echo nl2br(shell_exec("tail -n20 /var/log/adss.log"));
+        echo "<br/>Common logs:<br/>";
+        echo nl2br(shell_exec("tail -n20 /var/log/adss.log"));
         ?>
         <div class="menu">
             <a href="/">Back</a>
-        </div
+        </div>
+
+        <script>
+            let refreshInterval = null; // Holds the interval ID
+
+            // Function to start auto-refresh
+            function startAutoRefresh() {
+                if (!refreshInterval) {
+                    refreshInterval = setInterval(() => {
+                        location.reload();
+                    }, 5000);
+                }
+            }
+
+            // Function to stop auto-refresh
+            function stopAutoRefresh() {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+
+            // Get the checkbox element
+            const autoRefreshCheckbox = document.getElementById("autoRefreshCheckbox");
+
+            // Check if auto-refresh was enabled before page reload
+            if (localStorage.getItem("autoRefresh") === "true") {
+                autoRefreshCheckbox.checked = true;
+                startAutoRefresh(); // Start refreshing immediately
+            }
+
+            // Listen for checkbox changes
+            autoRefreshCheckbox.addEventListener("change", function () {
+                if (this.checked) {
+                    localStorage.setItem("autoRefresh", "true"); // Save state
+                    startAutoRefresh();
+                } else {
+                    localStorage.setItem("autoRefresh", "false");
+                    stopAutoRefresh();
+                }
+            });
+        </script>
 </body>
 </html>
