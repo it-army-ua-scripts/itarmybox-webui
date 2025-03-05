@@ -5,8 +5,19 @@ function startService($serviceName): void
     shell_exec("sudo systemctl daemon-reload && sudo systemctl start $serviceName 2>&1");
 }
 
+function stopService($serviceName): void
+{
+    echo shell_exec("sudo systemctl stop {$serviceName} 2>&1");
+}
+
 if (isset($_GET['daemon']) && in_array($_GET['daemon'], $config['daemonNames'])) {
-    startService($_GET['daemon']);
+    foreach ($config['daemonNames'] as $daemon){
+        if ($_GET['daemon']==$daemon) {
+            startService($daemon);
+        } else {
+            stopService($daemon);
+        }
+    }
 }
 
 if (!empty($_SERVER['HTTP_REFERER'])) {
