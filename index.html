@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link href="/image/ukraine.png" rel="icon">
+    <title>ITUA</title>
+    <!-- Import Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
+    <style>
+        /* Reset some default browser styles */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+
+        .container {
+            background: #fff;
+            max-width: 960px;
+            width: 90%;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+
+        .menu {
+            display: flex;
+            justify-content: center;
+            list-style: none;
+            padding: 0;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .menu li {
+            /* You can add additional styling if desired */
+        }
+
+        .menu a {
+            display: inline-block;
+            padding: 12px 20px;
+            font-size: 1.1rem;
+            font-weight: 500;
+            text-decoration: none;
+            color: #2c3e50;
+            background: #ecf0f1;
+            border-radius: 8px;
+            transition: background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .menu a:hover {
+            background: #bdc3c7;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .content {
+            text-align: center;
+        }
+
+        @media (max-width: 600px) {
+            .menu {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <img src="/image/logo.png" alt="logo" style="width: 50px">
+        <img src="/image/artline_logo.png" alt="artline-logo" style="width: 90px; margin-left: 20px">
+        <h1>Main Menu</h1>
+    </div>
+    <div class="content">
+        <ul class="menu">
+            <li><a href="/status.php">Status</a></li>
+            <li><a href="tools_list.php">Tools</a></li>
+            <li><a href="update.php">Update</a></li>
+        </ul>
+    </div>
+</div>
+</body>
+</html>
