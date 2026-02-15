@@ -40,6 +40,16 @@ body.padded {
     margin-bottom: 30px;
 }
 
+.header-logo {
+    height: 50px;
+    width: auto;
+    vertical-align: middle;
+}
+
+.logo-offset {
+    margin-left: 20px;
+}
+
 .header h1,
 h1 {
     font-size: 2.5rem;
