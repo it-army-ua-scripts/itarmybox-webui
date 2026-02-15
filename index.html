@@ -7,100 +7,84 @@
     <title>ITUA</title>
     <!-- Import Google Font -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
-    <style>
-        /* Reset some default browser styles */
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: 'Roboto', sans-serif;
-            min-height: 100vh;
-            background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #333;
-        }
-
-        .container {
-            background: #fff;
-            max-width: 960px;
-            width: 90%;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            color: #2c3e50;
-        }
-
-        .menu {
-            display: flex;
-            justify-content: center;
-            list-style: none;
-            padding: 0;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-
-        .menu li {
-            /* You can add additional styling if desired */
-        }
-
-        .menu a {
-            display: inline-block;
-            padding: 12px 20px;
-            font-size: 1.1rem;
-            font-weight: 500;
-            text-decoration: none;
-            color: #2c3e50;
-            background: #ecf0f1;
-            border-radius: 8px;
-            transition: background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .menu a:hover {
-            background: #bdc3c7;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-        }
-
-        .content {
-            text-align: center;
-        }
-
-        @media (max-width: 600px) {
-            .menu {
-                flex-direction: column;
-            }
-        }
-    </style>
+    <link href="/styles.css" rel="stylesheet" />
 </head>
 <body>
-<div class="container">
+<div class="container home-container">
+    <div class="lang-switcher">
+        <button type="button" class="lang-btn" id="lang-en">EN</button>
+        <button type="button" class="lang-btn" id="lang-uk">UA</button>
+    </div>
     <div class="header">
         <img src="/image/logo.png" alt="logo" style="width: 50px">
         <img src="/image/artline_logo.png" alt="artline-logo" style="width: 90px; margin-left: 20px">
-        <h1>Main Menu</h1>
+        <h1 id="title">Main Menu</h1>
     </div>
     <div class="content">
         <ul class="menu">
-            <li><a href="/status.php">Status</a></li>
-            <li><a href="tools_list.php">Tools</a></li>
-            <li><a href="update.php">Update</a></li>
+            <li><a href="/status.php" id="link-status">Status</a></li>
+            <li><a href="/tools_list.php" id="link-tools">Tools</a></li>
+            <li><a href="/update.php" id="link-update">Update</a></li>
         </ul>
     </div>
 </div>
+<script>
+    const translations = {
+        en: {
+            title: "Main Menu",
+            status: "Status",
+            tools: "Tools",
+            update: "Update"
+        },
+        uk: {
+            title: "Головне меню",
+            status: "Статус",
+            tools: "Інструменти",
+            update: "Оновлення"
+        }
+    };
+
+    const langEnBtn = document.getElementById("lang-en");
+    const langUkBtn = document.getElementById("lang-uk");
+    const titleEl = document.getElementById("title");
+    const statusEl = document.getElementById("link-status");
+    const toolsEl = document.getElementById("link-tools");
+    const updateEl = document.getElementById("link-update");
+
+    function getCookie(name) {
+        const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
+        return parts ? decodeURIComponent(parts.split("=")[1]) : null;
+    }
+
+    function updateLinks(lang) {
+        statusEl.href = "/status.php?lang=" + encodeURIComponent(lang);
+        toolsEl.href = "/tools_list.php?lang=" + encodeURIComponent(lang);
+        updateEl.href = "/update.php?lang=" + encodeURIComponent(lang);
+    }
+
+    function applyLang(lang) {
+        const activeLang = (lang === "uk" || lang === "en") ? lang : "en";
+        const text = translations[activeLang];
+        titleEl.textContent = text.title;
+        statusEl.textContent = text.status;
+        toolsEl.textContent = text.tools;
+        updateEl.textContent = text.update;
+        langEnBtn.classList.toggle("active", activeLang === "en");
+        langUkBtn.classList.toggle("active", activeLang === "uk");
+        updateLinks(activeLang);
+    }
+
+    function setLang(lang) {
+        document.cookie = "lang=" + encodeURIComponent(lang) + "; path=/; max-age=31536000";
+        applyLang(lang);
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const initialLang = params.get("lang") || getCookie("lang") || "en";
+    applyLang(initialLang);
+
+    langEnBtn.addEventListener("click", () => setLang("en"));
+    langUkBtn.addEventListener("click", () => setLang("uk"));
+</script>
 </body>
 </html>
