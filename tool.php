@@ -1,5 +1,41 @@
 <?php
 require_once 'i18n.php';
+$config = require 'config/config.php';
+
+function getServiceLogs(string $serviceName): string
+{
+    $serviceSafe = escapeshellarg($serviceName);
+    $logs = (string)shell_exec("sudo -n journalctl -u $serviceSafe --no-pager -n 5 2>/dev/null");
+    if (trim($logs) === '') {
+        $logs = (string)shell_exec("journalctl -u $serviceSafe --no-pager -n 5 2>/dev/null");
+    }
+    if (trim($logs) === '') {
+        $logs = "No journal entries available for this service.";
+    }
+    $logs = preg_replace('/^[ \t]+/m', '', $logs) ?? $logs;
+    return $logs;
+}
+
+if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
+    header('Content-Type: application/json; charset=UTF-8');
+    $daemon = $_GET['daemon'] ?? '';
+    if (!in_array($daemon, $config['daemonNames'], true)) {
+        echo json_encode(['ok' => false], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    $daemonSafe = escapeshellarg($daemon);
+    $status = trim((string)shell_exec("systemctl is-active -- $daemonSafe"));
+    echo json_encode(
+        [
+            'ok' => true,
+            'status' => $status,
+            'logs' => getServiceLogs($daemon)
+        ],
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    );
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -17,8 +53,6 @@ require_once 'i18n.php';
 <div class="container">
     <div class="content">
         <?php
-        $config = require 'config/config.php';
-
         function getConfigStringFromServiceFile(string $serviceName): string
         {
             $pattern = '/ExecStart=/';
@@ -141,7 +175,8 @@ require_once 'i18n.php';
             }
             // Fetch recent logs
             echo "<br/>" . htmlspecialchars(t('fetching_logs'), ENT_QUOTES, 'UTF-8') . "<br/>";
-            echo nl2br((string)shell_exec("sudo journalctl -u " . escapeshellarg($daemonName) . " --no-pager -n 5"));
+            $initialLogs = getServiceLogs($daemonName);
+            echo '<div class="log-box tool-log-box" id="daemon-log">' . htmlspecialchars($initialLogs, ENT_QUOTES, 'UTF-8') . '</div>';
             echo "<br/><h2>" . htmlspecialchars(t('settings'), ENT_QUOTES, 'UTF-8') . "</h2>";
             echo '<div class="form-container">';
             include "forms/" . $daemonName . ".php";
@@ -155,6 +190,39 @@ require_once 'i18n.php';
         </div>
     </div>
 </div>
+<?php if (isset($daemonName) && in_array($daemonName, $config['daemonNames'], true)): ?>
+<script>
+    const daemonLogState = { text: "" };
+    const daemonLogEl = document.getElementById("daemon-log");
+    const daemonName = <?= json_encode($daemonName, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const ajaxUrl = <?= json_encode(url_with_lang('/tool.php?ajax_logs=1&daemon=' . rawurlencode($daemonName)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
+    function appendOrReplace(el, newText) {
+        const oldText = daemonLogState.text || "";
+        if (newText.startsWith(oldText)) {
+            el.textContent += newText.slice(oldText.length);
+        } else {
+            el.textContent = newText;
+        }
+        daemonLogState.text = newText;
+        el.scrollTop = el.scrollHeight;
+    }
+
+    async function refreshLogs() {
+        try {
+            const response = await fetch(ajaxUrl, { cache: "no-store" });
+            const data = await response.json();
+            if (!data || !data.ok) {
+                return;
+            }
+            appendOrReplace(daemonLogEl, data.logs || "");
+        } catch (e) {
+        }
+    }
+
+    appendOrReplace(daemonLogEl, daemonLogEl.textContent || "");
+    setInterval(refreshLogs, 2000);
+</script>
+<?php endif; ?>
 </body>
 </html>

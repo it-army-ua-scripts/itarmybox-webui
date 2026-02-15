@@ -40,14 +40,24 @@ body.padded {
     margin-bottom: 30px;
 }
 
-.header-logo {
-    height: 50px;
-    width: auto;
-    vertical-align: middle;
+.logo-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
 }
 
-.logo-offset {
-    margin-left: 20px;
+.header-logo {
+    height: clamp(40px, 10vw, 56px);
+    width: auto;
+    max-width: 52vw;
+    vertical-align: middle;
+    object-fit: contain;
+}
+
+.header-logo-artline {
+    height: clamp(68px, 18vw, 92px);
 }
 
 .header h1,
@@ -229,9 +239,15 @@ h1 {
     height: 200px;
     overflow-y: auto;
     white-space: pre-wrap;
+    text-align: left;
     font-family: Consolas, "Courier New", monospace;
     font-size: 13px;
     line-height: 1.4;
+}
+
+.tool-log-box {
+    text-align: left !important;
+    white-space: pre-line;
 }
 
 .status-page .menu {
@@ -242,5 +258,14 @@ h1 {
 @media (max-width: 600px) {
     .menu {
         flex-direction: column;
+    }
+
+    .header-logo {
+        height: clamp(38px, 13vw, 52px);
+        max-width: 56vw;
+    }
+
+    .header-logo-artline {
+        height: clamp(64px, 21vw, 86px);
     }
 }
