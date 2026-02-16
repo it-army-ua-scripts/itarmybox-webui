@@ -145,6 +145,19 @@ function getServiceLogsRaw(string $module, int $lines): string
     return runCommand("journalctl -u $service --no-pager -o cat -n $lines", $code);
 }
 
+function knownLogFileByModule(string $module): ?string
+{
+    // From ADSS unit files:
+    // - mhddos/distress append to /var/log/adss.log
+    // - x100 appends to /opt/itarmy/.../x100-log-short.txt
+    static $map = [
+        'mhddos' => '/var/log/adss.log',
+        'distress' => '/var/log/adss.log',
+        'x100' => '/opt/itarmy/x100-for-docker/put-your-ovpn-files-here/x100-log-short.txt',
+    ];
+    return $map[$module] ?? null;
+}
+
 function parseStandardOutputPath(string $value): ?string
 {
     $value = trim($value);
@@ -166,6 +179,11 @@ function parseStandardOutputPath(string $value): ?string
 
 function getServiceLogFile(string $module): ?string
 {
+    $known = knownLogFileByModule($module);
+    if (is_string($known) && $known !== '') {
+        return $known;
+    }
+
     $service = escapeshellarg($module . '.service');
     $value = runCommand("systemctl show -p StandardOutput --value $service", $code);
     if ($code !== 0) {
