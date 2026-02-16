@@ -4,6 +4,7 @@
     $distressFloodControlsEnabled = $distressUseMyIp > 0;
     $distressDisableUdpFlood = (string)($currentAdjustableParams['disable-udp-flood'] ?? '0');
     $distressUdpPacketSizeEnabled = $distressFloodControlsEnabled && $distressDisableUdpFlood === '0';
+    $distressPacketsPerConnEnabled = $distressFloodControlsEnabled && $distressDisableUdpFlood === '0';
     $yesLabel = htmlspecialchars(t('yes'), ENT_QUOTES, 'UTF-8');
     $noLabel = htmlspecialchars(t('no'), ENT_QUOTES, 'UTF-8');
     ?>
@@ -54,7 +55,7 @@
     </div>
     <div class="form-group">
         <label for="direct-udp-mixed-flood-packets-per-conn"><?= htmlspecialchars(t('packets_per_connection'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="number" id="direct-udp-mixed-flood-packets-per-conn" name="direct-udp-mixed-flood-packets-per-conn" min="1" max="100" value="<?= $currentAdjustableParams['direct-udp-mixed-flood-packets-per-conn']??"" ?>">
+        <input type="number" id="direct-udp-mixed-flood-packets-per-conn" name="direct-udp-mixed-flood-packets-per-conn" min="1" max="100" value="<?= $currentAdjustableParams['direct-udp-mixed-flood-packets-per-conn']??"" ?>"<?= $distressPacketsPerConnEnabled ? '' : ' disabled' ?>>
     </div>
     <div class="form-group">
         <label for="proxies-path"><?= htmlspecialchars(t('proxies_file_path'), ENT_QUOTES, 'UTF-8') ?></label>
@@ -76,6 +77,7 @@
         ];
         const disableUdpFloodEl = document.getElementById("disable-udp-flood");
         const udpPacketSizeEl = document.getElementById("udp-packet-size");
+        const packetsPerConnEl = document.getElementById("direct-udp-mixed-flood-packets-per-conn");
 
         function refreshFloodControlsState() {
             const useMyIpValue = parseInt(useMyIpEl.value || "0", 10);
@@ -89,6 +91,10 @@
             if (udpPacketSizeEl) {
                 const udpFloodIsDisabled = disableUdpFloodEl && disableUdpFloodEl.value === "1";
                 udpPacketSizeEl.disabled = !enabled || udpFloodIsDisabled;
+            }
+            if (packetsPerConnEl) {
+                const udpFloodIsDisabled = disableUdpFloodEl && disableUdpFloodEl.value === "1";
+                packetsPerConnEl.disabled = !enabled || udpFloodIsDisabled;
             }
         }
 
