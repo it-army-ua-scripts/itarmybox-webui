@@ -18,9 +18,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     $commonLogs = '';
     if ($activeModule !== null) {
         $activeModuleSafe = escapeshellarg($activeModule);
-        $commonLogs = (string)shell_exec("journalctl -u $activeModuleSafe --no-pager -n 80 2>/dev/null");
+        $commonLogs = (string)shell_exec("sudo -n journalctl -u $activeModuleSafe --no-pager -n 80 2>/dev/null");
         if (trim($commonLogs) === '') {
-            $commonLogs = (string)shell_exec("journalctl -u $activeModuleSafe --no-pager -n 80 2>/dev/null");
+            $commonLogs = (string)shell_exec("sudo -n journalctl -u $activeModuleSafe --no-pager -n 80 2>/dev/null");
         }
     }
 

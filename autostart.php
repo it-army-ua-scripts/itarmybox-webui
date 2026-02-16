@@ -9,7 +9,7 @@ function getCurrentAutostartDaemon(array $daemonNames): ?string
 {
     foreach ($daemonNames as $daemon) {
         $daemonSafe = escapeshellarg($daemon . '.service');
-        $state = trim((string)shell_exec("systemctl is-enabled $daemonSafe 2>/dev/null"));
+        $state = trim((string)shell_exec("sudo -n systemctl is-enabled $daemonSafe 2>/dev/null"));
         if ($state === 'enabled') {
             return $daemon;
         }
@@ -22,7 +22,7 @@ function setAutostartDaemon(array $daemonNames, ?string $selectedDaemon): bool
     $ok = true;
     foreach ($daemonNames as $daemon) {
         $daemonSafe = escapeshellarg($daemon . '.service');
-        $result = shell_exec("systemctl disable $daemonSafe 2>/dev/null");
+        $result = shell_exec("sudo -n systemctl disable $daemonSafe 2>/dev/null");
         if ($result === null) {
             $ok = false;
         }
@@ -30,7 +30,7 @@ function setAutostartDaemon(array $daemonNames, ?string $selectedDaemon): bool
 
     if ($selectedDaemon !== null) {
         $selectedSafe = escapeshellarg($selectedDaemon . '.service');
-        $result = shell_exec("systemctl enable $selectedSafe 2>/dev/null");
+        $result = shell_exec("sudo -n systemctl enable $selectedSafe 2>/dev/null");
         if ($result === null) {
             $ok = false;
         }
@@ -45,9 +45,34 @@ function parseHmToParts(string $hm): array
     return [(int)$h, (int)$m];
 }
 
+function normalizeScheduleDays(array $rawDays): array
+{
+    $valid = [];
+    foreach ($rawDays as $day) {
+        if (preg_match('/^[0-6]$/', (string)$day) === 1) {
+            $valid[(int)$day] = true;
+        }
+    }
+    $days = array_keys($valid);
+    sort($days);
+    return $days;
+}
+
+function parseDowField(string $dowField): ?array
+{
+    if ($dowField === '*') {
+        return [0, 1, 2, 3, 4, 5, 6];
+    }
+    if (preg_match('/^[0-6](?:,[0-6])*$/', $dowField) !== 1) {
+        return null;
+    }
+    $parts = explode(',', $dowField);
+    return normalizeScheduleDays($parts);
+}
+
 function getRawCrontab(): string
 {
-    $raw = shell_exec('crontab -l 2>/dev/null');
+    $raw = shell_exec('sudo -n crontab -l 2>/dev/null');
     return is_string($raw) ? $raw : '';
 }
 
@@ -79,7 +104,7 @@ function getCurrentSchedule(array $daemonNames): ?array
         return null;
     }
 
-    $pattern = '/^#\s*ITARMYBOX\s+MODULE=(?<module>[a-zA-Z0-9_-]+)\s+DOW=(?<dow>[0-6])\s+START=(?<start>[0-2][0-9]:[0-5][0-9])\s+STOP=(?<stop>[0-2][0-9]:[0-5][0-9])$/m';
+    $pattern = '/^#\s*ITARMYBOX\s+MODULE=(?<module>[a-zA-Z0-9_-]+)\s+DOW=(?<dow>\*|[0-6](?:,[0-6])*)\s+START=(?<start>[0-2][0-9]:[0-5][0-9])\s+STOP=(?<stop>[0-2][0-9]:[0-5][0-9])$/m';
     if (!preg_match($pattern, $crontab, $m)) {
         return null;
     }
@@ -89,28 +114,38 @@ function getCurrentSchedule(array $daemonNames): ?array
         return null;
     }
 
+    $days = parseDowField($m['dow']);
+    if ($days === null || $days === []) {
+        return null;
+    }
+
     return [
         'module' => $module,
-        'dow' => (int)$m['dow'],
+        'days' => $days,
         'start' => $m['start'],
         'stop' => $m['stop'],
     ];
 }
 
-function saveSchedule(?string $module, ?int $dow, ?string $startTime, ?string $stopTime): bool
+function saveSchedule(?string $module, ?array $days, ?string $startTime, ?string $stopTime): bool
 {
     $base = stripScheduleBlock(getRawCrontab());
     $new = $base;
 
-    if ($module !== null && $dow !== null && $startTime !== null && $stopTime !== null) {
+    if ($module !== null && $days !== null && $startTime !== null && $stopTime !== null) {
+        $days = normalizeScheduleDays($days);
+        if ($days === []) {
+            return false;
+        }
         [$startH, $startM] = parseHmToParts($startTime);
         [$stopH, $stopM] = parseHmToParts($stopTime);
         $service = $module . '.service';
+        $dowCron = (count($days) === 7) ? '*' : implode(',', $days);
         $block = [
             SCHEDULE_BEGIN_MARKER,
-            "# ITARMYBOX MODULE=$module DOW=$dow START=$startTime STOP=$stopTime",
-            "$startM $startH * * $dow systemctl start $service >/dev/null 2>&1",
-            "$stopM $stopH * * $dow systemctl stop $service >/dev/null 2>&1",
+            "# ITARMYBOX MODULE=$module DOW=$dowCron START=$startTime STOP=$stopTime",
+            "$startM $startH * * $dowCron sudo -n systemctl start $service >/dev/null 2>&1",
+            "$stopM $stopH * * $dowCron sudo -n systemctl stop $service >/dev/null 2>&1",
             SCHEDULE_END_MARKER,
         ];
         $new .= ($new === '' ? '' : "\n") . implode("\n", $block);
@@ -128,7 +163,7 @@ function saveSchedule(?string $module, ?int $dow, ?string $startTime, ?string $s
     }
 
     $exitCode = 1;
-    exec('crontab ' . escapeshellarg($tmp) . ' 2>/dev/null', $out, $exitCode);
+    exec('sudo -n crontab ' . escapeshellarg($tmp) . ' 2>/dev/null', $out, $exitCode);
     @unlink($tmp);
 
     return $exitCode === 0;
@@ -155,17 +190,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ok = saveSchedule(null, null, null, null);
         } else {
             $module = $_POST['schedule_module'] ?? '';
-            $dowRaw = $_POST['schedule_day'] ?? '';
+            $dayMode = $_POST['schedule_day_mode'] ?? 'all';
+            $rawDays = $_POST['schedule_days'] ?? [];
+            $days = [];
+            if ($dayMode === 'all') {
+                $days = [0, 1, 2, 3, 4, 5, 6];
+            } elseif ($dayMode === 'specific' && is_array($rawDays)) {
+                $days = normalizeScheduleDays($rawDays);
+            }
             $startTime = $_POST['schedule_start'] ?? '';
             $stopTime = $_POST['schedule_stop'] ?? '';
             $validTime = '/^(?:[01]\d|2[0-3]):[0-5]\d$/';
             if (
                 in_array($module, $daemonNames, true) &&
-                preg_match('/^[0-6]$/', $dowRaw) === 1 &&
+                $days !== [] &&
                 preg_match($validTime, $startTime) === 1 &&
                 preg_match($validTime, $stopTime) === 1
             ) {
-                $ok = saveSchedule($module, (int)$dowRaw, $startTime, $stopTime);
+                $ok = saveSchedule($module, $days, $startTime, $stopTime);
             }
         }
         $message = $ok ? t('schedule_updated') : t('schedule_update_failed');
@@ -184,6 +226,16 @@ $days = [
     5 => t('day_friday'),
     6 => t('day_saturday'),
 ];
+$currentScheduleDays = $currentSchedule['days'] ?? [1];
+$isAllDays = count($currentScheduleDays) === 7;
+$scheduleDayMode = $isAllDays ? 'all' : 'specific';
+$dayLabels = [];
+foreach ($currentScheduleDays as $dayNum) {
+    if (isset($days[$dayNum])) {
+        $dayLabels[] = $days[$dayNum];
+    }
+}
+$daySummary = $isAllDays ? t('all_days') : implode(', ', $dayLabels);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -240,7 +292,7 @@ $days = [
                     echo htmlspecialchars(
                         t('schedule_current', [
                             'module' => strtoupper($currentSchedule['module']),
-                            'day' => $days[$currentSchedule['dow']] ?? '',
+                            'day' => $daySummary,
                             'start' => $currentSchedule['start'],
                             'stop' => $currentSchedule['stop'],
                         ]),
@@ -274,14 +326,29 @@ $days = [
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="schedule_day"><?= htmlspecialchars(t('schedule_day'), ENT_QUOTES, 'UTF-8') ?></label>
-                    <select id="schedule_day" name="schedule_day">
-                        <?php foreach ($days as $num => $label): ?>
-                            <option value="<?= $num ?>"<?= (($currentSchedule['dow'] ?? 1) === $num) ? ' selected' : '' ?>>
-                                <?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>
-                            </option>
-                        <?php endforeach; ?>
+                    <label for="schedule_day_mode"><?= htmlspecialchars(t('schedule_day_mode'), ENT_QUOTES, 'UTF-8') ?></label>
+                    <select id="schedule_day_mode" name="schedule_day_mode">
+                        <option value="all"<?= $scheduleDayMode === 'all' ? ' selected' : '' ?>><?= htmlspecialchars(t('schedule_all_days'), ENT_QUOTES, 'UTF-8') ?></option>
+                        <option value="specific"<?= $scheduleDayMode === 'specific' ? ' selected' : '' ?>><?= htmlspecialchars(t('schedule_specific_days'), ENT_QUOTES, 'UTF-8') ?></option>
                     </select>
+                </div>
+                <div class="form-group" id="schedule_days_group">
+                    <label><?= htmlspecialchars(t('schedule_select_days'), ENT_QUOTES, 'UTF-8') ?></label>
+                    <div class="schedule-days-grid">
+                        <?php foreach ($days as $num => $label): ?>
+                            <label class="schedule-day-item" for="schedule_day_<?= $num ?>">
+                                <input
+                                    id="schedule_day_<?= $num ?>"
+                                    class="schedule-day-checkbox"
+                                    type="checkbox"
+                                    name="schedule_days[]"
+                                    value="<?= $num ?>"
+                                    <?= in_array($num, $currentScheduleDays, true) ? 'checked' : '' ?>
+                                >
+                                <span><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
                 <div class="form-row-two">
                     <div class="form-group">
@@ -306,7 +373,9 @@ $days = [
 <script>
 (() => {
     const enabledEl = document.getElementById('schedule_enabled');
-    const toggledIds = ['schedule_module', 'schedule_day', 'schedule_start', 'schedule_stop'];
+    const dayModeEl = document.getElementById('schedule_day_mode');
+    const dayCheckboxes = Array.from(document.querySelectorAll('.schedule-day-checkbox'));
+    const toggledIds = ['schedule_module', 'schedule_day_mode', 'schedule_start', 'schedule_stop'];
     if (!enabledEl) {
         return;
     }
@@ -318,8 +387,15 @@ $days = [
                 el.disabled = !enabled;
             }
         }
+        const specificMode = dayModeEl && dayModeEl.value === 'specific';
+        for (const el of dayCheckboxes) {
+            el.disabled = !enabled || !specificMode;
+        }
     };
     enabledEl.addEventListener('change', update);
+    if (dayModeEl) {
+        dayModeEl.addEventListener('change', update);
+    }
     update();
 })();
 </script>
