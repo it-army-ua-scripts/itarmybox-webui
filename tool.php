@@ -76,10 +76,23 @@ if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
         {
             $configAsArray = str_getcsv($configString, ' ');
             $currentAdjustableParams = [];
+            $aliases = [
+                'ifaces' => ['bind'],
+                'bind' => ['ifaces']
+            ];
             foreach ($adjustableParams as $adjustableParam) {
                 foreach ($configAsArray as $key => $param) {
                     if ('--' . $adjustableParam == $param) {
                         $currentAdjustableParams[$adjustableParam] = $configAsArray[$key + 1];
+                    }
+                }
+                if (!isset($currentAdjustableParams[$adjustableParam]) && isset($aliases[$adjustableParam])) {
+                    foreach ($aliases[$adjustableParam] as $alias) {
+                        foreach ($configAsArray as $key => $param) {
+                            if ('--' . $alias == $param) {
+                                $currentAdjustableParams[$adjustableParam] = $configAsArray[$key + 1];
+                            }
+                        }
                     }
                 }
             }
@@ -89,13 +102,31 @@ if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
         function updateServiceConfigParams(string $configString, array $updatedParams): array
         {
             $configAsArray = str_getcsv($configString, ' ');
+            $aliases = [
+                'ifaces' => ['bind'],
+                'bind' => ['ifaces']
+            ];
             foreach ($updatedParams as $updatedParamKey => $updatedParam) {
+                $updatedParam = trim((string)$updatedParam);
+                $allKeys = array_merge([$updatedParamKey], $aliases[$updatedParamKey] ?? []);
+                $found = false;
+
                 foreach ($configAsArray as $key => $param) {
-                    if ('--' . $updatedParamKey == $param) {
-                        $configAsArray[$key + 1] = $updatedParam;
+                    foreach ($allKeys as $optionKey) {
+                        if ('--' . $optionKey === $param) {
+                            $found = true;
+                            if ($updatedParam === '') {
+                                unset($configAsArray[$key], $configAsArray[$key + 1]);
+                            } else {
+                                $configAsArray[$key] = '--' . $updatedParamKey;
+                                $configAsArray[$key + 1] = $updatedParam;
+                            }
+                        }
                     }
                 }
-                if (!in_array('--' . $updatedParamKey, $configAsArray)) {
+
+                $configAsArray = array_values($configAsArray);
+                if ($updatedParam !== '' && !$found) {
                     $configAsArray[] = '--' . $updatedParamKey;
                     $configAsArray[] = $updatedParam;
                 }

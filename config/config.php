@@ -6,9 +6,12 @@ return [
     'adjustableParams' => [
         'mhddos' => [
             'user-id',
+            'lang',
             'copies',
             'use-my-ip',
-            'threads'
+            'threads',
+            'proxies',
+            'ifaces'
         ],
         'distress' => [
             'user-id',

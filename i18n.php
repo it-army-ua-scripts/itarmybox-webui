@@ -55,6 +55,9 @@ function t(string $key, array $vars = []): string
             'number_of_copies' => 'Number of copies:',
             'percentage_personal_ip' => 'Percentage of personal IP:',
             'threads' => 'Threads:',
+            'language' => 'Language (ua | en | es | de | pl | it):',
+            'proxies_path_or_url' => 'Proxies (file path or URL):',
+            'network_interfaces' => 'Network interfaces (space-separated):',
             'number_tor_connections' => 'Number of Tor connections:',
             'number_task_creators' => 'Number of task creators:'
         ],

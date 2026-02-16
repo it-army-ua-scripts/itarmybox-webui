@@ -142,6 +142,7 @@ h1 {
 }
 
 .form-group input,
+.form-group select,
 .form-group textarea {
     width: 100%;
     padding: 10px;
@@ -152,6 +153,7 @@ h1 {
 }
 
 .form-group input:focus,
+.form-group select:focus,
 .form-group textarea:focus {
     border-color: #2c3e50;
     outline: none;
