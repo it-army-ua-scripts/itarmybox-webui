@@ -2,6 +2,8 @@
     <?php
     $distressUseMyIp = (int)($currentAdjustableParams['use-my-ip'] ?? 0);
     $distressFloodControlsEnabled = $distressUseMyIp > 0;
+    $yesLabel = htmlspecialchars(t('yes'), ENT_QUOTES, 'UTF-8');
+    $noLabel = htmlspecialchars(t('no'), ENT_QUOTES, 'UTF-8');
     ?>
     <div class="form-group">
         <label for="user-id"><?= htmlspecialchars(t('user_id_integer'), ENT_QUOTES, 'UTF-8') ?></label>
@@ -24,24 +26,24 @@
         <label for="enable-icmp-flood"><?= htmlspecialchars(t('enable_icmp_flood'), ENT_QUOTES, 'UTF-8') ?></label>
         <select id="enable-icmp-flood" name="enable-icmp-flood"<?= $distressFloodControlsEnabled ? '' : ' disabled' ?>>
             <?php $enableIcmp = (string)($currentAdjustableParams['enable-icmp-flood'] ?? '0'); ?>
-            <option value="0"<?= $enableIcmp === '0' ? ' selected' : '' ?>>0</option>
-            <option value="1"<?= $enableIcmp === '1' ? ' selected' : '' ?>>1</option>
+            <option value="0"<?= $enableIcmp === '0' ? ' selected' : '' ?>><?= $noLabel ?></option>
+            <option value="1"<?= $enableIcmp === '1' ? ' selected' : '' ?>><?= $yesLabel ?></option>
         </select>
     </div>
     <div class="form-group">
         <label for="enable-packet-flood"><?= htmlspecialchars(t('enable_packet_flood'), ENT_QUOTES, 'UTF-8') ?></label>
         <select id="enable-packet-flood" name="enable-packet-flood"<?= $distressFloodControlsEnabled ? '' : ' disabled' ?>>
             <?php $enablePacket = (string)($currentAdjustableParams['enable-packet-flood'] ?? '0'); ?>
-            <option value="0"<?= $enablePacket === '0' ? ' selected' : '' ?>>0</option>
-            <option value="1"<?= $enablePacket === '1' ? ' selected' : '' ?>>1</option>
+            <option value="0"<?= $enablePacket === '0' ? ' selected' : '' ?>><?= $noLabel ?></option>
+            <option value="1"<?= $enablePacket === '1' ? ' selected' : '' ?>><?= $yesLabel ?></option>
         </select>
     </div>
     <div class="form-group">
         <label for="disable-udp-flood"><?= htmlspecialchars(t('disable_udp_flood'), ENT_QUOTES, 'UTF-8') ?></label>
         <select id="disable-udp-flood" name="disable-udp-flood"<?= $distressFloodControlsEnabled ? '' : ' disabled' ?>>
             <?php $disableUdp = (string)($currentAdjustableParams['disable-udp-flood'] ?? '0'); ?>
-            <option value="0"<?= $disableUdp === '0' ? ' selected' : '' ?>>0</option>
-            <option value="1"<?= $disableUdp === '1' ? ' selected' : '' ?>>1</option>
+            <option value="0"<?= $disableUdp === '0' ? ' selected' : '' ?>><?= $noLabel ?></option>
+            <option value="1"<?= $disableUdp === '1' ? ' selected' : '' ?>><?= $yesLabel ?></option>
         </select>
     </div>
     <div class="form-group">
