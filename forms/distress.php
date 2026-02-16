@@ -2,6 +2,8 @@
     <?php
     $distressUseMyIp = (int)($currentAdjustableParams['use-my-ip'] ?? 0);
     $distressFloodControlsEnabled = $distressUseMyIp > 0;
+    $distressDisableUdpFlood = (string)($currentAdjustableParams['disable-udp-flood'] ?? '0');
+    $distressUdpPacketSizeEnabled = $distressFloodControlsEnabled && $distressDisableUdpFlood === '0';
     $yesLabel = htmlspecialchars(t('yes'), ENT_QUOTES, 'UTF-8');
     $noLabel = htmlspecialchars(t('no'), ENT_QUOTES, 'UTF-8');
     ?>
@@ -48,7 +50,7 @@
     </div>
     <div class="form-group">
         <label for="udp-packet-size"><?= htmlspecialchars(t('udp_packet_size'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="number" id="udp-packet-size" name="udp-packet-size" min="576" max="1420" value="<?= $currentAdjustableParams['udp-packet-size']??"" ?>">
+        <input type="number" id="udp-packet-size" name="udp-packet-size" min="576" max="1420" value="<?= $currentAdjustableParams['udp-packet-size']??"" ?>"<?= $distressUdpPacketSizeEnabled ? '' : ' disabled' ?>>
     </div>
     <div class="form-group">
         <label for="direct-udp-mixed-flood-packets-per-conn"><?= htmlspecialchars(t('packets_per_connection'), ENT_QUOTES, 'UTF-8') ?></label>
@@ -72,6 +74,8 @@
             document.getElementById("enable-packet-flood"),
             document.getElementById("disable-udp-flood")
         ];
+        const disableUdpFloodEl = document.getElementById("disable-udp-flood");
+        const udpPacketSizeEl = document.getElementById("udp-packet-size");
 
         function refreshFloodControlsState() {
             const useMyIpValue = parseInt(useMyIpEl.value || "0", 10);
@@ -82,11 +86,18 @@
                 }
                 el.disabled = !enabled;
             });
+            if (udpPacketSizeEl) {
+                const udpFloodIsDisabled = disableUdpFloodEl && disableUdpFloodEl.value === "1";
+                udpPacketSizeEl.disabled = !enabled || udpFloodIsDisabled;
+            }
         }
 
         if (useMyIpEl) {
             useMyIpEl.addEventListener("input", refreshFloodControlsState);
             useMyIpEl.addEventListener("change", refreshFloodControlsState);
+            if (disableUdpFloodEl) {
+                disableUdpFloodEl.addEventListener("change", refreshFloodControlsState);
+            }
             refreshFloodControlsState();
         }
     })();
