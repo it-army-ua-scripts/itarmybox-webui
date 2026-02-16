@@ -18,6 +18,10 @@ body.padded {
     padding: 20px;
 }
 
+body {
+    padding-bottom: 56px;
+}
+
 .container {
     background: #fff;
     max-width: 960px;
@@ -270,4 +274,24 @@ h1 {
     .header-logo-artline {
         height: clamp(64px, 21vw, 86px);
     }
+}
+
+.app-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    text-align: center;
+    font-size: 0.85rem;
+    color: #2c3e50;
+    background: rgba(245, 247, 250, 0.92);
+    padding: 8px 10px;
+    border-top: 1px solid rgba(44, 62, 80, 0.15);
+    z-index: 50;
+}
+
+.app-footer a {
+    color: #2c3e50;
+    font-weight: 500;
+    text-decoration: underline;
 }

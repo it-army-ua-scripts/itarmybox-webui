@@ -29,5 +29,6 @@ require_once 'i18n.php';
     </div>
 </div>
 
+<footer class="app-footer">&copy; 2022-<?= date('Y') ?> IT Army of Ukraine. <?= htmlspecialchars(t('footer_slogan'), ENT_QUOTES, 'UTF-8') ?>. <a href="https://itarmy.com.ua/" target="_blank" rel="noopener noreferrer">itarmy.com.ua</a></footer>
 </body>
 </html>

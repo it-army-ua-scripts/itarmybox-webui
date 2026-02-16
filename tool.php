@@ -350,5 +350,6 @@ if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
     setInterval(refreshLogs, 2000);
 </script>
 <?php endif; ?>
+<footer class="app-footer">&copy; 2022-<?= date('Y') ?> IT Army of Ukraine. <?= htmlspecialchars(t('footer_slogan'), ENT_QUOTES, 'UTF-8') ?>. <a href="https://itarmy.com.ua/" target="_blank" rel="noopener noreferrer">itarmy.com.ua</a></footer>
 </body>
 </html>

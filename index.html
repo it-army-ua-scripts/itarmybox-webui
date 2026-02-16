@@ -36,13 +36,15 @@
             title: "Main Menu",
             status: "Status",
             tools: "Tools",
-            update: "Update"
+            update: "Update",
+            footerSlogan: "Together to freedom"
         },
         uk: {
             title: "Головне меню",
             status: "Статус",
             tools: "Інструменти",
-            update: "Оновлення"
+            update: "Оновлення",
+            footerSlogan: "Разом до свободи"
         }    };
 
     const langEnBtn = document.getElementById("lang-en");
@@ -51,6 +53,7 @@
     const statusEl = document.getElementById("link-status");
     const toolsEl = document.getElementById("link-tools");
     const updateEl = document.getElementById("link-update");
+    const footerSloganEl = document.getElementById("footer-slogan");
 
     function getCookie(name) {
         const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
@@ -70,6 +73,7 @@
         statusEl.textContent = text.status;
         toolsEl.textContent = text.tools;
         updateEl.textContent = text.update;
+        footerSloganEl.textContent = text.footerSlogan;
         langEnBtn.classList.toggle("active", activeLang === "en");
         langUkBtn.classList.toggle("active", activeLang === "uk");
         updateLinks(activeLang);
@@ -86,6 +90,10 @@
 
     langEnBtn.addEventListener("click", () => setLang("en"));
     langUkBtn.addEventListener("click", () => setLang("uk"));
+</script>
+<footer class="app-footer">&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Together to freedom</span>. <a href="https://itarmy.com.ua/" target="_blank" rel="noopener noreferrer">itarmy.com.ua</a></footer>
+<script>
+    document.getElementById("copyright-year").textContent = String(new Date().getFullYear());
 </script>
 </body>
 </html>

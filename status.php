@@ -123,5 +123,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     updateStatus();
     setInterval(updateStatus, 2000);
 </script>
+<footer class="app-footer">&copy; 2022-<?= date('Y') ?> IT Army of Ukraine. <?= htmlspecialchars(t('footer_slogan'), ENT_QUOTES, 'UTF-8') ?>. <a href="https://itarmy.com.ua/" target="_blank" rel="noopener noreferrer">itarmy.com.ua</a></footer>
 </body>
 </html>
