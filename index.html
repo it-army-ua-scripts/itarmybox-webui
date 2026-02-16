@@ -53,8 +53,6 @@
     const statusEl = document.getElementById("link-status");
     const toolsEl = document.getElementById("link-tools");
     const updateEl = document.getElementById("link-update");
-    const footerSloganEl = document.getElementById("footer-slogan");
-
     function getCookie(name) {
         const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
         return parts ? decodeURIComponent(parts.split("=")[1]) : null;
@@ -73,7 +71,10 @@
         statusEl.textContent = text.status;
         toolsEl.textContent = text.tools;
         updateEl.textContent = text.update;
-        footerSloganEl.textContent = text.footerSlogan;
+        const footerSloganEl = document.getElementById("footer-slogan");
+        if (footerSloganEl) {
+            footerSloganEl.textContent = text.footerSlogan;
+        }
         langEnBtn.classList.toggle("active", activeLang === "en");
         langUkBtn.classList.toggle("active", activeLang === "uk");
         updateLinks(activeLang);
