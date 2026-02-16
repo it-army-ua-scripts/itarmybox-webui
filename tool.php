@@ -192,28 +192,49 @@ if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
             file_put_contents($serviceFile, $content);
         }
 
-        function setUserIdForX100EnvFil(array $updatedConfig): void
+        function setX100ConfigValues(array $updatedConfig): void
         {
-            $pattern = "/itArmyUserId=.*/";
             $envFile = '/opt/itarmy/x100-for-docker/put-your-ovpn-files-here/x100-config.txt';
-
+            $allowed = ['itArmyUserId', 'initialDistressScale', 'ignoreBundledFreeVpn'];
             $content = file_get_contents($envFile);
-            $content = preg_replace($pattern, "itArmyUserId=" . $updatedConfig['itArmyUserId'], $content, 1);
+            foreach ($allowed as $key) {
+                if (!array_key_exists($key, $updatedConfig)) {
+                    continue;
+                }
+                $value = trim((string)$updatedConfig[$key]);
+                if ($key === 'ignoreBundledFreeVpn' && $value === '') {
+                    $value = '0';
+                }
+                $pattern = '/^' . preg_quote($key, '/') . '=.*/m';
+                if (preg_match($pattern, $content)) {
+                    $content = preg_replace($pattern, $key . '=' . $value, $content, 1);
+                } else {
+                    $content .= PHP_EOL . $key . '=' . $value;
+                }
+            }
             file_put_contents($envFile, $content);
         }
 
-        function getUserIdFromX100EnvFile(): array
+        function getX100ConfigValues(): array
         {
-            $pattern = "/itArmyUserId=.*/";
-            $handle = fopen('/opt/itarmy/x100-for-docker/put-your-ovpn-files-here/x100-config.txt', "r");
-            $result=[];
-            if ($handle) {
-                while (($line = fgets($handle)) !== false) {
-                    if (preg_match($pattern, $line)) {
-                        $result['itArmyUserId'] = str_replace('itArmyUserId=', '', trim($line));
-                    }
+            $envFile = '/opt/itarmy/x100-for-docker/put-your-ovpn-files-here/x100-config.txt';
+            $result = [
+                'itArmyUserId' => '',
+                'initialDistressScale' => '',
+                'ignoreBundledFreeVpn' => '0'
+            ];
+            if (!is_readable($envFile)) {
+                return $result;
+            }
+            $lines = file($envFile, FILE_IGNORE_NEW_LINES);
+            foreach ($lines as $line) {
+                if (strpos($line, '=') === false) {
+                    continue;
                 }
-                fclose($handle);
+                [$key, $value] = explode('=', $line, 2);
+                if (array_key_exists($key, $result)) {
+                    $result[$key] = trim($value);
+                }
             }
             return $result;
         }
@@ -227,7 +248,7 @@ if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
             $daemonName = $_GET['daemon'];
             if (!empty($_POST)) {
                 if ($daemonName == 'x100') {
-                    setUserIdForX100EnvFil($_POST);
+                    setX100ConfigValues($_POST);
                 } else {
                     updateServiceFile($daemonName, updateServiceConfigParams(getConfigStringFromServiceFile($daemonName), $_POST));
                 }
@@ -235,7 +256,7 @@ if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
 
             }
             if ($daemonName == 'x100') {
-                $currentAdjustableParams = getUserIdFromX100EnvFile();
+                $currentAdjustableParams = getX100ConfigValues();
             } else {
                 $currentAdjustableParams = getCurrentAdjustableParams(getConfigStringFromServiceFile($daemonName), $config['adjustableParams'][$daemonName]);
             }

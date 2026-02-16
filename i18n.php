@@ -67,6 +67,8 @@ function t(string $key, array $vars = []): string
             'packets_per_connection' => 'Packets per connection (1-100):',
             'proxies_file_path' => 'Proxies (file path):',
             'network_interface' => 'Network interfaces (comma-separated):',
+            'initial_distress_scale' => 'Initial Distress Scale (10-40960):',
+            'ignore_bundled_free_vpn' => 'Ignore Bundled Free VPN:',
             'number_tor_connections' => 'Number of Tor connections:',
             'number_task_creators' => 'Number of task creators:'
         ],
@@ -113,6 +115,8 @@ function t(string $key, array $vars = []): string
             'packets_per_connection' => 'Кількість пакетів на зʼєднання (1-100):',
             'proxies_file_path' => 'Проксі (шлях до файлу):',
             'network_interface' => 'Мережеві інтерфейси (через кому):',
+            'initial_distress_scale' => 'Початковий Distress Scale (10-40960):',
+            'ignore_bundled_free_vpn' => 'Ігнорувати вбудований безкоштовний VPN:',
             'number_tor_connections' => 'Кількість Tor-зʼєднань:',
             'number_task_creators' => 'Кількість створювачів завдань:'
         ]

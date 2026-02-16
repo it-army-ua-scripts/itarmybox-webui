@@ -27,7 +27,9 @@ return [
             'interface'
         ],
         'x100' => [
-            'itArmyUserId'
+            'itArmyUserId',
+            'initialDistressScale',
+            'ignoreBundledFreeVpn'
         ]
     ]
 ];
