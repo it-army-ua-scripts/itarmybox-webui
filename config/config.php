@@ -17,7 +17,14 @@ return [
             'user-id',
             'use-my-ip',
             'use-tor',
-            'concurrency'
+            'concurrency',
+            'enable-icmp-flood',
+            'enable-packet-flood',
+            'disable-udp-flood',
+            'udp-packet-size',
+            'direct-udp-mixed-flood-packets-per-conn',
+            'proxies-path',
+            'interface'
         ],
         'x100' => [
             'itArmyUserId'

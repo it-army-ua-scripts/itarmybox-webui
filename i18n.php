@@ -58,6 +58,13 @@ function t(string $key, array $vars = []): string
             'language' => 'Language (ua | en | es | de | pl | it):',
             'proxies_path_or_url' => 'Proxies (file path or URL):',
             'network_interfaces' => 'Network interfaces (space-separated):',
+            'disable_udp_flood' => 'Disable UDP flood (1 | 0):',
+            'enable_icmp_flood' => 'Enable ICMP flood (1 | 0):',
+            'enable_packet_flood' => 'Enable packet flood (1 | 0):',
+            'udp_packet_size' => 'UDP packet size (576-1420):',
+            'packets_per_connection' => 'Packets per connection (1-100):',
+            'proxies_file_path' => 'Proxies (file path):',
+            'network_interface' => 'Network interfaces (comma-separated):',
             'number_tor_connections' => 'Number of Tor connections:',
             'number_task_creators' => 'Number of task creators:'
         ],

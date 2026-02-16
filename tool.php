@@ -78,21 +78,42 @@ if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
             $currentAdjustableParams = [];
             $aliases = [
                 'ifaces' => ['bind'],
-                'bind' => ['ifaces']
+                'bind' => ['ifaces'],
+                'disable-udp-flood' => ['direct-udp-failover'],
+                'direct-udp-failover' => ['disable-udp-flood']
             ];
-            foreach ($adjustableParams as $adjustableParam) {
-                foreach ($configAsArray as $key => $param) {
-                    if ('--' . $adjustableParam == $param) {
-                        $currentAdjustableParams[$adjustableParam] = $configAsArray[$key + 1];
-                    }
+            $flagOnlyByDaemon = [
+                'distress' => ['enable-icmp-flood', 'enable-packet-flood', 'disable-udp-flood']
+            ];
+            $daemonName = $_GET['daemon'] ?? '';
+            $flagOnly = array_flip($flagOnlyByDaemon[$daemonName] ?? []);
+            $options = [];
+            for ($i = 1; $i < count($configAsArray); $i++) {
+                $token = $configAsArray[$i];
+                if (!str_starts_with($token, '--')) {
+                    continue;
                 }
-                if (!isset($currentAdjustableParams[$adjustableParam]) && isset($aliases[$adjustableParam])) {
-                    foreach ($aliases[$adjustableParam] as $alias) {
-                        foreach ($configAsArray as $key => $param) {
-                            if ('--' . $alias == $param) {
-                                $currentAdjustableParams[$adjustableParam] = $configAsArray[$key + 1];
-                            }
+                $key = substr($token, 2);
+                $next = $configAsArray[$i + 1] ?? null;
+                if ($next !== null && !str_starts_with($next, '--')) {
+                    $options[$key] = $next;
+                    $i++;
+                } else {
+                    $options[$key] = true;
+                }
+            }
+
+            foreach ($adjustableParams as $adjustableParam) {
+                $candidateKeys = array_merge([$adjustableParam], $aliases[$adjustableParam] ?? []);
+                foreach ($candidateKeys as $candidateKey) {
+                    if (array_key_exists($candidateKey, $options)) {
+                        $value = $options[$candidateKey];
+                        if (isset($flagOnly[$adjustableParam])) {
+                            $currentAdjustableParams[$adjustableParam] = ($value === true) ? '1' : (string)$value;
+                        } else {
+                            $currentAdjustableParams[$adjustableParam] = ($value === true) ? '' : (string)$value;
                         }
+                        break;
                     }
                 }
             }
@@ -104,34 +125,62 @@ if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
             $configAsArray = str_getcsv($configString, ' ');
             $aliases = [
                 'ifaces' => ['bind'],
-                'bind' => ['ifaces']
+                'bind' => ['ifaces'],
+                'disable-udp-flood' => ['direct-udp-failover'],
+                'direct-udp-failover' => ['disable-udp-flood']
             ];
+            $flagOnlyByDaemon = [
+                'distress' => ['enable-icmp-flood', 'enable-packet-flood', 'disable-udp-flood']
+            ];
+            $daemonName = $_GET['daemon'] ?? '';
+            $flagOnly = array_flip($flagOnlyByDaemon[$daemonName] ?? []);
+
+            $baseTokens = [];
+            $options = [];
+            foreach ($configAsArray as $idx => $token) {
+                if ($idx === 0) {
+                    $baseTokens[] = $token;
+                    continue;
+                }
+                if (!str_starts_with($token, '--')) {
+                    continue;
+                }
+                $key = substr($token, 2);
+                $next = $configAsArray[$idx + 1] ?? null;
+                if ($next !== null && !str_starts_with($next, '--')) {
+                    $options[$key] = $next;
+                } else {
+                    $options[$key] = true;
+                }
+            }
+
             foreach ($updatedParams as $updatedParamKey => $updatedParam) {
                 $updatedParam = trim((string)$updatedParam);
                 $allKeys = array_merge([$updatedParamKey], $aliases[$updatedParamKey] ?? []);
-                $found = false;
-
-                foreach ($configAsArray as $key => $param) {
-                    foreach ($allKeys as $optionKey) {
-                        if ('--' . $optionKey === $param) {
-                            $found = true;
-                            if ($updatedParam === '') {
-                                unset($configAsArray[$key], $configAsArray[$key + 1]);
-                            } else {
-                                $configAsArray[$key] = '--' . $updatedParamKey;
-                                $configAsArray[$key + 1] = $updatedParam;
-                            }
-                        }
-                    }
+                foreach ($allKeys as $optionKey) {
+                    unset($options[$optionKey]);
                 }
 
-                $configAsArray = array_values($configAsArray);
-                if ($updatedParam !== '' && !$found) {
-                    $configAsArray[] = '--' . $updatedParamKey;
-                    $configAsArray[] = $updatedParam;
+                $isFlagOnly = isset($flagOnly[$updatedParamKey]);
+                if ($updatedParam === '' || $updatedParam === '0') {
+                    continue;
+                }
+
+                if ($isFlagOnly) {
+                    $options[$updatedParamKey] = true;
+                } else {
+                    $options[$updatedParamKey] = $updatedParam;
                 }
             }
-            return $configAsArray;
+
+            $out = $baseTokens;
+            foreach ($options as $key => $value) {
+                $out[] = '--' . $key;
+                if ($value !== true) {
+                    $out[] = $value;
+                }
+            }
+            return $out;
         }
 
         function updateServiceFile(string $serviceName, array $updatedConfigParams): void

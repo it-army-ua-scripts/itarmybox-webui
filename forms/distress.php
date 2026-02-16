@@ -16,5 +16,45 @@
         <label for="concurrency"><?= htmlspecialchars(t('number_task_creators'), ENT_QUOTES, 'UTF-8') ?></label>
         <input type="number" id="concurrency" name="concurrency" min="50" max="100000" required value="<?= $currentAdjustableParams['concurrency']??"" ?>">
     </div>
+    <div class="form-group">
+        <label for="enable-icmp-flood"><?= htmlspecialchars(t('enable_icmp_flood'), ENT_QUOTES, 'UTF-8') ?></label>
+        <select id="enable-icmp-flood" name="enable-icmp-flood">
+            <?php $enableIcmp = (string)($currentAdjustableParams['enable-icmp-flood'] ?? '0'); ?>
+            <option value="0"<?= $enableIcmp === '0' ? ' selected' : '' ?>>0</option>
+            <option value="1"<?= $enableIcmp === '1' ? ' selected' : '' ?>>1</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="enable-packet-flood"><?= htmlspecialchars(t('enable_packet_flood'), ENT_QUOTES, 'UTF-8') ?></label>
+        <select id="enable-packet-flood" name="enable-packet-flood">
+            <?php $enablePacket = (string)($currentAdjustableParams['enable-packet-flood'] ?? '0'); ?>
+            <option value="0"<?= $enablePacket === '0' ? ' selected' : '' ?>>0</option>
+            <option value="1"<?= $enablePacket === '1' ? ' selected' : '' ?>>1</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="disable-udp-flood"><?= htmlspecialchars(t('disable_udp_flood'), ENT_QUOTES, 'UTF-8') ?></label>
+        <select id="disable-udp-flood" name="disable-udp-flood">
+            <?php $disableUdp = (string)($currentAdjustableParams['disable-udp-flood'] ?? '0'); ?>
+            <option value="0"<?= $disableUdp === '0' ? ' selected' : '' ?>>0</option>
+            <option value="1"<?= $disableUdp === '1' ? ' selected' : '' ?>>1</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="udp-packet-size"><?= htmlspecialchars(t('udp_packet_size'), ENT_QUOTES, 'UTF-8') ?></label>
+        <input type="number" id="udp-packet-size" name="udp-packet-size" min="576" max="1420" value="<?= $currentAdjustableParams['udp-packet-size']??"" ?>">
+    </div>
+    <div class="form-group">
+        <label for="direct-udp-mixed-flood-packets-per-conn"><?= htmlspecialchars(t('packets_per_connection'), ENT_QUOTES, 'UTF-8') ?></label>
+        <input type="number" id="direct-udp-mixed-flood-packets-per-conn" name="direct-udp-mixed-flood-packets-per-conn" min="1" max="100" value="<?= $currentAdjustableParams['direct-udp-mixed-flood-packets-per-conn']??"" ?>">
+    </div>
+    <div class="form-group">
+        <label for="proxies-path"><?= htmlspecialchars(t('proxies_file_path'), ENT_QUOTES, 'UTF-8') ?></label>
+        <input type="text" id="proxies-path" name="proxies-path" value="<?= $currentAdjustableParams['proxies-path']??"" ?>">
+    </div>
+    <div class="form-group">
+        <label for="interface"><?= htmlspecialchars(t('network_interface'), ENT_QUOTES, 'UTF-8') ?></label>
+        <input type="text" id="interface" name="interface" value="<?= $currentAdjustableParams['interface']??"" ?>" placeholder="eth0,eth1">
+    </div>
     <button class="submit-btn" type="submit"><?= htmlspecialchars(t('save'), ENT_QUOTES, 'UTF-8') ?></button>
 </form>
