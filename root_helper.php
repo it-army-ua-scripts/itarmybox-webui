@@ -269,6 +269,59 @@ function statusSnapshot(array $modules, int $lines): array
     ];
 }
 
+function isAutostartWanted(string $module): ?bool
+{
+    $depsRaw = runCommand('systemctl list-dependencies --plain --no-legend multi-user.target', $code);
+    if ($code !== 0) {
+        return null;
+    }
+    $deps = array_map('trim', preg_split('/\r\n|\r|\n/', $depsRaw));
+    $service = $module . '.service';
+    foreach ($deps as $dep) {
+        if ($dep === $service) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function serviceInfo(string $module): array
+{
+    $serviceArg = escapeshellarg($module . '.service');
+
+    $active = serviceIsActive($module);
+    $wanted = isAutostartWanted($module);
+
+    $fragmentPath = trim(runCommand("systemctl show -p FragmentPath --value $serviceArg", $code1));
+    if ($code1 !== 0) {
+        $fragmentPath = '';
+    }
+    $execStart = trim(runCommand("systemctl show -p ExecStart --value $serviceArg", $code2));
+    if ($code2 !== 0) {
+        $execStart = '';
+    }
+    $standardOutput = trim(runCommand("systemctl show -p StandardOutput --value $serviceArg", $code3));
+    if ($code3 !== 0) {
+        $standardOutput = '';
+    }
+
+    $statusText = runCommand("systemctl status $serviceArg --no-pager --full", $code4);
+    if ($code4 !== 0 && trim($statusText) === '') {
+        $statusText = 'Service status is unavailable.';
+    }
+
+    return [
+        'ok' => true,
+        'active' => $active,
+        'autostartWanted' => $wanted,
+        'fragmentPath' => $fragmentPath,
+        'execStart' => $execStart,
+        'standardOutput' => $standardOutput,
+        'statusText' => $statusText,
+        'logFile' => getServiceLogFile($module),
+    ];
+}
+
 function getSchedule(array $modules): array
 {
     $raw = runCommand('crontab -l', $code);
@@ -439,6 +492,15 @@ if ($action === 'service_logs') {
 if ($action === 'status_snapshot') {
     $lines = (int)($request['lines'] ?? 80);
     respond(statusSnapshot($modules, $lines));
+    exit(0);
+}
+
+if ($action === 'service_info') {
+    $module = $request['module'] ?? null;
+    if (!is_string($module) || !in_array($module, $modules, true)) {
+        fail('invalid_module');
+    }
+    respond(serviceInfo($module));
     exit(0);
 }
 

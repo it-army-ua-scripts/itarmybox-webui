@@ -1,24 +1,27 @@
 <?php
 require_once 'i18n.php';
 require_once 'lib/tool_helpers.php';
+require_once 'lib/root_helper_client.php';
 $config = require 'config/config.php';
 
 $daemonName = $_GET['daemon'] ?? '';
 
-if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
+if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
     header('Content-Type: application/json; charset=UTF-8');
     if (!in_array($daemonName, $config['daemonNames'], true)) {
         echo json_encode(['ok' => false], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }
 
-    $daemonSafe = escapeshellarg($daemonName);
-    $status = trim((string)shell_exec("systemctl is-active -- $daemonSafe"));
+    $info = root_helper_request([
+        'action' => 'service_info',
+        'modules' => $config['daemonNames'],
+        'module' => $daemonName,
+    ]);
     echo json_encode(
         [
-            'ok' => true,
-            'status' => $status,
-            'logs' => getServiceLogs($daemonName)
+            'ok' => (bool)($info['ok'] ?? false),
+            'info' => $info,
         ],
         JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
     );
@@ -74,8 +77,13 @@ if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
             <h1><?= htmlspecialchars(t('settings_for', ['module' => $daemonName]), ENT_QUOTES, 'UTF-8') ?></h1>
             <h2><?= htmlspecialchars(t('status_label'), ENT_QUOTES, 'UTF-8') ?></h2>
             <?php
-            $status = trim((string)shell_exec("systemctl is-active " . escapeshellarg($daemonName)));
-            if ($status === 'active') {
+            $info = root_helper_request([
+                'action' => 'service_info',
+                'modules' => $config['daemonNames'],
+                'module' => $daemonName,
+            ]);
+            $isActive = (($info['ok'] ?? false) === true) ? (bool)($info['active'] ?? false) : false;
+            if ($isActive) {
                 echo htmlspecialchars(t('module_running', ['module' => $daemonName]), ENT_QUOTES, 'UTF-8');
                 echo '<div class="menu"><a href="' . htmlspecialchars(url_with_lang('/stop.php?daemon=' . rawurlencode($daemonName)), ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars(t('stop'), ENT_QUOTES, 'UTF-8') . '</a></div>';
             } else {
@@ -83,9 +91,37 @@ if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
                 echo '<div class="menu"><a href="' . htmlspecialchars(url_with_lang('/start.php?daemon=' . rawurlencode($daemonName)), ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars(t('start'), ENT_QUOTES, 'UTF-8') . '</a></div>';
             }
 
-            echo "<br/>" . htmlspecialchars(t('fetching_logs'), ENT_QUOTES, 'UTF-8') . "<br/>";
-            $initialLogs = getServiceLogs($daemonName);
-            echo '<div class="log-box tool-log-box" id="daemon-log">' . htmlspecialchars($initialLogs, ENT_QUOTES, 'UTF-8') . '</div>';
+            echo "<br/><h2>" . htmlspecialchars(t('service_info'), ENT_QUOTES, 'UTF-8') . "</h2>";
+            $statusText = (string)($info['statusText'] ?? '');
+            $fragmentPath = (string)($info['fragmentPath'] ?? '');
+            $execStart = (string)($info['execStart'] ?? '');
+            $standardOutput = (string)($info['standardOutput'] ?? '');
+            $autostartWanted = $info['autostartWanted'] ?? null;
+            $logFile = (string)($info['logFile'] ?? '');
+            $infoLines = [];
+            if ($fragmentPath !== '') {
+                $infoLines[] = "Unit: " . $fragmentPath;
+            }
+            if ($execStart !== '') {
+                $infoLines[] = "ExecStart: " . $execStart;
+            }
+            if ($standardOutput !== '') {
+                $infoLines[] = "StandardOutput: " . $standardOutput;
+            }
+            if ($logFile !== '') {
+                $infoLines[] = "Log file: " . $logFile;
+            }
+            if ($autostartWanted === true) {
+                $infoLines[] = "Autostart: enabled";
+            } elseif ($autostartWanted === false) {
+                $infoLines[] = "Autostart: disabled";
+            }
+            $serviceInfoText = implode("\n", $infoLines);
+            if ($serviceInfoText !== '') {
+                $serviceInfoText .= "\n\n";
+            }
+            $serviceInfoText .= $statusText;
+            echo '<div class="log-box tool-log-box" id="service-info">' . htmlspecialchars($serviceInfoText, ENT_QUOTES, 'UTF-8') . '</div>';
             echo "<br/><h2>" . htmlspecialchars(t('settings'), ENT_QUOTES, 'UTF-8') . "</h2>";
             echo '<div class="form-container">';
             include "forms/" . $daemonName . ".php";
@@ -101,36 +137,47 @@ if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
 </div>
 <?php if (in_array($daemonName, $config['daemonNames'], true)): ?>
 <script>
-    const daemonLogState = { text: "" };
-    const daemonLogEl = document.getElementById("daemon-log");
+    const serviceInfoState = { text: "" };
+    const serviceInfoEl = document.getElementById("service-info");
     const daemonName = <?= json_encode($daemonName, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-    const ajaxUrl = <?= json_encode(url_with_lang('/tool.php?ajax_logs=1&daemon=' . rawurlencode($daemonName)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const ajaxUrl = <?= json_encode(url_with_lang('/tool.php?ajax_info=1&daemon=' . rawurlencode($daemonName)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
     function appendOrReplace(el, newText) {
-        const oldText = daemonLogState.text || "";
+        const oldText = serviceInfoState.text || "";
         if (newText.startsWith(oldText)) {
             el.textContent += newText.slice(oldText.length);
         } else {
             el.textContent = newText;
         }
-        daemonLogState.text = newText;
+        serviceInfoState.text = newText;
         el.scrollTop = el.scrollHeight;
     }
 
-    async function refreshLogs() {
+    async function refreshInfo() {
         try {
             const response = await fetch(ajaxUrl, { cache: "no-store" });
             const data = await response.json();
             if (!data || !data.ok) {
                 return;
             }
-            appendOrReplace(daemonLogEl, data.logs || "");
+            const info = data.info || {};
+            const lines = [];
+            if (info.fragmentPath) lines.push("Unit: " + info.fragmentPath);
+            if (info.execStart) lines.push("ExecStart: " + info.execStart);
+            if (info.standardOutput) lines.push("StandardOutput: " + info.standardOutput);
+            if (info.logFile) lines.push("Log file: " + info.logFile);
+            if (info.autostartWanted === true) lines.push("Autostart: enabled");
+            if (info.autostartWanted === false) lines.push("Autostart: disabled");
+            let text = lines.join("\n");
+            if (text) text += "\n\n";
+            text += (info.statusText || "");
+            appendOrReplace(serviceInfoEl, text);
         } catch (e) {
         }
     }
 
-    appendOrReplace(daemonLogEl, daemonLogEl.textContent || "");
-    setInterval(refreshLogs, 2000);
+    appendOrReplace(serviceInfoEl, serviceInfoEl.textContent || "");
+    setInterval(refreshInfo, 4000);
 </script>
 <?php endif; ?>
 <footer class="app-footer">&copy; 2022-<?= date('Y') ?> IT Army of Ukraine. <?= htmlspecialchars(t('footer_slogan'), ENT_QUOTES, 'UTF-8') ?>.</footer>

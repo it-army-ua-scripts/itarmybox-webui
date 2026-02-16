@@ -14,6 +14,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     ]);
     $activeModule = ($response['ok'] ?? false) ? ($response['activeModule'] ?? null) : null;
     $commonLogs = ($response['ok'] ?? false) ? (string)($response['commonLogs'] ?? '') : '';
+    $logSource = ($response['ok'] ?? false) ? ($response['logSource'] ?? null) : null;
+    $logPath = ($response['ok'] ?? false) ? ($response['logPath'] ?? null) : null;
 
     if (trim($commonLogs) === '') {
         $commonLogs = (string)shell_exec("tail -n80 /var/log/adss.log 2>/dev/null");
@@ -23,7 +25,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         [
             'ok' => true,
             'activeModule' => $activeModule,
-            'commonLogs' => $commonLogs
+            'commonLogs' => $commonLogs,
+            'logSource' => $logSource,
+            'logPath' => $logPath,
         ],
         JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
     );
