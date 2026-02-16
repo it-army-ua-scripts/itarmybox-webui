@@ -176,20 +176,59 @@ h1 {
 
 .schedule-days-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px 12px;
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    gap: 10px;
 }
 
 .schedule-day-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 400;
+    position: relative;
+    display: block;
     margin: 0;
+    cursor: pointer;
 }
 
 .schedule-day-item input[type="checkbox"] {
-    width: auto;
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.schedule-day-item span {
+    display: block;
+    text-align: center;
+    border: 1px solid #cfd8e3;
+    background: #f4f7fa;
+    color: #2c3e50;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-weight: 500;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.schedule-day-item:hover span {
+    border-color: #aab8c9;
+    transform: translateY(-1px);
+}
+
+.schedule-day-item input[type="checkbox"]:checked + span {
+    background: #2c3e50;
+    border-color: #2c3e50;
+    color: #fff;
+}
+
+.schedule-day-item input[type="checkbox"]:focus-visible + span {
+    outline: 2px solid #6b8db2;
+    outline-offset: 2px;
+}
+
+.schedule-day-item input[type="checkbox"]:disabled + span {
+    background: #eef2f5;
+    border-color: #d7e0e9;
+    color: #8b9aac;
+}
+
+.schedule-days-grid.is-disabled {
+    opacity: 0.7;
 }
 
 .submit-btn {
@@ -296,7 +335,7 @@ h1 {
     }
 
     .schedule-days-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .header-logo {

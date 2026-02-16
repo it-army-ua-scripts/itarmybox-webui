@@ -310,6 +310,7 @@ $daySummary = $isAllDays ? t('all_days') : implode(', ', $dayLabels);
     const enabledEl = document.getElementById('schedule_enabled');
     const dayModeEl = document.getElementById('schedule_day_mode');
     const dayCheckboxes = Array.from(document.querySelectorAll('.schedule-day-checkbox'));
+    const dayGridEl = document.querySelector('.schedule-days-grid');
     const toggledIds = ['schedule_module', 'schedule_day_mode', 'schedule_start', 'schedule_stop'];
     if (!enabledEl) {
         return;
@@ -325,6 +326,9 @@ $daySummary = $isAllDays ? t('all_days') : implode(', ', $dayLabels);
         const specificMode = dayModeEl && dayModeEl.value === 'specific';
         for (const el of dayCheckboxes) {
             el.disabled = !enabled || !specificMode;
+        }
+        if (dayGridEl) {
+            dayGridEl.classList.toggle('is-disabled', !enabled || !specificMode);
         }
     };
     enabledEl.addEventListener('change', update);
