@@ -3,7 +3,7 @@
 function getServiceLogs(string $serviceName): string
 {
     $serviceSafe = escapeshellarg($serviceName);
-    $logs = (string)shell_exec("sudo -n journalctl -u $serviceSafe --no-pager -n 5 2>/dev/null");
+    $logs = (string)shell_exec("journalctl -u $serviceSafe --no-pager -n 5 2>/dev/null");
     if (trim($logs) === '') {
         $logs = (string)shell_exec("journalctl -u $serviceSafe --no-pager -n 5 2>/dev/null");
     }

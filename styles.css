@@ -168,6 +168,12 @@ h1 {
     min-height: 100px;
 }
 
+.form-row-two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
 .submit-btn {
     display: block;
     width: 100%;
@@ -264,6 +270,11 @@ h1 {
 @media (max-width: 600px) {
     .menu {
         flex-direction: column;
+    }
+
+    .form-row-two {
+        grid-template-columns: 1fr;
+        gap: 0;
     }
 
     .header-logo {
