@@ -99,10 +99,17 @@ function getEnabledAutostartModules(array $modules): array
 
 function setAutostart(array $modules, ?string $selected): array
 {
+    $targets = ['multi-user.target', 'default.target', 'graphical.target'];
     foreach ($modules as $module) {
         $service = escapeshellarg($module . '.service');
-        runCommand("systemctl remove-wants multi-user.target $service", $code);
-        // remove-wants returns non-zero when symlink does not exist; ignore that here.
+        foreach ($targets as $target) {
+            $targetSafe = escapeshellarg($target);
+            // Persistent wants.
+            runCommand("systemctl remove-wants $targetSafe $service", $code1);
+            // Runtime wants (enabled-runtime case).
+            runCommand("systemctl --runtime remove-wants $targetSafe $service", $code2);
+            // Non-zero here may mean link absent; ignore.
+        }
     }
 
     if ($selected !== null) {
@@ -112,6 +119,8 @@ function setAutostart(array $modules, ?string $selected): array
             return ['ok' => false, 'error' => 'add_wants_failed'];
         }
     }
+
+    runCommand('systemctl daemon-reload', $reloadCode);
 
     $enabled = getEnabledAutostartModules($modules);
     if ($selected === null) {
