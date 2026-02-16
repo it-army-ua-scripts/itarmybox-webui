@@ -3,6 +3,7 @@ require_once 'i18n.php';
 require_once 'lib/root_helper_client.php';
 $config = require 'config/config.php';
 $daemonNames = $config['daemonNames'];
+const MAX_SCHEDULE_INTERVALS = 5;
 
 function getCurrentAutostartDaemon(array $daemonNames): ?string
 {
@@ -43,115 +44,71 @@ function normalizeScheduleDays(array $rawDays): array
     return $days;
 }
 
-function parseDowField(string $dowField): ?array
-{
-    if ($dowField === '*') {
-        return [0, 1, 2, 3, 4, 5, 6];
-    }
-    if (preg_match('/^[0-6](?:,[0-6])*$/', $dowField) !== 1) {
-        return null;
-    }
-    $parts = explode(',', $dowField);
-    return normalizeScheduleDays($parts);
-}
-
-function getCurrentSchedule(array $daemonNames): ?array
+function getCurrentSchedules(array $daemonNames): array
 {
     $response = root_helper_request([
         'action' => 'schedule_get',
         'modules' => $daemonNames,
     ]);
-    if (($response['ok'] ?? false) !== true || !isset($response['schedule']) || !is_array($response['schedule'])) {
-        return null;
-    }
-    $schedule = $response['schedule'];
-    $module = $schedule['module'] ?? '';
-    $dowRaw = $schedule['dow'] ?? '';
-    $start = $schedule['start'] ?? '';
-    $stop = $schedule['stop'] ?? '';
-    if (
-        !is_string($module) ||
-        !in_array($module, $daemonNames, true) ||
-        !is_string($dowRaw) ||
-        !is_string($start) ||
-        !is_string($stop)
-    ) {
-        return null;
-    }
-    $days = parseDowField($dowRaw);
-    if ($days === null || $days === []) {
-        return null;
+    if (($response['ok'] ?? false) !== true || !isset($response['entries']) || !is_array($response['entries'])) {
+        return [];
     }
 
-    return [
-        'module' => $module,
-        'days' => $days,
-        'start' => $start,
-        'stop' => $stop,
-    ];
+    $entries = [];
+    foreach ($response['entries'] as $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        $module = $entry['module'] ?? '';
+        $start = $entry['start'] ?? '';
+        $stop = $entry['stop'] ?? '';
+        $days = normalizeScheduleDays((array)($entry['days'] ?? []));
+        if (
+            is_string($module) &&
+            in_array($module, $daemonNames, true) &&
+            preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string)$start) === 1 &&
+            preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string)$stop) === 1 &&
+            $days !== []
+        ) {
+            $entries[] = [
+                'module' => $module,
+                'days' => $days,
+                'start' => (string)$start,
+                'stop' => (string)$stop,
+                'day_mode' => (count($days) === 7) ? 'all' : 'specific',
+            ];
+        }
+        if (count($entries) >= MAX_SCHEDULE_INTERVALS) {
+            break;
+        }
+    }
+    return $entries;
 }
 
-function saveSchedule(array $daemonNames, ?string $module, ?array $days, ?string $startTime, ?string $stopTime): bool
+function saveScheduleEntries(array $daemonNames, array $entries): bool
 {
     $response = root_helper_request([
         'action' => 'schedule_set',
         'modules' => $daemonNames,
-        'module' => $module,
-        'days' => $days,
-        'start' => $startTime,
-        'stop' => $stopTime,
+        'entries' => $entries,
     ]);
     return ($response['ok'] ?? false) === true;
 }
 
-$message = '';
-$messageClass = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? 'autostart_save';
-    if ($action === 'autostart_save') {
-        $requested = $_POST['autostart_daemon'] ?? '';
-        $selectedDaemon = null;
-        if ($requested !== 'none' && in_array($requested, $daemonNames, true)) {
-            $selectedDaemon = $requested;
-        }
-
-        $ok = setAutostartDaemon($daemonNames, $selectedDaemon);
-        $message = $ok ? t('autostart_updated') : t('autostart_update_failed');
-        $messageClass = $ok ? 'status active' : 'status inactive';
-    } elseif ($action === 'schedule_save') {
-        $enabled = ($_POST['schedule_enabled'] ?? '0') === '1';
-        $ok = false;
-        if (!$enabled) {
-            $ok = saveSchedule($daemonNames, null, null, null, null);
-        } else {
-            $module = $_POST['schedule_module'] ?? '';
-            $dayMode = $_POST['schedule_day_mode'] ?? 'all';
-            $rawDays = $_POST['schedule_days'] ?? [];
-            $days = [];
-            if ($dayMode === 'all') {
-                $days = [0, 1, 2, 3, 4, 5, 6];
-            } elseif ($dayMode === 'specific' && is_array($rawDays)) {
-                $days = normalizeScheduleDays($rawDays);
-            }
-            $startTime = $_POST['schedule_start'] ?? '';
-            $stopTime = $_POST['schedule_stop'] ?? '';
-            $validTime = '/^(?:[01]\d|2[0-3]):[0-5]\d$/';
-            if (
-                in_array($module, $daemonNames, true) &&
-                $days !== [] &&
-                preg_match($validTime, $startTime) === 1 &&
-                preg_match($validTime, $stopTime) === 1
-            ) {
-                $ok = saveSchedule($daemonNames, $module, $days, $startTime, $stopTime);
-            }
-        }
-        $message = $ok ? t('schedule_updated') : t('schedule_update_failed');
-        $messageClass = $ok ? 'status active' : 'status inactive';
+function buildDaySummary(array $days, array $dayLabels): string
+{
+    if (count($days) === 7) {
+        return t('all_days');
     }
+    $labels = [];
+    foreach ($days as $day) {
+        if (isset($dayLabels[$day])) {
+            $labels[] = $dayLabels[$day];
+        }
+    }
+    return implode(', ', $labels);
 }
 
-$currentAutostart = getCurrentAutostartDaemon($daemonNames);
-$currentSchedule = getCurrentSchedule($daemonNames);
 $days = [
     0 => t('day_sunday'),
     1 => t('day_monday'),
@@ -161,16 +118,103 @@ $days = [
     5 => t('day_friday'),
     6 => t('day_saturday'),
 ];
-$currentScheduleDays = $currentSchedule['days'] ?? [1];
-$isAllDays = count($currentScheduleDays) === 7;
-$scheduleDayMode = $isAllDays ? 'all' : 'specific';
-$dayLabels = [];
-foreach ($currentScheduleDays as $dayNum) {
-    if (isset($days[$dayNum])) {
-        $dayLabels[] = $days[$dayNum];
+
+$message = '';
+$messageClass = '';
+$currentAutostart = getCurrentAutostartDaemon($daemonNames);
+$currentSchedules = getCurrentSchedules($daemonNames);
+$scheduleEnabled = count($currentSchedules) > 0;
+$scheduleEntriesForForm = $currentSchedules;
+if ($scheduleEntriesForForm === []) {
+    $scheduleEntriesForForm[] = [
+        'module' => $daemonNames[0] ?? '',
+        'day_mode' => 'all',
+        'days' => [0, 1, 2, 3, 4, 5, 6],
+        'start' => '09:00',
+        'stop' => '21:00',
+    ];
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? 'autostart_save';
+    if ($action === 'autostart_save') {
+        $requested = $_POST['autostart_daemon'] ?? '';
+        $selectedDaemon = null;
+        if ($requested !== 'none' && in_array($requested, $daemonNames, true)) {
+            $selectedDaemon = $requested;
+        }
+        $ok = setAutostartDaemon($daemonNames, $selectedDaemon);
+        $message = $ok ? t('autostart_updated') : t('autostart_update_failed');
+        $messageClass = $ok ? 'status active' : 'status inactive';
+        $currentAutostart = getCurrentAutostartDaemon($daemonNames);
+    } elseif ($action === 'schedule_save') {
+        $scheduleEnabled = ($_POST['schedule_enabled'] ?? '0') === '1';
+        $rawEntries = $_POST['schedule_entries'] ?? [];
+        $normalizedEntries = [];
+        if (is_array($rawEntries)) {
+            foreach ($rawEntries as $entry) {
+                if (!is_array($entry)) {
+                    continue;
+                }
+                $module = (string)($entry['module'] ?? '');
+                $dayMode = (string)($entry['day_mode'] ?? 'all');
+                $daysRaw = $entry['days'] ?? [];
+                $start = (string)($entry['start'] ?? '');
+                $stop = (string)($entry['stop'] ?? '');
+                $daysNorm = ($dayMode === 'specific' && is_array($daysRaw))
+                    ? normalizeScheduleDays($daysRaw)
+                    : [0, 1, 2, 3, 4, 5, 6];
+                if (
+                    in_array($module, $daemonNames, true) &&
+                    $daysNorm !== [] &&
+                    preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $start) === 1 &&
+                    preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $stop) === 1
+                ) {
+                    $normalizedEntries[] = [
+                        'module' => $module,
+                        'days' => $daysNorm,
+                        'start' => $start,
+                        'stop' => $stop,
+                    ];
+                }
+                if (count($normalizedEntries) >= MAX_SCHEDULE_INTERVALS) {
+                    break;
+                }
+            }
+        }
+
+        if (!$scheduleEnabled) {
+            $ok = saveScheduleEntries($daemonNames, []);
+        } elseif ($normalizedEntries === []) {
+            $ok = false;
+        } else {
+            $ok = saveScheduleEntries($daemonNames, $normalizedEntries);
+        }
+
+        $message = $ok ? t('schedule_updated') : t('schedule_update_failed');
+        $messageClass = $ok ? 'status active' : 'status inactive';
+        $currentSchedules = getCurrentSchedules($daemonNames);
+        $scheduleEnabled = count($currentSchedules) > 0;
+        $scheduleEntriesForForm = ($currentSchedules === []) ? [[
+            'module' => $daemonNames[0] ?? '',
+            'day_mode' => 'all',
+            'days' => [0, 1, 2, 3, 4, 5, 6],
+            'start' => '09:00',
+            'stop' => '21:00',
+        ]] : $currentSchedules;
     }
 }
-$daySummary = $isAllDays ? t('all_days') : implode(', ', $dayLabels);
+
+$scheduleSummaryLines = [];
+foreach ($currentSchedules as $idx => $entry) {
+    $scheduleSummaryLines[] = t('schedule_line', [
+        'idx' => (string)($idx + 1),
+        'module' => strtoupper((string)$entry['module']),
+        'days' => buildDaySummary((array)$entry['days'], $days),
+        'start' => (string)$entry['start'],
+        'stop' => (string)$entry['stop'],
+    ]);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -189,16 +233,11 @@ $daySummary = $isAllDays ? t('all_days') : implode(', ', $dayLabels);
         <?php if ($message !== ''): ?>
             <div class="<?= htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
+
         <div class="service">
             <div class="service-title"><?= htmlspecialchars(t('current_autostart'), ENT_QUOTES, 'UTF-8') ?></div>
             <div class="status <?= $currentAutostart ? 'active' : 'inactive' ?>">
-                <?php
-                if ($currentAutostart) {
-                    echo htmlspecialchars(t('autostart_for', ['module' => strtoupper($currentAutostart)]), ENT_QUOTES, 'UTF-8');
-                } else {
-                    echo htmlspecialchars(t('autostart_none'), ENT_QUOTES, 'UTF-8');
-                }
-                ?>
+                <?= htmlspecialchars($currentAutostart ? t('autostart_for', ['module' => strtoupper($currentAutostart)]) : t('autostart_none'), ENT_QUOTES, 'UTF-8') ?>
             </div>
         </div>
 
@@ -219,82 +258,99 @@ $daySummary = $isAllDays ? t('all_days') : implode(', ', $dayLabels);
                 <button class="submit-btn" type="submit"><?= htmlspecialchars(t('save'), ENT_QUOTES, 'UTF-8') ?></button>
             </form>
         </div>
+
         <div class="service">
             <div class="service-title"><?= htmlspecialchars(t('schedule_settings'), ENT_QUOTES, 'UTF-8') ?></div>
-            <div class="status <?= $currentSchedule ? 'active' : 'inactive' ?>">
-                <?php
-                if ($currentSchedule) {
-                    echo htmlspecialchars(
-                        t('schedule_current', [
-                            'module' => strtoupper($currentSchedule['module']),
-                            'day' => $daySummary,
-                            'start' => $currentSchedule['start'],
-                            'stop' => $currentSchedule['stop'],
-                        ]),
-                        ENT_QUOTES,
-                        'UTF-8'
-                    );
-                } else {
-                    echo htmlspecialchars(t('schedule_disabled'), ENT_QUOTES, 'UTF-8');
-                }
-                ?>
+            <div class="status <?= count($scheduleSummaryLines) > 0 ? 'active' : 'inactive' ?>">
+                <?php if (count($scheduleSummaryLines) > 0): ?>
+                    <div class="schedule-summary">
+                        <?= htmlspecialchars(implode("\n", $scheduleSummaryLines), ENT_QUOTES, 'UTF-8') ?>
+                    </div>
+                <?php else: ?>
+                    <?= htmlspecialchars(t('schedule_disabled'), ENT_QUOTES, 'UTF-8') ?>
+                <?php endif; ?>
             </div>
         </div>
+
         <div class="form-container">
-            <form method="post" action="">
+            <form method="post" action="" id="schedule-form">
                 <input type="hidden" name="action" value="schedule_save">
                 <div class="form-group">
                     <label for="schedule_enabled"><?= htmlspecialchars(t('schedule_enabled'), ENT_QUOTES, 'UTF-8') ?></label>
                     <select id="schedule_enabled" name="schedule_enabled">
-                        <option value="0"<?= $currentSchedule ? '' : ' selected' ?>><?= htmlspecialchars(t('no'), ENT_QUOTES, 'UTF-8') ?></option>
-                        <option value="1"<?= $currentSchedule ? ' selected' : '' ?>><?= htmlspecialchars(t('yes'), ENT_QUOTES, 'UTF-8') ?></option>
+                        <option value="0"<?= $scheduleEnabled ? '' : ' selected' ?>><?= htmlspecialchars(t('no'), ENT_QUOTES, 'UTF-8') ?></option>
+                        <option value="1"<?= $scheduleEnabled ? ' selected' : '' ?>><?= htmlspecialchars(t('yes'), ENT_QUOTES, 'UTF-8') ?></option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label for="schedule_module"><?= htmlspecialchars(t('schedule_module'), ENT_QUOTES, 'UTF-8') ?></label>
-                    <select id="schedule_module" name="schedule_module">
-                        <?php foreach ($daemonNames as $daemon): ?>
-                            <option value="<?= htmlspecialchars($daemon, ENT_QUOTES, 'UTF-8') ?>"<?= ($currentSchedule['module'] ?? '') === $daemon ? ' selected' : '' ?>>
-                                <?= htmlspecialchars(strtoupper($daemon), ENT_QUOTES, 'UTF-8') ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
+
+                <div id="schedule-intervals">
+                    <?php foreach ($scheduleEntriesForForm as $idx => $entry): ?>
+                        <?php
+                        $entryDays = normalizeScheduleDays((array)($entry['days'] ?? []));
+                        $entryDayMode = (string)($entry['day_mode'] ?? ((count($entryDays) === 7) ? 'all' : 'specific'));
+                        $entryModule = (string)($entry['module'] ?? ($daemonNames[0] ?? ''));
+                        $entryStart = (string)($entry['start'] ?? '09:00');
+                        $entryStop = (string)($entry['stop'] ?? '21:00');
+                        ?>
+                        <div class="schedule-interval-card" data-idx="<?= $idx ?>">
+                            <div class="schedule-interval-head">
+                                <div class="service-title schedule-interval-title"><?= htmlspecialchars(t('schedule_interval', ['num' => (string)($idx + 1)]), ENT_QUOTES, 'UTF-8') ?></div>
+                                <button type="button" class="lang-btn remove-interval-btn"><?= htmlspecialchars(t('remove_interval'), ENT_QUOTES, 'UTF-8') ?></button>
+                            </div>
+                            <div class="form-group">
+                                <label><?= htmlspecialchars(t('schedule_module'), ENT_QUOTES, 'UTF-8') ?></label>
+                                <select name="schedule_entries[<?= $idx ?>][module]" class="interval-module">
+                                    <?php foreach ($daemonNames as $daemon): ?>
+                                        <option value="<?= htmlspecialchars($daemon, ENT_QUOTES, 'UTF-8') ?>"<?= $entryModule === $daemon ? ' selected' : '' ?>>
+                                            <?= htmlspecialchars(strtoupper($daemon), ENT_QUOTES, 'UTF-8') ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label><?= htmlspecialchars(t('schedule_day_mode'), ENT_QUOTES, 'UTF-8') ?></label>
+                                <select name="schedule_entries[<?= $idx ?>][day_mode]" class="interval-day-mode">
+                                    <option value="all"<?= $entryDayMode === 'all' ? ' selected' : '' ?>><?= htmlspecialchars(t('schedule_all_days'), ENT_QUOTES, 'UTF-8') ?></option>
+                                    <option value="specific"<?= $entryDayMode === 'specific' ? ' selected' : '' ?>><?= htmlspecialchars(t('schedule_specific_days'), ENT_QUOTES, 'UTF-8') ?></option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label><?= htmlspecialchars(t('schedule_select_days'), ENT_QUOTES, 'UTF-8') ?></label>
+                                <div class="schedule-days-grid interval-days-grid">
+                                    <?php foreach ($days as $num => $label): ?>
+                                        <label class="schedule-day-item" for="interval_<?= $idx ?>_day_<?= $num ?>">
+                                            <input
+                                                id="interval_<?= $idx ?>_day_<?= $num ?>"
+                                                class="schedule-day-checkbox"
+                                                type="checkbox"
+                                                name="schedule_entries[<?= $idx ?>][days][]"
+                                                value="<?= $num ?>"
+                                                <?= in_array($num, $entryDays, true) ? 'checked' : '' ?>
+                                            >
+                                            <span><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></span>
+                                        </label>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                            <div class="form-row-two">
+                                <div class="form-group">
+                                    <label><?= htmlspecialchars(t('schedule_start_time'), ENT_QUOTES, 'UTF-8') ?></label>
+                                    <input type="time" name="schedule_entries[<?= $idx ?>][start]" value="<?= htmlspecialchars($entryStart, ENT_QUOTES, 'UTF-8') ?>" class="interval-start">
+                                </div>
+                                <div class="form-group">
+                                    <label><?= htmlspecialchars(t('schedule_stop_time'), ENT_QUOTES, 'UTF-8') ?></label>
+                                    <input type="time" name="schedule_entries[<?= $idx ?>][stop]" value="<?= htmlspecialchars($entryStop, ENT_QUOTES, 'UTF-8') ?>" class="interval-stop">
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
-                <div class="form-group">
-                    <label for="schedule_day_mode"><?= htmlspecialchars(t('schedule_day_mode'), ENT_QUOTES, 'UTF-8') ?></label>
-                    <select id="schedule_day_mode" name="schedule_day_mode">
-                        <option value="all"<?= $scheduleDayMode === 'all' ? ' selected' : '' ?>><?= htmlspecialchars(t('schedule_all_days'), ENT_QUOTES, 'UTF-8') ?></option>
-                        <option value="specific"<?= $scheduleDayMode === 'specific' ? ' selected' : '' ?>><?= htmlspecialchars(t('schedule_specific_days'), ENT_QUOTES, 'UTF-8') ?></option>
-                    </select>
+
+                <div class="schedule-actions-row">
+                    <div class="schedule-limit-hint"><?= htmlspecialchars(t('schedule_limit_hint'), ENT_QUOTES, 'UTF-8') ?></div>
+                    <button type="button" id="add-interval-btn" class="lang-btn"><?= htmlspecialchars(t('add_interval'), ENT_QUOTES, 'UTF-8') ?></button>
                 </div>
-                <div class="form-group" id="schedule_days_group">
-                    <label><?= htmlspecialchars(t('schedule_select_days'), ENT_QUOTES, 'UTF-8') ?></label>
-                    <div class="schedule-days-grid">
-                        <?php foreach ($days as $num => $label): ?>
-                            <label class="schedule-day-item" for="schedule_day_<?= $num ?>">
-                                <input
-                                    id="schedule_day_<?= $num ?>"
-                                    class="schedule-day-checkbox"
-                                    type="checkbox"
-                                    name="schedule_days[]"
-                                    value="<?= $num ?>"
-                                    <?= in_array($num, $currentScheduleDays, true) ? 'checked' : '' ?>
-                                >
-                                <span><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></span>
-                            </label>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-                <div class="form-row-two">
-                    <div class="form-group">
-                        <label for="schedule_start"><?= htmlspecialchars(t('schedule_start_time'), ENT_QUOTES, 'UTF-8') ?></label>
-                        <input id="schedule_start" name="schedule_start" type="time" value="<?= htmlspecialchars($currentSchedule['start'] ?? '09:00', ENT_QUOTES, 'UTF-8') ?>">
-                    </div>
-                    <div class="form-group">
-                        <label for="schedule_stop"><?= htmlspecialchars(t('schedule_stop_time'), ENT_QUOTES, 'UTF-8') ?></label>
-                        <input id="schedule_stop" name="schedule_stop" type="time" value="<?= htmlspecialchars($currentSchedule['stop'] ?? '21:00', ENT_QUOTES, 'UTF-8') ?>">
-                    </div>
-                </div>
+
                 <button class="submit-btn" type="submit"><?= htmlspecialchars(t('save'), ENT_QUOTES, 'UTF-8') ?></button>
             </form>
         </div>
@@ -307,35 +363,123 @@ $daySummary = $isAllDays ? t('all_days') : implode(', ', $dayLabels);
 <footer class="app-footer">&copy; 2022-<?= date('Y') ?> IT Army of Ukraine. <?= htmlspecialchars(t('footer_slogan'), ENT_QUOTES, 'UTF-8') ?>.</footer>
 <script>
 (() => {
+    const maxIntervals = <?= MAX_SCHEDULE_INTERVALS ?>;
+    const texts = {
+        interval: <?= json_encode(t('schedule_interval', ['num' => '{{num}}']), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>
+    };
     const enabledEl = document.getElementById('schedule_enabled');
-    const dayModeEl = document.getElementById('schedule_day_mode');
-    const dayCheckboxes = Array.from(document.querySelectorAll('.schedule-day-checkbox'));
-    const dayGridEl = document.querySelector('.schedule-days-grid');
-    const toggledIds = ['schedule_module', 'schedule_day_mode', 'schedule_start', 'schedule_stop'];
-    if (!enabledEl) {
+    const intervalsEl = document.getElementById('schedule-intervals');
+    const addBtn = document.getElementById('add-interval-btn');
+    if (!enabledEl || !intervalsEl || !addBtn) {
         return;
     }
-    const update = () => {
-        const enabled = enabledEl.value === '1';
-        for (const id of toggledIds) {
-            const el = document.getElementById(id);
-            if (el) {
-                el.disabled = !enabled;
+
+    function reindexIntervals() {
+        const cards = Array.from(intervalsEl.querySelectorAll('.schedule-interval-card'));
+        cards.forEach((card, idx) => {
+            card.dataset.idx = String(idx);
+            const title = card.querySelector('.schedule-interval-title');
+            if (title) {
+                title.textContent = texts.interval.replace('{{num}}', String(idx + 1));
             }
-        }
-        const specificMode = dayModeEl && dayModeEl.value === 'specific';
-        for (const el of dayCheckboxes) {
-            el.disabled = !enabled || !specificMode;
-        }
-        if (dayGridEl) {
-            dayGridEl.classList.toggle('is-disabled', !enabled || !specificMode);
-        }
-    };
-    enabledEl.addEventListener('change', update);
-    if (dayModeEl) {
-        dayModeEl.addEventListener('change', update);
+            const elements = card.querySelectorAll('input, select, label');
+            elements.forEach((el) => {
+                if (el.name) {
+                    el.name = el.name.replace(/schedule_entries\[\d+\]/, `schedule_entries[${idx}]`);
+                }
+                if (el.id) {
+                    el.id = el.id
+                        .replace(/interval_\d+_day_/g, `interval_${idx}_day_`);
+                }
+                if (el.htmlFor) {
+                    el.htmlFor = el.htmlFor
+                        .replace(/interval_\d+_day_/g, `interval_${idx}_day_`);
+                }
+            });
+        });
     }
-    update();
+
+    function updateIntervalCardState(card, enabledGlobal) {
+        const dayModeEl = card.querySelector('.interval-day-mode');
+        const daysGrid = card.querySelector('.interval-days-grid');
+        const dayChecks = card.querySelectorAll('.schedule-day-checkbox');
+        const controls = card.querySelectorAll('.interval-module, .interval-day-mode, .interval-start, .interval-stop');
+        controls.forEach((el) => {
+            el.disabled = !enabledGlobal;
+        });
+        const specific = dayModeEl && dayModeEl.value === 'specific';
+        dayChecks.forEach((el) => {
+            el.disabled = !enabledGlobal || !specific;
+        });
+        if (daysGrid) {
+            daysGrid.classList.toggle('is-disabled', !enabledGlobal || !specific);
+        }
+    }
+
+    function bindCard(card) {
+        const removeBtn = card.querySelector('.remove-interval-btn');
+        const dayModeEl = card.querySelector('.interval-day-mode');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', () => {
+                const cards = intervalsEl.querySelectorAll('.schedule-interval-card');
+                if (cards.length <= 1) {
+                    return;
+                }
+                card.remove();
+                reindexIntervals();
+                refreshState();
+            });
+        }
+        if (dayModeEl) {
+            dayModeEl.addEventListener('change', refreshState);
+        }
+    }
+
+    function refreshState() {
+        const enabled = enabledEl.value === '1';
+        const cards = Array.from(intervalsEl.querySelectorAll('.schedule-interval-card'));
+        cards.forEach((card) => updateIntervalCardState(card, enabled));
+        addBtn.disabled = !enabled || cards.length >= maxIntervals;
+        const removeButtons = intervalsEl.querySelectorAll('.remove-interval-btn');
+        removeButtons.forEach((btn) => {
+            btn.disabled = !enabled || cards.length <= 1;
+        });
+    }
+
+    function addInterval() {
+        const cards = Array.from(intervalsEl.querySelectorAll('.schedule-interval-card'));
+        if (cards.length >= maxIntervals) {
+            return;
+        }
+        const clone = cards[0].cloneNode(true);
+        clone.querySelectorAll('input').forEach((el) => {
+            if (el.type === 'checkbox') {
+                el.checked = false;
+            } else if (el.type === 'time') {
+                el.value = (el.classList.contains('interval-start')) ? '09:00' : '21:00';
+            }
+        });
+        clone.querySelectorAll('select').forEach((el) => {
+            if (el.classList.contains('interval-day-mode')) {
+                el.value = 'all';
+            } else if (el.classList.contains('interval-module')) {
+                el.selectedIndex = 0;
+            }
+        });
+        clone.querySelectorAll('.schedule-day-checkbox').forEach((el) => {
+            el.checked = true;
+        });
+        intervalsEl.appendChild(clone);
+        bindCard(clone);
+        reindexIntervals();
+        refreshState();
+    }
+
+    Array.from(intervalsEl.querySelectorAll('.schedule-interval-card')).forEach(bindCard);
+    enabledEl.addEventListener('change', refreshState);
+    addBtn.addEventListener('click', addInterval);
+    reindexIntervals();
+    refreshState();
 })();
 </script>
 </body>

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 const SCHEDULE_BEGIN_MARKER = '# ITARMYBOX-SCHEDULE-BEGIN';
 const SCHEDULE_END_MARKER = '# ITARMYBOX-SCHEDULE-END';
+const MAX_SCHEDULE_ENTRIES = 5;
 
 function respond(array $data): void
 {
@@ -68,6 +69,17 @@ function normalizeDays(array $days): array
     $values = array_keys($set);
     sort($values);
     return $values;
+}
+
+function parseDowField(string $dow): ?array
+{
+    if ($dow === '*') {
+        return [0, 1, 2, 3, 4, 5, 6];
+    }
+    if (preg_match('/^[0-6](?:,[0-6])*$/', $dow) !== 1) {
+        return null;
+    }
+    return normalizeDays(explode(',', $dow));
 }
 
 function getAutostart(array $modules): array
@@ -353,29 +365,58 @@ function getSchedule(array $modules): array
 {
     $raw = runCommand('crontab -l', $code);
     if ($code !== 0) {
-        return ['ok' => true, 'schedule' => null];
+        return ['ok' => true, 'entries' => []];
     }
 
-    $pattern = '/^#\s*ITARMYBOX\s+MODULE=(?<module>[a-zA-Z0-9_-]+)\s+DOW=(?<dow>\*|[0-6](?:,[0-6])*)\s+START=(?<start>[0-2][0-9]:[0-5][0-9])\s+STOP=(?<stop>[0-2][0-9]:[0-5][0-9])$/m';
-    if (!preg_match($pattern, $raw, $m)) {
-        return ['ok' => true, 'schedule' => null];
+    $entries = [];
+    $newPattern = '/^#\s*ITARMYBOX\s+ENTRY\s+MODULE=(?<module>[a-zA-Z0-9_-]+)\s+DOW=(?<dow>\*|[0-6](?:,[0-6])*)\s+START=(?<start>[0-2][0-9]:[0-5][0-9])\s+STOP=(?<stop>[0-2][0-9]:[0-5][0-9])$/m';
+    if (preg_match_all($newPattern, $raw, $matches, PREG_SET_ORDER) > 0) {
+        foreach ($matches as $m) {
+            $module = $m['module'];
+            if (!in_array($module, $modules, true)) {
+                continue;
+            }
+            $days = parseDowField($m['dow']);
+            if ($days === null || $days === []) {
+                continue;
+            }
+            $entries[] = [
+                'module' => $module,
+                'days' => $days,
+                'start' => $m['start'],
+                'stop' => $m['stop'],
+            ];
+            if (count($entries) >= MAX_SCHEDULE_ENTRIES) {
+                break;
+            }
+        }
+        return ['ok' => true, 'entries' => $entries];
     }
-    if (!in_array($m['module'], $modules, true)) {
-        return ['ok' => true, 'schedule' => null];
+
+    // Backward compatibility with old single-entry format.
+    $oldPattern = '/^#\s*ITARMYBOX\s+MODULE=(?<module>[a-zA-Z0-9_-]+)\s+DOW=(?<dow>\*|[0-6](?:,[0-6])*)\s+START=(?<start>[0-2][0-9]:[0-5][0-9])\s+STOP=(?<stop>[0-2][0-9]:[0-5][0-9])$/m';
+    if (preg_match($oldPattern, $raw, $m)) {
+        $module = $m['module'];
+        if (in_array($module, $modules, true)) {
+            $days = parseDowField($m['dow']);
+            if ($days !== null && $days !== []) {
+                $entries[] = [
+                    'module' => $module,
+                    'days' => $days,
+                    'start' => $m['start'],
+                    'stop' => $m['stop'],
+                ];
+            }
+        }
     }
 
     return [
         'ok' => true,
-        'schedule' => [
-            'module' => $m['module'],
-            'dow' => $m['dow'],
-            'start' => $m['start'],
-            'stop' => $m['stop'],
-        ],
+        'entries' => $entries,
     ];
 }
 
-function setSchedule(?string $module, ?array $days, ?string $start, ?string $stop): array
+function setScheduleEntries(array $entries): array
 {
     $raw = runCommand('crontab -l', $code);
     if ($code !== 0) {
@@ -384,22 +425,34 @@ function setSchedule(?string $module, ?array $days, ?string $start, ?string $sto
     $base = stripScheduleBlock($raw);
     $new = $base;
 
-    if ($module !== null && $days !== null && $start !== null && $stop !== null) {
-        $days = normalizeDays($days);
-        if ($days === []) {
-            return ['ok' => false, 'error' => 'invalid_days'];
+    if ($entries !== []) {
+        if (count($entries) > MAX_SCHEDULE_ENTRIES) {
+            return ['ok' => false, 'error' => 'too_many_entries'];
         }
-        $dow = count($days) === 7 ? '*' : implode(',', $days);
-        [$startH, $startM] = parseTimeParts($start);
-        [$stopH, $stopM] = parseTimeParts($stop);
-        $service = $module . '.service';
-        $block = [
-            SCHEDULE_BEGIN_MARKER,
-            "# ITARMYBOX MODULE=$module DOW=$dow START=$start STOP=$stop",
-            "$startM $startH * * $dow systemctl start $service >/dev/null 2>&1",
-            "$stopM $stopH * * $dow systemctl stop $service >/dev/null 2>&1",
-            SCHEDULE_END_MARKER,
-        ];
+        $block = [SCHEDULE_BEGIN_MARKER];
+        foreach ($entries as $entry) {
+            $module = (string)($entry['module'] ?? '');
+            $days = normalizeDays((array)($entry['days'] ?? []));
+            $start = (string)($entry['start'] ?? '');
+            $stop = (string)($entry['stop'] ?? '');
+            if (
+                $module === '' ||
+                $days === [] ||
+                preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $start) !== 1 ||
+                preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $stop) !== 1
+            ) {
+                return ['ok' => false, 'error' => 'invalid_entry'];
+            }
+
+            $dow = count($days) === 7 ? '*' : implode(',', $days);
+            [$startH, $startM] = parseTimeParts($start);
+            [$stopH, $stopM] = parseTimeParts($stop);
+            $service = $module . '.service';
+            $block[] = "# ITARMYBOX ENTRY MODULE=$module DOW=$dow START=$start STOP=$stop";
+            $block[] = "$startM $startH * * $dow systemctl start $service >/dev/null 2>&1";
+            $block[] = "$stopM $stopH * * $dow systemctl stop $service >/dev/null 2>&1";
+        }
+        $block[] = SCHEDULE_END_MARKER;
         $new .= ($new === '' ? '' : "\n") . implode("\n", $block);
     }
 
@@ -463,25 +516,40 @@ if ($action === 'schedule_get') {
 }
 
 if ($action === 'schedule_set') {
-    $module = $request['module'] ?? null;
-    $days = $request['days'] ?? null;
-    $start = $request['start'] ?? null;
-    $stop = $request['stop'] ?? null;
+    $entries = $request['entries'] ?? [];
+    if (!is_array($entries)) {
+        fail('invalid_entries');
+    }
+    $normalized = [];
+    foreach ($entries as $entry) {
+        if (!is_array($entry)) {
+            fail('invalid_entry');
+        }
+        $module = $entry['module'] ?? null;
+        $days = $entry['days'] ?? null;
+        $start = $entry['start'] ?? null;
+        $stop = $entry['stop'] ?? null;
+        if (!is_string($module) || !in_array($module, $modules, true)) {
+            fail('invalid_schedule_module');
+        }
+        if (!is_array($days)) {
+            fail('invalid_days');
+        }
+        if (preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string)$start) !== 1) {
+            fail('invalid_start');
+        }
+        if (preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string)$stop) !== 1) {
+            fail('invalid_stop');
+        }
+        $normalized[] = [
+            'module' => $module,
+            'days' => normalizeDays($days),
+            'start' => (string)$start,
+            'stop' => (string)$stop,
+        ];
+    }
 
-    if ($module !== null && (!is_string($module) || !in_array($module, $modules, true))) {
-        fail('invalid_schedule_module');
-    }
-    if ($days !== null && !is_array($days)) {
-        fail('invalid_days');
-    }
-    if ($start !== null && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string)$start) !== 1) {
-        fail('invalid_start');
-    }
-    if ($stop !== null && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string)$stop) !== 1) {
-        fail('invalid_stop');
-    }
-
-    respond(setSchedule($module, $days, $start, $stop));
+    respond(setScheduleEntries($normalized));
     exit(0);
 }
 
