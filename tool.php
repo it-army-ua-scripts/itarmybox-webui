@@ -244,13 +244,38 @@ if (isset($_GET['ajax_logs']) && $_GET['ajax_logs'] === '1') {
             shell_exec("sudo systemctl daemon-reload && sudo systemctl restart {$serviceName}.service 2>&1");
         }
 
+        function normalizeDistressPostParams(array $params): array
+        {
+            $useMyIp = (int)($params['use-my-ip'] ?? 0);
+            if ($useMyIp <= 0) {
+                $params['enable-icmp-flood'] = '';
+                $params['enable-packet-flood'] = '';
+                $params['disable-udp-flood'] = '';
+                $params['udp-packet-size'] = '';
+                $params['direct-udp-mixed-flood-packets-per-conn'] = '';
+                return $params;
+            }
+
+            $disableUdpFlood = (string)($params['disable-udp-flood'] ?? '0');
+            if ($disableUdpFlood === '1') {
+                $params['udp-packet-size'] = '';
+                $params['direct-udp-mixed-flood-packets-per-conn'] = '';
+            }
+
+            return $params;
+        }
+
         if (isset($_GET['daemon']) && in_array($_GET['daemon'], $config['daemonNames'])) {
             $daemonName = $_GET['daemon'];
             if (!empty($_POST)) {
                 if ($daemonName == 'x100') {
                     setX100ConfigValues($_POST);
                 } else {
-                    updateServiceFile($daemonName, updateServiceConfigParams(getConfigStringFromServiceFile($daemonName), $_POST));
+                    $paramsToSave = $_POST;
+                    if ($daemonName === 'distress') {
+                        $paramsToSave = normalizeDistressPostParams($paramsToSave);
+                    }
+                    updateServiceFile($daemonName, updateServiceConfigParams(getConfigStringFromServiceFile($daemonName), $paramsToSave));
                 }
                 echo "<span style='color: green;'>" . htmlspecialchars(t('service_updated'), ENT_QUOTES, 'UTF-8') . "</span>";
 
