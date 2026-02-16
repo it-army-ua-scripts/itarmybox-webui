@@ -135,8 +135,51 @@ function getActiveModule(array $modules): ?string
 function getServiceLogsRaw(string $module, int $lines): string
 {
     $lines = max(1, min(500, $lines));
+    $logFile = getServiceLogFile($module);
+    if ($logFile !== null) {
+        $pathSafe = escapeshellarg($logFile);
+        return runCommand("tail -n $lines $pathSafe", $code);
+    }
+
     $service = escapeshellarg($module . '.service');
-    return runCommand("journalctl -u $service --no-pager -n $lines", $code);
+    return runCommand("journalctl -u $service --no-pager -o cat -n $lines", $code);
+}
+
+function parseStandardOutputPath(string $value): ?string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return null;
+    }
+    // Examples:
+    // append:/var/log/adss.log
+    // file:/path/to/log
+    // journal
+    if (str_starts_with($value, 'append:')) {
+        return substr($value, strlen('append:'));
+    }
+    if (str_starts_with($value, 'file:')) {
+        return substr($value, strlen('file:'));
+    }
+    return null;
+}
+
+function getServiceLogFile(string $module): ?string
+{
+    $service = escapeshellarg($module . '.service');
+    $value = runCommand("systemctl show -p StandardOutput --value $service", $code);
+    if ($code !== 0) {
+        return null;
+    }
+    $path = parseStandardOutputPath($value);
+    if ($path === null) {
+        return null;
+    }
+    $path = trim($path);
+    if ($path === '' || $path[0] !== '/') {
+        return null;
+    }
+    return $path;
 }
 
 function serviceActivateExclusive(array $modules, string $selected): array

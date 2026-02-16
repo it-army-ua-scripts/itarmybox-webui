@@ -12,4 +12,5 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
+ReadOnlyPaths=/var/log /opt/itarmy
 ReadWritePaths=/tmp /var/spool/cron /var/spool/cron/crontabs /etc/systemd/system

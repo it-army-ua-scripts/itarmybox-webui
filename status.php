@@ -67,7 +67,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     const activeModuleStatusEl = document.getElementById("active-module-status");
     const text = <?= json_encode([
         'activeModule' => t('active_module'),
-        'moduleRunning' => t('module_running', ['module' => '{{module}}']),
         'noModuleRunning' => t('no_module_running'),
         'commonLogsFor' => t('common_logs_for', ['module' => '{{module}}']),
         'commonLogsNoActive' => t('common_logs_no_active')
@@ -94,8 +93,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
             }
 
             if (data.activeModule) {
-                activeModuleNameEl.textContent = data.activeModule;
-                activeModuleStatusEl.textContent = text.moduleRunning.replace("{{module}}", data.activeModule);
+                activeModuleNameEl.textContent = text.activeModule;
+                activeModuleStatusEl.textContent = data.activeModule;
                 activeModuleStatusEl.classList.add("active");
                 activeModuleStatusEl.classList.remove("inactive");
                 commonLogTitleEl.textContent = text.commonLogsFor.replace("{{module}}", data.activeModule);
