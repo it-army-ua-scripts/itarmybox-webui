@@ -27,6 +27,7 @@
             <li><a href="/status.php" id="link-status">Status</a></li>
             <li><a href="/tools_list.php" id="link-tools">Tools</a></li>
             <li><a href="/update.php" id="link-update">Update</a></li>
+            <li><a href="/autostart.php" id="link-autostart">Autostart</a></li>
         </ul>
     </div>
 </div>
@@ -37,6 +38,7 @@
             status: "Status",
             tools: "Tools",
             update: "Update",
+            autostart: "Autostart",
             footerSlogan: "Together to freedom"
         },
         uk: {
@@ -44,6 +46,7 @@
             status: "Статус",
             tools: "Інструменти",
             update: "Оновлення",
+            autostart: "Автостарт",
             footerSlogan: "Разом до свободи"
         }    };
 
@@ -53,6 +56,7 @@
     const statusEl = document.getElementById("link-status");
     const toolsEl = document.getElementById("link-tools");
     const updateEl = document.getElementById("link-update");
+    const autostartEl = document.getElementById("link-autostart");
     function getCookie(name) {
         const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
         return parts ? decodeURIComponent(parts.split("=")[1]) : null;
@@ -62,6 +66,7 @@
         statusEl.href = "/status.php?lang=" + encodeURIComponent(lang);
         toolsEl.href = "/tools_list.php?lang=" + encodeURIComponent(lang);
         updateEl.href = "/update.php?lang=" + encodeURIComponent(lang);
+        autostartEl.href = "/autostart.php?lang=" + encodeURIComponent(lang);
     }
 
     function applyLang(lang) {
@@ -71,6 +76,7 @@
         statusEl.textContent = text.status;
         toolsEl.textContent = text.tools;
         updateEl.textContent = text.update;
+        autostartEl.textContent = text.autostart;
         const footerSloganEl = document.getElementById("footer-slogan");
         if (footerSloganEl) {
             footerSloganEl.textContent = text.footerSlogan;
