@@ -7,31 +7,47 @@ const SCHEDULE_END_MARKER = '# ITARMYBOX-SCHEDULE-END';
 
 function getCurrentAutostartDaemon(array $daemonNames): ?string
 {
+    $depsRaw = (string)shell_exec('sudo -n systemctl list-dependencies --plain --no-legend multi-user.target 2>/dev/null');
+    $deps = array_map('trim', preg_split('/\r\n|\r|\n/', $depsRaw));
+    $depSet = [];
+    foreach ($deps as $dep) {
+        if ($dep !== '') {
+            $depSet[$dep] = true;
+        }
+    }
+
     foreach ($daemonNames as $daemon) {
-        $daemonSafe = escapeshellarg($daemon . '.service');
-        $state = trim((string)shell_exec("sudo -n systemctl is-enabled $daemonSafe 2>/dev/null"));
-        if ($state === 'enabled') {
+        $service = $daemon . '.service';
+        if (isset($depSet[$service])) {
             return $daemon;
         }
     }
     return null;
 }
 
+function runSudoCommand(string $command): int
+{
+    $exitCode = 1;
+    exec("sudo -n $command 2>/dev/null", $out, $exitCode);
+    return $exitCode;
+}
+
 function setAutostartDaemon(array $daemonNames, ?string $selectedDaemon): bool
 {
     $ok = true;
     foreach ($daemonNames as $daemon) {
-        $daemonSafe = escapeshellarg($daemon . '.service');
-        $result = shell_exec("sudo -n systemctl disable $daemonSafe 2>/dev/null");
-        if ($result === null) {
+        $service = $daemon . '.service';
+        $serviceSafe = escapeshellarg($service);
+        $code = runSudoCommand("systemctl remove-wants multi-user.target $serviceSafe");
+        if ($code !== 0 && $selectedDaemon === $daemon) {
             $ok = false;
         }
     }
 
     if ($selectedDaemon !== null) {
         $selectedSafe = escapeshellarg($selectedDaemon . '.service');
-        $result = shell_exec("sudo -n systemctl enable $selectedSafe 2>/dev/null");
-        if ($result === null) {
+        $code = runSudoCommand("systemctl add-wants multi-user.target $selectedSafe");
+        if ($code !== 0) {
             $ok = false;
         }
     }
