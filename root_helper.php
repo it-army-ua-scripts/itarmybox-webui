@@ -135,14 +135,26 @@ function getActiveModule(array $modules): ?string
 function getServiceLogsRaw(string $module, int $lines): string
 {
     $lines = max(1, min(500, $lines));
+    [$text, $meta] = getServiceLogWithMeta($module, $lines);
+    return $text;
+}
+
+function getServiceLogWithMeta(string $module, int $lines): array
+{
+    $lines = max(1, min(500, $lines));
     $logFile = getServiceLogFile($module);
     if ($logFile !== null) {
         $pathSafe = escapeshellarg($logFile);
-        return runCommand("tail -n $lines $pathSafe", $code);
+        $text = runCommand("tail -n $lines $pathSafe", $code);
+        if (trim($text) !== '') {
+            return [$text, ['source' => 'file', 'path' => $logFile]];
+        }
+        // If file is empty/missing, fall back to journal.
     }
 
     $service = escapeshellarg($module . '.service');
-    return runCommand("journalctl -u $service --no-pager -o cat -n $lines", $code);
+    $text = runCommand("journalctl -u $service --no-pager -o cat -n $lines", $code);
+    return [$text, ['source' => 'journal', 'path' => null]];
 }
 
 function knownLogFileByModule(string $module): ?string
@@ -240,14 +252,20 @@ function statusSnapshot(array $modules, int $lines): array
 {
     $activeModule = getActiveModule($modules);
     $logs = '';
+    $logSource = null;
+    $logPath = null;
     if ($activeModule !== null) {
-        $logs = getServiceLogsRaw($activeModule, $lines);
+        [$logs, $meta] = getServiceLogWithMeta($activeModule, $lines);
+        $logSource = $meta['source'] ?? null;
+        $logPath = $meta['path'] ?? null;
     }
 
     return [
         'ok' => true,
         'activeModule' => $activeModule,
         'commonLogs' => $logs,
+        'logSource' => $logSource,
+        'logPath' => $logPath,
     ];
 }
 

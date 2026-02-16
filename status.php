@@ -97,7 +97,10 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
                 activeModuleStatusEl.textContent = data.activeModule;
                 activeModuleStatusEl.classList.add("active");
                 activeModuleStatusEl.classList.remove("inactive");
-                commonLogTitleEl.textContent = text.commonLogsFor.replace("{{module}}", data.activeModule);
+                const src = data.logSource ? String(data.logSource) : "";
+                const path = data.logPath ? String(data.logPath) : "";
+                const suffix = src ? ` [${src}${path ? ": " + path : ""}]` : "";
+                commonLogTitleEl.textContent = text.commonLogsFor.replace("{{module}}", data.activeModule) + suffix;
             } else {
                 activeModuleNameEl.textContent = text.activeModule;
                 activeModuleStatusEl.textContent = text.noModuleRunning;
