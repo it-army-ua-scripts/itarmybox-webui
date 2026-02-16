@@ -97,19 +97,25 @@ function getEnabledAutostartModules(array $modules): array
     return $enabled;
 }
 
+function removeAutostartLinks(string $module): void
+{
+    $service = $module . '.service';
+    $bases = ['/etc/systemd/system', '/run/systemd/system'];
+    $targets = ['multi-user.target.wants', 'default.target.wants', 'graphical.target.wants'];
+    foreach ($bases as $base) {
+        foreach ($targets as $targetDir) {
+            $path = $base . '/' . $targetDir . '/' . $service;
+            if (is_link($path) || file_exists($path)) {
+                @unlink($path);
+            }
+        }
+    }
+}
+
 function setAutostart(array $modules, ?string $selected): array
 {
-    $targets = ['multi-user.target', 'default.target', 'graphical.target'];
     foreach ($modules as $module) {
-        $service = escapeshellarg($module . '.service');
-        foreach ($targets as $target) {
-            $targetSafe = escapeshellarg($target);
-            // Persistent wants.
-            runCommand("systemctl remove-wants $targetSafe $service", $code1);
-            // Runtime wants (enabled-runtime case).
-            runCommand("systemctl --runtime remove-wants $targetSafe $service", $code2);
-            // Non-zero here may mean link absent; ignore.
-        }
+        removeAutostartLinks($module);
     }
 
     if ($selected !== null) {
