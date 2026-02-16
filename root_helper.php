@@ -72,26 +72,29 @@ function normalizeDays(array $days): array
 
 function getAutostart(array $modules): array
 {
-    $depsRaw = runCommand('systemctl list-dependencies --plain --no-legend multi-user.target', $code);
+    $enabled = getEnabledAutostartModules($modules);
+    return ['ok' => true, 'active' => $enabled[0] ?? null];
+}
+
+function isModuleAutostartEnabled(string $module): bool
+{
+    $service = escapeshellarg($module . '.service');
+    $raw = trim(runCommand("systemctl is-enabled $service", $code));
     if ($code !== 0) {
-        return ['ok' => false, 'error' => 'failed_to_read_dependencies'];
+        return false;
     }
-    $deps = array_map('trim', preg_split('/\r\n|\r|\n/', $depsRaw));
-    $depSet = [];
-    foreach ($deps as $dep) {
-        if ($dep !== '') {
-            $depSet[$dep] = true;
-        }
-    }
+    return str_starts_with($raw, 'enabled');
+}
 
+function getEnabledAutostartModules(array $modules): array
+{
+    $enabled = [];
     foreach ($modules as $module) {
-        $service = $module . '.service';
-        if (isset($depSet[$service])) {
-            return ['ok' => true, 'active' => $module];
+        if (isModuleAutostartEnabled($module)) {
+            $enabled[] = $module;
         }
     }
-
-    return ['ok' => true, 'active' => null];
+    return $enabled;
 }
 
 function setAutostart(array $modules, ?string $selected): array
@@ -99,9 +102,7 @@ function setAutostart(array $modules, ?string $selected): array
     foreach ($modules as $module) {
         $service = escapeshellarg($module . '.service');
         runCommand("systemctl remove-wants multi-user.target $service", $code);
-        if ($code !== 0 && $selected === $module) {
-            return ['ok' => false, 'error' => 'remove_wants_failed'];
-        }
+        // remove-wants returns non-zero when symlink does not exist; ignore that here.
     }
 
     if ($selected !== null) {
@@ -109,6 +110,17 @@ function setAutostart(array $modules, ?string $selected): array
         runCommand("systemctl add-wants multi-user.target $service", $code);
         if ($code !== 0) {
             return ['ok' => false, 'error' => 'add_wants_failed'];
+        }
+    }
+
+    $enabled = getEnabledAutostartModules($modules);
+    if ($selected === null) {
+        if (count($enabled) !== 0) {
+            return ['ok' => false, 'error' => 'autostart_verification_failed'];
+        }
+    } else {
+        if (count($enabled) !== 1 || $enabled[0] !== $selected) {
+            return ['ok' => false, 'error' => 'autostart_verification_failed'];
         }
     }
 
