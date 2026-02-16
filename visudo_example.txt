@@ -37,3 +37,7 @@ www-data ALL=(root) NOPASSWD: /bin/journalctl -u * --no-pager -n *
 
 www-data ALL=(root) NOPASSWD: /usr/bin/crontab -l
 www-data ALL=(root) NOPASSWD: /usr/bin/crontab *
+
+www-data ALL=(root) NOPASSWD: /usr/bin/systemctl add-wants multi-user.target *.service
+www-data ALL=(root) NOPASSWD: /usr/bin/systemctl remove-wants multi-user.target *.service
+www-data ALL=(root) NOPASSWD: /usr/bin/systemctl list-dependencies --plain --no-legend multi-user.target

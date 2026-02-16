@@ -1,28 +1,19 @@
 <?php
 require_once 'i18n.php';
+require_once 'lib/root_helper_client.php';
 $config = require 'config/config.php';
 $daemonNames = $config['daemonNames'];
 
 if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     header('Content-Type: application/json; charset=UTF-8');
 
-    $activeModule = null;
-    foreach ($daemonNames as $daemon) {
-        $daemonSafe = escapeshellarg($daemon);
-        $status = trim((string)shell_exec("systemctl is-active -- $daemonSafe"));
-        if ($status === 'active' && $activeModule === null) {
-            $activeModule = $daemon;
-        }
-    }
-
-    $commonLogs = '';
-    if ($activeModule !== null) {
-        $activeModuleSafe = escapeshellarg($activeModule);
-        $commonLogs = (string)shell_exec("sudo -n journalctl -u $activeModuleSafe --no-pager -n 80 2>/dev/null");
-        if (trim($commonLogs) === '') {
-            $commonLogs = (string)shell_exec("sudo -n journalctl -u $activeModuleSafe --no-pager -n 80 2>/dev/null");
-        }
-    }
+    $response = root_helper_request([
+        'action' => 'status_snapshot',
+        'modules' => $daemonNames,
+        'lines' => 80,
+    ]);
+    $activeModule = ($response['ok'] ?? false) ? ($response['activeModule'] ?? null) : null;
+    $commonLogs = ($response['ok'] ?? false) ? (string)($response['commonLogs'] ?? '') : '';
 
     if (trim($commonLogs) === '') {
         $commonLogs = (string)shell_exec("tail -n80 /var/log/adss.log 2>/dev/null");

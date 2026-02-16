@@ -1,0 +1,13 @@
+[Unit]
+Description=IT Army Box Root Helper Socket
+
+[Socket]
+ListenStream=/run/itarmybox-root-helper.sock
+SocketMode=0660
+SocketUser=root
+SocketGroup=www-data
+RemoveOnStop=true
+Accept=true
+
+[Install]
+WantedBy=sockets.target

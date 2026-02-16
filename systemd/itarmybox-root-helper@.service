@@ -1,0 +1,15 @@
+[Unit]
+Description=IT Army Box Root Helper Worker
+
+[Service]
+Type=simple
+User=root
+Group=root
+StandardInput=socket
+StandardOutput=socket
+ExecStart=/usr/bin/php /var/www/html/itarmybox-webui/root_helper.php
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/tmp /var/spool/cron /var/spool/cron/crontabs /etc/systemd/system

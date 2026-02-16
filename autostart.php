@@ -1,64 +1,33 @@
 <?php
 require_once 'i18n.php';
+require_once 'lib/root_helper_client.php';
 $config = require 'config/config.php';
 $daemonNames = $config['daemonNames'];
-const SCHEDULE_BEGIN_MARKER = '# ITARMYBOX-SCHEDULE-BEGIN';
-const SCHEDULE_END_MARKER = '# ITARMYBOX-SCHEDULE-END';
 
 function getCurrentAutostartDaemon(array $daemonNames): ?string
 {
-    $depsRaw = (string)shell_exec('sudo -n systemctl list-dependencies --plain --no-legend multi-user.target 2>/dev/null');
-    $deps = array_map('trim', preg_split('/\r\n|\r|\n/', $depsRaw));
-    $depSet = [];
-    foreach ($deps as $dep) {
-        if ($dep !== '') {
-            $depSet[$dep] = true;
-        }
+    $response = root_helper_request([
+        'action' => 'autostart_get',
+        'modules' => $daemonNames,
+    ]);
+    if (($response['ok'] ?? false) !== true) {
+        return null;
     }
-
-    foreach ($daemonNames as $daemon) {
-        $service = $daemon . '.service';
-        if (isset($depSet[$service])) {
-            return $daemon;
-        }
+    $active = $response['active'] ?? null;
+    if (is_string($active) && in_array($active, $daemonNames, true)) {
+        return $active;
     }
     return null;
 }
 
-function runSudoCommand(string $command): int
-{
-    $exitCode = 1;
-    exec("sudo -n $command 2>/dev/null", $out, $exitCode);
-    return $exitCode;
-}
-
 function setAutostartDaemon(array $daemonNames, ?string $selectedDaemon): bool
 {
-    $ok = true;
-    foreach ($daemonNames as $daemon) {
-        $service = $daemon . '.service';
-        $serviceSafe = escapeshellarg($service);
-        $code = runSudoCommand("systemctl remove-wants multi-user.target $serviceSafe");
-        if ($code !== 0 && $selectedDaemon === $daemon) {
-            $ok = false;
-        }
-    }
-
-    if ($selectedDaemon !== null) {
-        $selectedSafe = escapeshellarg($selectedDaemon . '.service');
-        $code = runSudoCommand("systemctl add-wants multi-user.target $selectedSafe");
-        if ($code !== 0) {
-            $ok = false;
-        }
-    }
-
-    return $ok;
-}
-
-function parseHmToParts(string $hm): array
-{
-    [$h, $m] = explode(':', $hm, 2);
-    return [(int)$h, (int)$m];
+    $response = root_helper_request([
+        'action' => 'autostart_set',
+        'modules' => $daemonNames,
+        'selected' => $selectedDaemon,
+    ]);
+    return ($response['ok'] ?? false) === true;
 }
 
 function normalizeScheduleDays(array $rawDays): array
@@ -86,51 +55,30 @@ function parseDowField(string $dowField): ?array
     return normalizeScheduleDays($parts);
 }
 
-function getRawCrontab(): string
-{
-    $raw = shell_exec('sudo -n crontab -l 2>/dev/null');
-    return is_string($raw) ? $raw : '';
-}
-
-function stripScheduleBlock(string $crontab): string
-{
-    $lines = preg_split('/\r\n|\r|\n/', $crontab);
-    $clean = [];
-    $inside = false;
-    foreach ($lines as $line) {
-        if ($line === SCHEDULE_BEGIN_MARKER) {
-            $inside = true;
-            continue;
-        }
-        if ($line === SCHEDULE_END_MARKER) {
-            $inside = false;
-            continue;
-        }
-        if (!$inside && trim($line) !== '') {
-            $clean[] = $line;
-        }
-    }
-    return implode("\n", $clean);
-}
-
 function getCurrentSchedule(array $daemonNames): ?array
 {
-    $crontab = getRawCrontab();
-    if ($crontab === '') {
+    $response = root_helper_request([
+        'action' => 'schedule_get',
+        'modules' => $daemonNames,
+    ]);
+    if (($response['ok'] ?? false) !== true || !isset($response['schedule']) || !is_array($response['schedule'])) {
         return null;
     }
-
-    $pattern = '/^#\s*ITARMYBOX\s+MODULE=(?<module>[a-zA-Z0-9_-]+)\s+DOW=(?<dow>\*|[0-6](?:,[0-6])*)\s+START=(?<start>[0-2][0-9]:[0-5][0-9])\s+STOP=(?<stop>[0-2][0-9]:[0-5][0-9])$/m';
-    if (!preg_match($pattern, $crontab, $m)) {
+    $schedule = $response['schedule'];
+    $module = $schedule['module'] ?? '';
+    $dowRaw = $schedule['dow'] ?? '';
+    $start = $schedule['start'] ?? '';
+    $stop = $schedule['stop'] ?? '';
+    if (
+        !is_string($module) ||
+        !in_array($module, $daemonNames, true) ||
+        !is_string($dowRaw) ||
+        !is_string($start) ||
+        !is_string($stop)
+    ) {
         return null;
     }
-
-    $module = $m['module'];
-    if (!in_array($module, $daemonNames, true)) {
-        return null;
-    }
-
-    $days = parseDowField($m['dow']);
+    $days = parseDowField($dowRaw);
     if ($days === null || $days === []) {
         return null;
     }
@@ -138,51 +86,22 @@ function getCurrentSchedule(array $daemonNames): ?array
     return [
         'module' => $module,
         'days' => $days,
-        'start' => $m['start'],
-        'stop' => $m['stop'],
+        'start' => $start,
+        'stop' => $stop,
     ];
 }
 
-function saveSchedule(?string $module, ?array $days, ?string $startTime, ?string $stopTime): bool
+function saveSchedule(array $daemonNames, ?string $module, ?array $days, ?string $startTime, ?string $stopTime): bool
 {
-    $base = stripScheduleBlock(getRawCrontab());
-    $new = $base;
-
-    if ($module !== null && $days !== null && $startTime !== null && $stopTime !== null) {
-        $days = normalizeScheduleDays($days);
-        if ($days === []) {
-            return false;
-        }
-        [$startH, $startM] = parseHmToParts($startTime);
-        [$stopH, $stopM] = parseHmToParts($stopTime);
-        $service = $module . '.service';
-        $dowCron = (count($days) === 7) ? '*' : implode(',', $days);
-        $block = [
-            SCHEDULE_BEGIN_MARKER,
-            "# ITARMYBOX MODULE=$module DOW=$dowCron START=$startTime STOP=$stopTime",
-            "$startM $startH * * $dowCron sudo -n systemctl start $service >/dev/null 2>&1",
-            "$stopM $stopH * * $dowCron sudo -n systemctl stop $service >/dev/null 2>&1",
-            SCHEDULE_END_MARKER,
-        ];
-        $new .= ($new === '' ? '' : "\n") . implode("\n", $block);
-    }
-
-    $tmp = tempnam(sys_get_temp_dir(), 'itarmybox-cron-');
-    if ($tmp === false) {
-        return false;
-    }
-
-    $bytes = file_put_contents($tmp, $new === '' ? "\n" : ($new . "\n"));
-    if ($bytes === false) {
-        @unlink($tmp);
-        return false;
-    }
-
-    $exitCode = 1;
-    exec('sudo -n crontab ' . escapeshellarg($tmp) . ' 2>/dev/null', $out, $exitCode);
-    @unlink($tmp);
-
-    return $exitCode === 0;
+    $response = root_helper_request([
+        'action' => 'schedule_set',
+        'modules' => $daemonNames,
+        'module' => $module,
+        'days' => $days,
+        'start' => $startTime,
+        'stop' => $stopTime,
+    ]);
+    return ($response['ok'] ?? false) === true;
 }
 
 $message = '';
@@ -203,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enabled = ($_POST['schedule_enabled'] ?? '0') === '1';
         $ok = false;
         if (!$enabled) {
-            $ok = saveSchedule(null, null, null, null);
+            $ok = saveSchedule($daemonNames, null, null, null, null);
         } else {
             $module = $_POST['schedule_module'] ?? '';
             $dayMode = $_POST['schedule_day_mode'] ?? 'all';
@@ -223,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 preg_match($validTime, $startTime) === 1 &&
                 preg_match($validTime, $stopTime) === 1
             ) {
-                $ok = saveSchedule($module, $days, $startTime, $stopTime);
+                $ok = saveSchedule($daemonNames, $module, $days, $startTime, $stopTime);
             }
         }
         $message = $ok ? t('schedule_updated') : t('schedule_update_failed');
