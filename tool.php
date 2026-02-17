@@ -46,6 +46,7 @@ if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
         if (in_array($daemonName, $config['daemonNames'], true)) {
             if (!empty($_POST)) {
                 $saveOk = false;
+                $saveError = '';
                 if ($daemonName === 'x100') {
                     $saveOk = setX100ConfigValues($_POST);
                 } else {
@@ -53,8 +54,16 @@ if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
                     if ($daemonName === 'distress') {
                         $paramsToSave = normalizeDistressPostParams($paramsToSave);
                     }
+                    if ($daemonName === 'mhddos') {
+                        $mhddosValidation = normalizeAndValidateMhddosPostParams($paramsToSave);
+                        if (($mhddosValidation['ok'] ?? false) !== true) {
+                            $saveError = (string)($mhddosValidation['error'] ?? 'Invalid mhddos settings.');
+                        } else {
+                            $paramsToSave = (array)$mhddosValidation['params'];
+                        }
+                    }
                     $currentConfigString = getConfigStringFromServiceFile($daemonName);
-                    if ($currentConfigString !== '') {
+                    if ($saveError === '' && $currentConfigString !== '') {
                         $saveOk = updateServiceFile(
                             $daemonName,
                             updateServiceConfigParams(
@@ -69,7 +78,11 @@ if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
                 if ($saveOk) {
                     echo "<span style='color: green;'>" . htmlspecialchars(t('service_updated'), ENT_QUOTES, 'UTF-8') . "</span>";
                 } else {
-                    echo "<span style='color: red;'>" . htmlspecialchars(t('error'), ENT_QUOTES, 'UTF-8') . ": settings were not saved</span>";
+                    if ($saveError !== '') {
+                        echo "<span style='color: red;'>" . htmlspecialchars($saveError, ENT_QUOTES, 'UTF-8') . "</span>";
+                    } else {
+                        echo "<span style='color: red;'>" . htmlspecialchars(t('error'), ENT_QUOTES, 'UTF-8') . ": settings were not saved</span>";
+                    }
                 }
             }
 

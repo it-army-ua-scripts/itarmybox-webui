@@ -1,7 +1,7 @@
 <form method="post" action="">
     <div class="form-group">
         <label for="user-id"><?= htmlspecialchars(t('user_id_integer'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="number" id="user-id" name="user-id" required value="<?= $currentAdjustableParams['user-id']??"" ?>">
+        <input type="text" id="user-id" name="user-id" value="<?= $currentAdjustableParams['user-id']??"" ?>" placeholder="digits only">
     </div>
     <div class="form-group">
         <label for="lang"><?= htmlspecialchars(t('language'), ENT_QUOTES, 'UTF-8') ?></label>
@@ -18,15 +18,15 @@
     </div>
     <div class="form-group">
         <label for="copies"><?= htmlspecialchars(t('number_of_copies'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="text" id="copies" name="copies" required value="<?= $currentAdjustableParams['copies']??"" ?>" placeholder="auto or number">
+        <input type="text" id="copies" name="copies" value="<?= $currentAdjustableParams['copies']??"" ?>" placeholder="auto or number (default: auto)">
     </div>
     <div class="form-group">
         <label for="use-my-ip"><?= htmlspecialchars(t('percentage_personal_ip'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="number" id="use-my-ip" name="use-my-ip" min="0" max="100" required value="<?= $currentAdjustableParams['use-my-ip']??"" ?>">
+        <input type="number" id="use-my-ip" name="use-my-ip" min="0" max="100" value="<?= $currentAdjustableParams['use-my-ip']??"" ?>" placeholder="0..100 (default: 0)">
     </div>
     <div class="form-group">
         <label for="threads"><?= htmlspecialchars(t('threads'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="number" id="threads" name="threads" required value="<?= $currentAdjustableParams['threads']??"" ?>">
+        <input type="text" id="threads" name="threads" value="<?= $currentAdjustableParams['threads']??"" ?>" placeholder="digits only (default: 8000)">
     </div>
     <div class="form-group">
         <label for="proxies"><?= htmlspecialchars(t('proxies_path_or_url'), ENT_QUOTES, 'UTF-8') ?></label>

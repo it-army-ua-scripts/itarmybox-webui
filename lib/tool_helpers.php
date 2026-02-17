@@ -233,3 +233,58 @@ function normalizeDistressPostParams(array $params): array
     }
     return $params;
 }
+
+function normalizeAndValidateMhddosPostParams(array $params): array
+{
+    $normalized = $params;
+
+    $userIdRaw = (string)($params['user-id'] ?? '');
+    if ($userIdRaw !== '') {
+        if ($userIdRaw !== trim($userIdRaw) || preg_match('/^\d+$/', $userIdRaw) !== 1) {
+            return ['ok' => false, 'error' => 'Invalid user-id: only digits, no spaces.'];
+        }
+    }
+    $normalized['user-id'] = $userIdRaw;
+
+    $copiesRaw = (string)($params['copies'] ?? '');
+    if ($copiesRaw === '') {
+        $normalized['copies'] = 'auto';
+    } else {
+        if ($copiesRaw !== trim($copiesRaw) || preg_match('/^(?:auto|\d+)$/i', $copiesRaw) !== 1) {
+            return ['ok' => false, 'error' => 'Invalid copies: use auto or digits, no spaces.'];
+        }
+        $normalized['copies'] = strtolower($copiesRaw);
+    }
+
+    $useMyIpRaw = (string)($params['use-my-ip'] ?? '');
+    if ($useMyIpRaw === '') {
+        $normalized['use-my-ip'] = '0';
+    } else {
+        if ($useMyIpRaw !== trim($useMyIpRaw) || preg_match('/^\d+$/', $useMyIpRaw) !== 1) {
+            return ['ok' => false, 'error' => 'Invalid use-my-ip: only digits from 0 to 100, no spaces.'];
+        }
+        $useMyIp = (int)$useMyIpRaw;
+        if ($useMyIp < 0 || $useMyIp > 100) {
+            return ['ok' => false, 'error' => 'Invalid use-my-ip: value must be between 0 and 100.'];
+        }
+        $normalized['use-my-ip'] = (string)$useMyIp;
+    }
+
+    $threadsRaw = (string)($params['threads'] ?? '');
+    if ($threadsRaw === '') {
+        $normalized['threads'] = '8000';
+    } else {
+        if ($threadsRaw !== trim($threadsRaw) || preg_match('/^\d+$/', $threadsRaw) !== 1) {
+            return ['ok' => false, 'error' => 'Invalid threads: only digits, no spaces.'];
+        }
+        $normalized['threads'] = $threadsRaw;
+    }
+
+    foreach (['lang', 'proxies', 'ifaces'] as $optionalKey) {
+        if (!array_key_exists($optionalKey, $normalized)) {
+            $normalized[$optionalKey] = '';
+        }
+    }
+
+    return ['ok' => true, 'params' => $normalized];
+}
