@@ -10,7 +10,6 @@
     <link href="/styles.css" rel="stylesheet" />
 </head>
 <body>
-<header class="app-header"><span id="home-datetime-header"></span></header>
 <div class="container home-container">
     <div class="lang-switcher">
         <button type="button" class="lang-btn" id="lang-en">EN</button>
@@ -60,23 +59,22 @@
     const toolsEl = document.getElementById("link-tools");
     const updateEl = document.getElementById("link-update");
     const autostartEl = document.getElementById("link-autostart");
-    const homeDateTimeHeaderEl = document.getElementById("home-datetime-header");
     let activeLang = "en";
 
-    function renderDateTime() {
-        const locale = translations[activeLang]?.locale || "en-US";
-        const now = new Date();
-        const dateFmt = new Intl.DateTimeFormat(locale, {
-            weekday: "long",
-            day: "2-digit",
-            month: "long"
-        });
-        const timeFmt = new Intl.DateTimeFormat(locale, {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false
-        });
-        homeDateTimeHeaderEl.textContent = dateFmt.format(now) + " " + timeFmt.format(now);
+    async function refreshServerDateTime() {
+        try {
+            const response = await fetch("/server_time.php?lang=" + encodeURIComponent(activeLang), { cache: "no-store" });
+            const data = await response.json();
+            if (!data || data.ok !== true || typeof data.text !== "string") {
+                return;
+            }
+            const footerDateTimeEl = document.getElementById("footer-datetime");
+            if (!footerDateTimeEl) {
+                return;
+            }
+            footerDateTimeEl.textContent = data.text;
+        } catch (e) {
+        }
     }
 
     function getCookie(name) {
@@ -106,7 +104,7 @@
         langEnBtn.classList.toggle("active", activeLang === "en");
         langUkBtn.classList.toggle("active", activeLang === "uk");
         updateLinks(activeLang);
-        renderDateTime();
+        refreshServerDateTime();
     }
 
     function setLang(lang) {
@@ -117,12 +115,15 @@
     const params = new URLSearchParams(window.location.search);
     const initialLang = params.get("lang") || getCookie("lang") || "en";
     applyLang(initialLang);
-    setInterval(renderDateTime, 30000);
+    setInterval(refreshServerDateTime, 30000);
 
     langEnBtn.addEventListener("click", () => setLang("en"));
     langUkBtn.addEventListener("click", () => setLang("uk"));
 </script>
-<footer class="app-footer">&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Together to freedom</span>.</footer>
+<footer class="app-footer">
+    <div class="footer-datetime" id="footer-datetime"></div>
+    <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Together to freedom</span>.</div>
+</footer>
 <script>
     document.getElementById("copyright-year").textContent = String(new Date().getFullYear());
 </script>
