@@ -360,7 +360,10 @@ foreach ($currentSchedules as $idx => $entry) {
         </div>
     </div>
 </div>
-<footer class="app-footer">&copy; 2022-<?= date('Y') ?> IT Army of Ukraine. <?= htmlspecialchars(t('footer_slogan'), ENT_QUOTES, 'UTF-8') ?>.</footer>
+<footer class="app-footer">
+    <div class="footer-datetime" id="footer-datetime"></div>
+    <div>&copy; 2022-<?= date('Y') ?> IT Army of Ukraine. <?= htmlspecialchars(t('footer_slogan'), ENT_QUOTES, 'UTF-8') ?>.</div>
+</footer>
 <script>
 (() => {
     const maxIntervals = <?= MAX_SCHEDULE_INTERVALS ?>;
@@ -480,6 +483,28 @@ foreach ($currentSchedules as $idx => $entry) {
     addBtn.addEventListener('click', addInterval);
     reindexIntervals();
     refreshState();
+})();
+</script>
+<script>
+(() => {
+    const lang = <?= json_encode(app_lang(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const el = document.getElementById('footer-datetime');
+    if (!el) {
+        return;
+    }
+    async function refreshServerDateTime() {
+        try {
+            const response = await fetch('/server_time.php?lang=' + encodeURIComponent(lang), { cache: 'no-store' });
+            const data = await response.json();
+            if (!data || data.ok !== true || typeof data.text !== 'string') {
+                return;
+            }
+            el.textContent = data.text;
+        } catch (e) {
+        }
+    }
+    refreshServerDateTime();
+    setInterval(refreshServerDateTime, 30000);
 })();
 </script>
 </body>

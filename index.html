@@ -39,7 +39,6 @@
             tools: "Tools",
             update: "Update",
             autostart: "Autostart",
-            locale: "en-US",
             footerSlogan: "Together to freedom"
         },
         uk: {
@@ -48,7 +47,6 @@
             tools: "Інструменти",
             update: "Оновлення",
             autostart: "Автостарт",
-            locale: "uk-UA",
             footerSlogan: "Разом до свободи"
         }    };
 
@@ -60,22 +58,6 @@
     const updateEl = document.getElementById("link-update");
     const autostartEl = document.getElementById("link-autostart");
     let activeLang = "en";
-
-    async function refreshServerDateTime() {
-        try {
-            const response = await fetch("/server_time.php?lang=" + encodeURIComponent(activeLang), { cache: "no-store" });
-            const data = await response.json();
-            if (!data || data.ok !== true || typeof data.text !== "string") {
-                return;
-            }
-            const footerDateTimeEl = document.getElementById("footer-datetime");
-            if (!footerDateTimeEl) {
-                return;
-            }
-            footerDateTimeEl.textContent = data.text;
-        } catch (e) {
-        }
-    }
 
     function getCookie(name) {
         const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
@@ -104,7 +86,6 @@
         langEnBtn.classList.toggle("active", activeLang === "en");
         langUkBtn.classList.toggle("active", activeLang === "uk");
         updateLinks(activeLang);
-        refreshServerDateTime();
     }
 
     function setLang(lang) {
@@ -115,13 +96,11 @@
     const params = new URLSearchParams(window.location.search);
     const initialLang = params.get("lang") || getCookie("lang") || "en";
     applyLang(initialLang);
-    setInterval(refreshServerDateTime, 30000);
 
     langEnBtn.addEventListener("click", () => setLang("en"));
     langUkBtn.addEventListener("click", () => setLang("uk"));
 </script>
 <footer class="app-footer">
-    <div class="footer-datetime" id="footer-datetime"></div>
     <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Together to freedom</span>.</div>
 </footer>
 <script>
