@@ -234,6 +234,74 @@ function normalizeDistressPostParams(array $params): array
     return $params;
 }
 
+function normalizeAndValidateDistressPostParams(array $params): array
+{
+    $normalized = $params;
+
+    $userIdRaw = (string)($params['user-id'] ?? '');
+    if ($userIdRaw !== '') {
+        if ($userIdRaw !== trim($userIdRaw) || preg_match('/^\d+$/', $userIdRaw) !== 1) {
+            return ['ok' => false, 'error' => 'Invalid user-id: only digits, no spaces.'];
+        }
+    }
+    $normalized['user-id'] = $userIdRaw;
+
+    $useMyIpRaw = (string)($params['use-my-ip'] ?? '');
+    if ($useMyIpRaw === '') {
+        $normalized['use-my-ip'] = '0';
+    } else {
+        if ($useMyIpRaw !== trim($useMyIpRaw) || preg_match('/^\d+$/', $useMyIpRaw) !== 1) {
+            return ['ok' => false, 'error' => 'Invalid use-my-ip: only digits from 0 to 100, no spaces.'];
+        }
+        $useMyIp = (int)$useMyIpRaw;
+        if ($useMyIp < 0 || $useMyIp > 100) {
+            return ['ok' => false, 'error' => 'Invalid use-my-ip: value must be between 0 and 100.'];
+        }
+        $normalized['use-my-ip'] = (string)$useMyIp;
+    }
+
+    $useTorRaw = (string)($params['use-tor'] ?? '');
+    if ($useTorRaw === '') {
+        $normalized['use-tor'] = '0';
+    } else {
+        if ($useTorRaw !== trim($useTorRaw) || preg_match('/^\d+$/', $useTorRaw) !== 1) {
+            return ['ok' => false, 'error' => 'Invalid use-tor: only digits from 0 to 100, no spaces.'];
+        }
+        $useTor = (int)$useTorRaw;
+        if ($useTor < 0 || $useTor > 100) {
+            return ['ok' => false, 'error' => 'Invalid use-tor: value must be between 0 and 100.'];
+        }
+        $normalized['use-tor'] = (string)$useTor;
+    }
+
+    $concurrencyRaw = (string)($params['concurrency'] ?? '');
+    if ($concurrencyRaw === '') {
+        $normalized['concurrency'] = '4096';
+    } else {
+        if ($concurrencyRaw !== trim($concurrencyRaw) || preg_match('/^\d+$/', $concurrencyRaw) !== 1) {
+            return ['ok' => false, 'error' => 'Invalid concurrency: only digits, no spaces.'];
+        }
+        $normalized['concurrency'] = $concurrencyRaw;
+    }
+
+    foreach ([
+        'enable-icmp-flood',
+        'enable-packet-flood',
+        'disable-udp-flood',
+        'udp-packet-size',
+        'direct-udp-mixed-flood-packets-per-conn',
+        'proxies-path',
+        'interface',
+    ] as $key) {
+        if (!array_key_exists($key, $normalized)) {
+            $normalized[$key] = '';
+        }
+    }
+
+    $normalized = normalizeDistressPostParams($normalized);
+    return ['ok' => true, 'params' => $normalized];
+}
+
 function normalizeAndValidateMhddosPostParams(array $params): array
 {
     $normalized = $params;

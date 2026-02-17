@@ -53,7 +53,12 @@ if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
                 } else {
                     $paramsToSave = $_POST;
                     if ($daemonName === 'distress') {
-                        $paramsToSave = normalizeDistressPostParams($paramsToSave);
+                        $distressValidation = normalizeAndValidateDistressPostParams($paramsToSave);
+                        if (($distressValidation['ok'] ?? false) !== true) {
+                            $saveError = (string)($distressValidation['error'] ?? 'Invalid distress settings.');
+                        } else {
+                            $paramsToSave = (array)$distressValidation['params'];
+                        }
                     }
                     if ($daemonName === 'mhddos') {
                         $mhddosValidation = normalizeAndValidateMhddosPostParams($paramsToSave);
