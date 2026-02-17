@@ -47,6 +47,7 @@ if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
             if (!empty($_POST)) {
                 $saveOk = false;
                 $saveError = '';
+                $restartError = '';
                 if ($daemonName === 'x100') {
                     $saveOk = setX100ConfigValues($_POST);
                 } else {
@@ -76,7 +77,20 @@ if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
                     }
                 }
                 if ($saveOk) {
+                    $restartResponse = root_helper_request([
+                        'action' => 'service_restart',
+                        'modules' => $config['daemonNames'],
+                        'module' => $daemonName,
+                    ]);
+                    if (($restartResponse['ok'] ?? false) !== true) {
+                        $restartError = 'Settings saved, but module restart failed.';
+                    }
+                }
+                if ($saveOk) {
                     echo "<span style='color: green;'>" . htmlspecialchars(t('service_updated'), ENT_QUOTES, 'UTF-8') . "</span>";
+                    if ($restartError !== '') {
+                        echo "<br><span style='color: red;'>" . htmlspecialchars($restartError, ENT_QUOTES, 'UTF-8') . "</span>";
+                    }
                 } else {
                     if ($saveError !== '') {
                         echo "<span style='color: red;'>" . htmlspecialchars($saveError, ENT_QUOTES, 'UTF-8') . "</span>";

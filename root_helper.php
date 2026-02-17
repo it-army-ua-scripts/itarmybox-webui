@@ -287,6 +287,23 @@ function serviceStop(string $module): array
     return ['ok' => true];
 }
 
+function serviceRestart(string $module): array
+{
+    if (!serviceIsActive($module)) {
+        return ['ok' => true, 'restarted' => false];
+    }
+    runCommand('systemctl daemon-reload', $reloadCode);
+    if ($reloadCode !== 0) {
+        return ['ok' => false, 'error' => 'daemon_reload_failed'];
+    }
+    $service = escapeshellarg($module . '.service');
+    runCommand("systemctl restart $service", $restartCode);
+    if ($restartCode !== 0) {
+        return ['ok' => false, 'error' => 'service_restart_failed'];
+    }
+    return ['ok' => true, 'restarted' => true];
+}
+
 function statusSnapshot(array $modules, int $lines): array
 {
     $activeModule = getActiveModule($modules);
@@ -626,6 +643,15 @@ if ($action === 'service_stop') {
         fail('invalid_module');
     }
     respond(serviceStop($module));
+    exit(0);
+}
+
+if ($action === 'service_restart') {
+    $module = $request['module'] ?? null;
+    if (!is_string($module) || !in_array($module, $modules, true)) {
+        fail('invalid_module');
+    }
+    respond(serviceRestart($module));
     exit(0);
 }
 
