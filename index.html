@@ -10,6 +10,7 @@
     <link href="/styles.css" rel="stylesheet" />
 </head>
 <body>
+<header class="app-header"><span id="home-datetime-header"></span></header>
 <div class="container home-container">
     <div class="lang-switcher">
         <button type="button" class="lang-btn" id="lang-en">EN</button>
@@ -21,10 +22,6 @@
             <img src="/image/artline_logo.png" alt="artline-logo" class="header-logo header-logo-artline">
         </div>
         <h1 id="title">Main Menu</h1>
-        <div class="home-datetime" id="home-datetime" aria-live="polite">
-            <span class="home-datetime-date" id="home-datetime-date"></span>
-            <span class="home-datetime-time" id="home-datetime-time"></span>
-        </div>
     </div>
     <div class="content">
         <ul class="menu">
@@ -63,8 +60,7 @@
     const toolsEl = document.getElementById("link-tools");
     const updateEl = document.getElementById("link-update");
     const autostartEl = document.getElementById("link-autostart");
-    const homeDateEl = document.getElementById("home-datetime-date");
-    const homeTimeEl = document.getElementById("home-datetime-time");
+    const homeDateTimeHeaderEl = document.getElementById("home-datetime-header");
     let activeLang = "en";
 
     function renderDateTime() {
@@ -80,8 +76,7 @@
             minute: "2-digit",
             hour12: false
         });
-        homeDateEl.textContent = dateFmt.format(now);
-        homeTimeEl.textContent = timeFmt.format(now);
+        homeDateTimeHeaderEl.textContent = dateFmt.format(now) + " " + timeFmt.format(now);
     }
 
     function getCookie(name) {

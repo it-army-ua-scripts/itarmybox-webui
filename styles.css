@@ -19,6 +19,7 @@ body.padded {
 }
 
 body {
+    padding-top: 56px;
     padding-bottom: 56px;
 }
 
@@ -74,29 +75,6 @@ h1 {
 h1 {
     text-align: center;
     margin-bottom: 20px;
-}
-
-.home-datetime {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    padding: 6px 12px;
-    margin-top: 6px;
-    border: 1px solid #d7e0e9;
-    border-radius: 999px;
-    background: #f7f9fb;
-    color: #2c3e50;
-    font-size: 0.98rem;
-}
-
-.home-datetime-date {
-    font-weight: 500;
-    text-transform: capitalize;
-}
-
-.home-datetime-time {
-    font-family: Consolas, "Courier New", monospace;
-    font-weight: 700;
 }
 
 .content {
@@ -417,12 +395,20 @@ h1 {
         height: clamp(64px, 21vw, 86px);
     }
 
-    .home-datetime {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        border-radius: 10px;
-    }
+}
+
+.app-header {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    text-align: center;
+    font-size: 0.85rem;
+    color: #2c3e50;
+    background: rgba(245, 247, 250, 0.92);
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(44, 62, 80, 0.15);
+    z-index: 50;
 }
 
 .app-footer {
