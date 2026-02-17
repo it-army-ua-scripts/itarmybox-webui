@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 const SCHEDULE_BEGIN_MARKER = '# ITARMYBOX-SCHEDULE-BEGIN';
 const SCHEDULE_END_MARKER = '# ITARMYBOX-SCHEDULE-END';
-const MAX_SCHEDULE_ENTRIES = 5;
+const MAX_SCHEDULE_ENTRIES = 2;
 
 function respond(array $data): void
 {

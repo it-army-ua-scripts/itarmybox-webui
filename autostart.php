@@ -3,7 +3,7 @@ require_once 'i18n.php';
 require_once 'lib/root_helper_client.php';
 $config = require 'config/config.php';
 $daemonNames = $config['daemonNames'];
-const MAX_SCHEDULE_INTERVALS = 5;
+const MAX_SCHEDULE_INTERVALS = 2;
 
 function getCurrentAutostartDaemon(array $daemonNames): ?string
 {
