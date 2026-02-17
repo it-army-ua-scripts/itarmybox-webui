@@ -19,18 +19,16 @@ function getServiceLogs(string $serviceName): string
 
 function getConfigStringFromServiceFile(string $serviceName): string
 {
-    $pattern = '/ExecStart=/';
-    $handle = fopen('/opt/itarmy/services/' . $serviceName . '.service', "r");
-    $result = '';
-    if ($handle) {
-        while (($line = fgets($handle)) !== false) {
-            if (preg_match($pattern, $line)) {
-                $result = trim($line);
-            }
-        }
-        fclose($handle);
+    $config = require __DIR__ . '/../config/config.php';
+    $response = root_helper_request([
+        'action' => 'service_execstart_get',
+        'modules' => $config['daemonNames'],
+        'module' => $serviceName,
+    ]);
+    if (($response['ok'] ?? false) !== true) {
+        return '';
     }
-    return $result;
+    return (string)($response['execStart'] ?? '');
 }
 
 function getCurrentAdjustableParams(string $configString, array $adjustableParams, string $daemonName): array
@@ -137,20 +135,30 @@ function updateServiceConfigParams(string $configString, array $updatedParams, s
     return $out;
 }
 
-function updateServiceFile(string $serviceName, array $updatedConfigParams): void
+function updateServiceFile(string $serviceName, array $updatedConfigParams): bool
 {
-    $pattern = "/ExecStart=.*/";
-    $serviceFile = '/opt/itarmy/services/' . $serviceName . '.service';
-    $content = file_get_contents($serviceFile);
-    $content = preg_replace($pattern, implode(" ", $updatedConfigParams), $content, 1);
-    file_put_contents($serviceFile, $content);
+    $config = require __DIR__ . '/../config/config.php';
+    $response = root_helper_request([
+        'action' => 'service_execstart_set',
+        'modules' => $config['daemonNames'],
+        'module' => $serviceName,
+        'execStart' => implode(' ', $updatedConfigParams),
+    ]);
+    return ($response['ok'] ?? false) === true;
 }
 
-function setX100ConfigValues(array $updatedConfig): void
+function setX100ConfigValues(array $updatedConfig): bool
 {
-    $envFile = '/opt/itarmy/x100-for-docker/put-your-ovpn-files-here/x100-config.txt';
     $allowed = ['itArmyUserId', 'initialDistressScale', 'ignoreBundledFreeVpn'];
-    $content = file_get_contents($envFile);
+    $config = require __DIR__ . '/../config/config.php';
+    $readResponse = root_helper_request([
+        'action' => 'x100_config_get',
+        'modules' => $config['daemonNames'],
+    ]);
+    if (($readResponse['ok'] ?? false) !== true) {
+        return false;
+    }
+    $content = (string)($readResponse['content'] ?? '');
     foreach ($allowed as $key) {
         if (!array_key_exists($key, $updatedConfig)) {
             continue;
@@ -166,21 +174,34 @@ function setX100ConfigValues(array $updatedConfig): void
             $content .= PHP_EOL . $key . '=' . $value;
         }
     }
-    file_put_contents($envFile, $content);
+    $writeResponse = root_helper_request([
+        'action' => 'x100_config_set',
+        'modules' => $config['daemonNames'],
+        'content' => $content,
+    ]);
+    return ($writeResponse['ok'] ?? false) === true;
 }
 
 function getX100ConfigValues(): array
 {
-    $envFile = '/opt/itarmy/x100-for-docker/put-your-ovpn-files-here/x100-config.txt';
     $result = [
         'itArmyUserId' => '',
         'initialDistressScale' => '',
         'ignoreBundledFreeVpn' => '0'
     ];
-    if (!is_readable($envFile)) {
+    $config = require __DIR__ . '/../config/config.php';
+    $response = root_helper_request([
+        'action' => 'x100_config_get',
+        'modules' => $config['daemonNames'],
+    ]);
+    if (($response['ok'] ?? false) !== true) {
         return $result;
     }
-    $lines = file($envFile, FILE_IGNORE_NEW_LINES);
+    $content = (string)($response['content'] ?? '');
+    $lines = preg_split('/\r\n|\r|\n/', $content);
+    if (!is_array($lines)) {
+        return $result;
+    }
     foreach ($lines as $line) {
         if (strpos($line, '=') === false) {
             continue;

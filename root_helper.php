@@ -361,6 +361,64 @@ function serviceInfo(string $module): array
     ];
 }
 
+function readServiceExecStart(string $module): ?string
+{
+    $serviceFile = '/opt/itarmy/services/' . $module . '.service';
+    if (!is_readable($serviceFile)) {
+        return null;
+    }
+    $handle = fopen($serviceFile, 'r');
+    if ($handle === false) {
+        return null;
+    }
+    $result = null;
+    while (($line = fgets($handle)) !== false) {
+        if (str_starts_with(trim($line), 'ExecStart=')) {
+            $result = trim($line);
+        }
+    }
+    fclose($handle);
+    return $result;
+}
+
+function updateServiceExecStart(string $module, string $execStartLine): bool
+{
+    if (!str_starts_with($execStartLine, 'ExecStart=')) {
+        return false;
+    }
+    $serviceFile = '/opt/itarmy/services/' . $module . '.service';
+    $content = @file_get_contents($serviceFile);
+    if (!is_string($content) || $content === '') {
+        return false;
+    }
+    if (preg_match('/^ExecStart=.*/m', $content) !== 1) {
+        return false;
+    }
+    $updated = preg_replace('/^ExecStart=.*/m', $execStartLine, $content, 1);
+    if (!is_string($updated)) {
+        return false;
+    }
+    if ($updated === $content) {
+        return true;
+    }
+    $written = @file_put_contents($serviceFile, $updated);
+    return $written !== false;
+}
+
+function getX100Config(): ?string
+{
+    $envFile = '/opt/itarmy/x100-for-docker/put-your-ovpn-files-here/x100-config.txt';
+    $content = @file_get_contents($envFile);
+    return is_string($content) ? $content : null;
+}
+
+function setX100Config(string $content): bool
+{
+    $envFile = '/opt/itarmy/x100-for-docker/put-your-ovpn-files-here/x100-config.txt';
+    $written = @file_put_contents($envFile, $content);
+    return $written !== false;
+}
+
 function getSchedule(array $modules): array
 {
     $raw = runCommand('crontab -l', $code);
@@ -596,6 +654,54 @@ if ($action === 'service_info') {
         fail('invalid_module');
     }
     respond(serviceInfo($module));
+    exit(0);
+}
+
+if ($action === 'service_execstart_get') {
+    $module = $request['module'] ?? null;
+    if (!is_string($module) || !in_array($module, $modules, true)) {
+        fail('invalid_module');
+    }
+    $execStart = readServiceExecStart($module);
+    if ($execStart === null) {
+        respond(['ok' => false, 'error' => 'execstart_read_failed']);
+        exit(0);
+    }
+    respond(['ok' => true, 'execStart' => $execStart]);
+    exit(0);
+}
+
+if ($action === 'service_execstart_set') {
+    $module = $request['module'] ?? null;
+    $execStart = $request['execStart'] ?? null;
+    if (!is_string($module) || !in_array($module, $modules, true)) {
+        fail('invalid_module');
+    }
+    if (!is_string($execStart) || trim($execStart) === '') {
+        fail('invalid_execstart');
+    }
+    $ok = updateServiceExecStart($module, trim($execStart));
+    respond(['ok' => $ok]);
+    exit(0);
+}
+
+if ($action === 'x100_config_get') {
+    $content = getX100Config();
+    if ($content === null) {
+        respond(['ok' => false, 'error' => 'x100_config_read_failed']);
+        exit(0);
+    }
+    respond(['ok' => true, 'content' => $content]);
+    exit(0);
+}
+
+if ($action === 'x100_config_set') {
+    $content = $request['content'] ?? null;
+    if (!is_string($content)) {
+        fail('invalid_content');
+    }
+    $ok = setX100Config($content);
+    respond(['ok' => $ok]);
     exit(0);
 }
 

@@ -45,23 +45,32 @@ if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
         <?php
         if (in_array($daemonName, $config['daemonNames'], true)) {
             if (!empty($_POST)) {
+                $saveOk = false;
                 if ($daemonName === 'x100') {
-                    setX100ConfigValues($_POST);
+                    $saveOk = setX100ConfigValues($_POST);
                 } else {
                     $paramsToSave = $_POST;
                     if ($daemonName === 'distress') {
                         $paramsToSave = normalizeDistressPostParams($paramsToSave);
                     }
-                    updateServiceFile(
-                        $daemonName,
-                        updateServiceConfigParams(
-                            getConfigStringFromServiceFile($daemonName),
-                            $paramsToSave,
-                            $daemonName
+                    $currentConfigString = getConfigStringFromServiceFile($daemonName);
+                    if ($currentConfigString !== '') {
+                        $saveOk = updateServiceFile(
+                            $daemonName,
+                            updateServiceConfigParams(
+                                $currentConfigString,
+                                $paramsToSave,
+                                $daemonName
+                            )
                         )
-                    );
+                        ;
+                    }
                 }
-                echo "<span style='color: green;'>" . htmlspecialchars(t('service_updated'), ENT_QUOTES, 'UTF-8') . "</span>";
+                if ($saveOk) {
+                    echo "<span style='color: green;'>" . htmlspecialchars(t('service_updated'), ENT_QUOTES, 'UTF-8') . "</span>";
+                } else {
+                    echo "<span style='color: red;'>" . htmlspecialchars(t('error'), ENT_QUOTES, 'UTF-8') . ": settings were not saved</span>";
+                }
             }
 
             if ($daemonName === 'x100') {
