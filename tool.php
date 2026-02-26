@@ -145,6 +145,7 @@ if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
             if ($fragmentPath !== '') {
                 $infoLines[] = "Unit: " . $fragmentPath;
             }
+            $infoLines[] = t('status_label') . ' ' . ($isActive ? t('service_state_active') : t('service_state_inactive'));
             if ($execStart !== '') {
                 $infoLines[] = "ExecStart: " . $execStart;
             }
@@ -184,6 +185,9 @@ if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
     const serviceInfoEl = document.getElementById("service-info");
     const daemonName = <?= json_encode($daemonName, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const ajaxUrl = <?= json_encode(url_with_lang('/tool.php?ajax_info=1&daemon=' . rawurlencode($daemonName)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const statusLabel = <?= json_encode(t('status_label'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const serviceStateActive = <?= json_encode(t('service_state_active'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const serviceStateInactive = <?= json_encode(t('service_state_inactive'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
     function appendOrReplace(el, newText) {
         const oldText = serviceInfoState.text || "";
@@ -206,6 +210,9 @@ if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
             const info = data.info || {};
             const lines = [];
             if (info.fragmentPath) lines.push("Unit: " + info.fragmentPath);
+            if (typeof info.active === "boolean") {
+                lines.push(statusLabel + " " + (info.active ? serviceStateActive : serviceStateInactive));
+            }
             if (info.execStart) lines.push("ExecStart: " + info.execStart);
             if (info.standardOutput) lines.push("StandardOutput: " + info.standardOutput);
             if (info.logFile) lines.push("Log file: " + info.logFile);
