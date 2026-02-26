@@ -5,7 +5,6 @@ return [
     ],
     'adjustableParams' => [
         'mhddos' => [
-            'user-id',
             'lang',
             'copies',
             'use-my-ip',
@@ -14,7 +13,6 @@ return [
             'ifaces'
         ],
         'distress' => [
-            'user-id',
             'use-my-ip',
             'use-tor',
             'concurrency',
@@ -27,7 +25,6 @@ return [
             'interface'
         ],
         'x100' => [
-            'itArmyUserId',
             'initialDistressScale',
             'ignoreBundledFreeVpn'
         ]

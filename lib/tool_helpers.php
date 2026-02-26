@@ -238,14 +238,6 @@ function normalizeAndValidateDistressPostParams(array $params): array
 {
     $normalized = $params;
 
-    $userIdRaw = (string)($params['user-id'] ?? '');
-    if ($userIdRaw !== '') {
-        if ($userIdRaw !== trim($userIdRaw) || preg_match('/^\d+$/', $userIdRaw) !== 1) {
-            return ['ok' => false, 'error' => 'Invalid user-id: only digits, no spaces.'];
-        }
-    }
-    $normalized['user-id'] = $userIdRaw;
-
     $useMyIpRaw = (string)($params['use-my-ip'] ?? '');
     if ($useMyIpRaw === '') {
         $normalized['use-my-ip'] = '0';
@@ -305,14 +297,6 @@ function normalizeAndValidateDistressPostParams(array $params): array
 function normalizeAndValidateMhddosPostParams(array $params): array
 {
     $normalized = $params;
-
-    $userIdRaw = (string)($params['user-id'] ?? '');
-    if ($userIdRaw !== '') {
-        if ($userIdRaw !== trim($userIdRaw) || preg_match('/^\d+$/', $userIdRaw) !== 1) {
-            return ['ok' => false, 'error' => 'Invalid user-id: only digits, no spaces.'];
-        }
-    }
-    $normalized['user-id'] = $userIdRaw;
 
     $copiesRaw = (string)($params['copies'] ?? '');
     if ($copiesRaw === '') {

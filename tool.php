@@ -52,7 +52,8 @@ if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
                 if ($daemonName === 'x100') {
                     $saveOk = setX100ConfigValues($_POST);
                 } else {
-                    $paramsToSave = $_POST;
+                    $allowedParamKeys = array_flip($config['adjustableParams'][$daemonName] ?? []);
+                    $paramsToSave = array_intersect_key($_POST, $allowedParamKeys);
                     if ($daemonName === 'distress') {
                         $distressValidation = normalizeAndValidateDistressPostParams($paramsToSave);
                         if (($distressValidation['ok'] ?? false) !== true) {

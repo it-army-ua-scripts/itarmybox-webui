@@ -5,10 +5,6 @@
     $ignoreBundledFreeVpn = (string)($currentAdjustableParams['ignoreBundledFreeVpn'] ?? '0');
     ?>
     <div class="form-group">
-        <label for="itArmyUserId"><?= htmlspecialchars(t('user_id_integer'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="number" id="itArmyUserId" name="itArmyUserId" required value="<?= $currentAdjustableParams['itArmyUserId']??"" ?>">
-    </div>
-    <div class="form-group">
         <label for="initialDistressScale"><?= htmlspecialchars(t('initial_distress_scale'), ENT_QUOTES, 'UTF-8') ?></label>
         <input type="number" id="initialDistressScale" name="initialDistressScale" min="10" max="40960" value="<?= $currentAdjustableParams['initialDistressScale']??"" ?>">
     </div>

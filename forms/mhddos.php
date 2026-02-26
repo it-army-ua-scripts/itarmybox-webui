@@ -1,9 +1,5 @@
 <form method="post" action="">
     <div class="form-group">
-        <label for="user-id"><?= htmlspecialchars(t('user_id_integer'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="text" id="user-id" name="user-id" value="<?= $currentAdjustableParams['user-id']??"" ?>" placeholder="digits only">
-    </div>
-    <div class="form-group">
         <label for="lang"><?= htmlspecialchars(t('language'), ENT_QUOTES, 'UTF-8') ?></label>
         <select id="lang" name="lang">
             <?php
