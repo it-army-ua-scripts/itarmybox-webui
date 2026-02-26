@@ -107,7 +107,12 @@ function t(string $key, array $vars = []): string
             'initial_distress_scale' => 'Initial Distress Scale (10-40960):',
             'ignore_bundled_free_vpn' => 'Ignore Bundled Free VPN:',
             'number_tor_connections' => 'Number of Tor connections:',
-            'number_task_creators' => 'Number of task creators:'
+            'number_task_creators' => 'Number of task creators:',
+            'user_id' => 'User ID',
+            'invalid_user_id' => 'Invalid User ID',
+            'settings_not_saved' => 'settings were not saved',
+            'user_id_help_part1' => 'You can get your User ID from Telegram bot',
+            'user_id_help_part2' => 'It helps track generated traffic and may get you into top 15 on'
         ],
         'uk' => [
             'main_menu' => 'Головне меню',
@@ -192,7 +197,12 @@ function t(string $key, array $vars = []): string
             'initial_distress_scale' => 'Початковий Distress Scale (10-40960):',
             'ignore_bundled_free_vpn' => 'Ігнорувати вбудований безкоштовний VPN:',
             'number_tor_connections' => 'Кількість Tor-зʼєднань:',
-            'number_task_creators' => 'Кількість створювачів завдань:'
+            'number_task_creators' => 'Кількість створювачів завдань:',
+            'user_id' => 'User ID',
+            'invalid_user_id' => 'Некоректний User ID',
+            'settings_not_saved' => 'налаштування не збережено',
+            'user_id_help_part1' => 'User ID можна отримати у Telegram-бота',
+            'user_id_help_part2' => 'Це дозволяє відслідковувати генерацію трафіку та потенційно потрапити в топ-15 на'
         ]
     ];
 
