@@ -57,10 +57,6 @@
         <label for="proxies-path"><?= htmlspecialchars(t('proxies_file_path'), ENT_QUOTES, 'UTF-8') ?></label>
         <input type="text" id="proxies-path" name="proxies-path" value="<?= $currentAdjustableParams['proxies-path']??"" ?>">
     </div>
-    <div class="form-group">
-        <label for="interface"><?= htmlspecialchars(t('network_interface'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="text" id="interface" name="interface" value="<?= $currentAdjustableParams['interface']??"" ?>" placeholder="eth0,eth1">
-    </div>
     <button class="submit-btn" type="submit"><?= htmlspecialchars(t('save'), ENT_QUOTES, 'UTF-8') ?></button>
 </form>
 <script>

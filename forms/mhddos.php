@@ -28,9 +28,5 @@
         <label for="proxies"><?= htmlspecialchars(t('proxies_path_or_url'), ENT_QUOTES, 'UTF-8') ?></label>
         <input type="text" id="proxies" name="proxies" value="<?= $currentAdjustableParams['proxies']??"" ?>">
     </div>
-    <div class="form-group">
-        <label for="ifaces"><?= htmlspecialchars(t('network_interfaces'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="text" id="ifaces" name="ifaces" value="<?= $currentAdjustableParams['ifaces']??"" ?>" placeholder="eth0 eth1">
-    </div>
     <button class="submit-btn" type="submit"><?= htmlspecialchars(t('save'), ENT_QUOTES, 'UTF-8') ?></button>
 </form>

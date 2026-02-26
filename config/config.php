@@ -9,8 +9,7 @@ return [
             'copies',
             'use-my-ip',
             'threads',
-            'proxies',
-            'ifaces'
+            'proxies'
         ],
         'distress' => [
             'use-my-ip',
@@ -21,8 +20,7 @@ return [
             'disable-udp-flood',
             'udp-packet-size',
             'direct-udp-mixed-flood-packets-per-conn',
-            'proxies-path',
-            'interface'
+            'proxies-path'
         ],
         'x100' => [
             'initialDistressScale',
