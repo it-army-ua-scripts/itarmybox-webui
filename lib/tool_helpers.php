@@ -125,6 +125,11 @@ function updateServiceConfigParams(string $configString, array $updatedParams, s
         $options[$updatedParamKey] = $isFlagOnly ? true : $updatedParam;
     }
 
+    // Keep a stable source tag for module traffic accounting.
+    if (in_array($daemonName, ['mhddos', 'distress'], true)) {
+        $options['source'] = 'itarmybox';
+    }
+
     $out = $baseTokens;
     foreach ($options as $key => $value) {
         $out[] = '--' . $key;

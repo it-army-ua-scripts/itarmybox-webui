@@ -1,13 +1,21 @@
 <?php
 require_once 'lib/navigation.php';
 require_once 'lib/root_helper_client.php';
+require_once 'lib/tool_helpers.php';
 $config = require 'config/config.php';
 
 if (isset($_GET['daemon']) && in_array($_GET['daemon'], $config['daemonNames'], true)) {
+    $daemon = (string)$_GET['daemon'];
+    if (in_array($daemon, ['mhddos', 'distress'], true)) {
+        $currentConfig = getConfigStringFromServiceFile($daemon);
+        if ($currentConfig !== '') {
+            updateServiceFile($daemon, updateServiceConfigParams($currentConfig, [], $daemon));
+        }
+    }
     root_helper_request([
         'action' => 'service_activate_exclusive',
         'modules' => $config['daemonNames'],
-        'selected' => (string)$_GET['daemon'],
+        'selected' => $daemon,
     ]);
 }
 
