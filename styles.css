@@ -119,6 +119,15 @@ h1 {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
+.menu a.main-status-active {
+    background: #1e824c;
+    color: #fff;
+}
+
+.menu a.main-status-active:hover {
+    background: #17663b;
+}
+
 .form-container {
     max-width: 500px;
     margin: 0 auto;

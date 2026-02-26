@@ -77,7 +77,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         'noModuleRunning' => t('no_module_running'),
         'commonLogsFor' => t('common_logs_for', ['module' => '{{module}}']),
         'commonLogsNoActive' => t('common_logs_no_active'),
-        'start' => t('start'),
         'stop' => t('stop')
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const lang = <?= json_encode(app_lang(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
@@ -103,13 +102,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         if (!moduleName) {
             return;
         }
-        const startLink = document.createElement("a");
-        startLink.href = actionUrl("/start.php", moduleName);
-        startLink.textContent = text.start;
         const stopLink = document.createElement("a");
         stopLink.href = actionUrl("/stop.php", moduleName);
         stopLink.textContent = text.stop;
-        activeModuleActionsEl.appendChild(startLink);
         activeModuleActionsEl.appendChild(stopLink);
     }
 

@@ -134,6 +134,17 @@
         }
     }
 
+    async function refreshMainStatusIndicator() {
+        try {
+            const response = await fetch("/status.php?ajax=1&lang=" + encodeURIComponent(activeLang), { cache: "no-store" });
+            const data = await response.json();
+            const isActive = !!(data && data.ok === true && data.activeModule);
+            statusEl.classList.toggle("main-status-active", isActive);
+        } catch (e) {
+            statusEl.classList.remove("main-status-active");
+        }
+    }
+
     function setLang(lang) {
         document.cookie = "lang=" + encodeURIComponent(lang) + "; path=/; max-age=31536000";
         applyLang(lang);
@@ -143,6 +154,8 @@
     const initialLang = params.get("lang") || getCookie("lang") || "en";
     applyLang(initialLang);
     fetchVersionInfo();
+    refreshMainStatusIndicator();
+    setInterval(refreshMainStatusIndicator, 5000);
 
     langEnBtn.addEventListener("click", () => setLang("en"));
     langUkBtn.addEventListener("click", () => setLang("uk"));
