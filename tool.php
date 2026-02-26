@@ -6,28 +6,6 @@ require_once 'lib/footer.php';
 $config = require 'config/config.php';
 
 $daemonName = $_GET['daemon'] ?? '';
-
-if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
-    header('Content-Type: application/json; charset=UTF-8');
-    if (!in_array($daemonName, $config['daemonNames'], true)) {
-        echo json_encode(['ok' => false], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        exit;
-    }
-
-    $info = root_helper_request([
-        'action' => 'service_info',
-        'modules' => $config['daemonNames'],
-        'module' => $daemonName,
-    ]);
-    echo json_encode(
-        [
-            'ok' => (bool)($info['ok'] ?? false),
-            'info' => $info,
-        ],
-        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-    );
-    exit;
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -134,38 +112,6 @@ if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
                 echo '<div class="menu"><a href="' . htmlspecialchars(url_with_lang('/start.php?daemon=' . rawurlencode($daemonName)), ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars(t('start'), ENT_QUOTES, 'UTF-8') . '</a></div>';
             }
 
-            echo "<br/><h2>" . htmlspecialchars(t('service_info'), ENT_QUOTES, 'UTF-8') . "</h2>";
-            $statusText = (string)($info['statusText'] ?? '');
-            $fragmentPath = (string)($info['fragmentPath'] ?? '');
-            $execStart = (string)($info['execStart'] ?? '');
-            $standardOutput = (string)($info['standardOutput'] ?? '');
-            $autostartWanted = $info['autostartWanted'] ?? null;
-            $logFile = (string)($info['logFile'] ?? '');
-            $infoLines = [];
-            if ($fragmentPath !== '') {
-                $infoLines[] = "Unit: " . $fragmentPath;
-            }
-            $infoLines[] = t('status_label') . ' ' . ($isActive ? t('service_state_active') : t('service_state_inactive'));
-            if ($execStart !== '') {
-                $infoLines[] = "ExecStart: " . $execStart;
-            }
-            if ($standardOutput !== '') {
-                $infoLines[] = "StandardOutput: " . $standardOutput;
-            }
-            if ($logFile !== '') {
-                $infoLines[] = "Log file: " . $logFile;
-            }
-            if ($autostartWanted === true) {
-                $infoLines[] = "Autostart: enabled";
-            } elseif ($autostartWanted === false) {
-                $infoLines[] = "Autostart: disabled";
-            }
-            $serviceInfoText = implode("\n", $infoLines);
-            if ($serviceInfoText !== '') {
-                $serviceInfoText .= "\n\n";
-            }
-            $serviceInfoText .= $statusText;
-            echo '<div class="log-box tool-log-box" id="service-info">' . htmlspecialchars($serviceInfoText, ENT_QUOTES, 'UTF-8') . '</div>';
             echo "<br/><h2>" . htmlspecialchars(t('settings'), ENT_QUOTES, 'UTF-8') . "</h2>";
             echo '<div class="form-container">';
             include "forms/" . $daemonName . ".php";
@@ -179,57 +125,6 @@ if (isset($_GET['ajax_info']) && $_GET['ajax_info'] === '1') {
         </div>
     </div>
 </div>
-<?php if (in_array($daemonName, $config['daemonNames'], true)): ?>
-<script>
-    const serviceInfoState = { text: "" };
-    const serviceInfoEl = document.getElementById("service-info");
-    const daemonName = <?= json_encode($daemonName, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-    const ajaxUrl = <?= json_encode(url_with_lang('/tool.php?ajax_info=1&daemon=' . rawurlencode($daemonName)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-    const statusLabel = <?= json_encode(t('status_label'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-    const serviceStateActive = <?= json_encode(t('service_state_active'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-    const serviceStateInactive = <?= json_encode(t('service_state_inactive'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-
-    function appendOrReplace(el, newText) {
-        const oldText = serviceInfoState.text || "";
-        if (newText.startsWith(oldText)) {
-            el.textContent += newText.slice(oldText.length);
-        } else {
-            el.textContent = newText;
-        }
-        serviceInfoState.text = newText;
-        el.scrollTop = el.scrollHeight;
-    }
-
-    async function refreshInfo() {
-        try {
-            const response = await fetch(ajaxUrl, { cache: "no-store" });
-            const data = await response.json();
-            if (!data || !data.ok) {
-                return;
-            }
-            const info = data.info || {};
-            const lines = [];
-            if (info.fragmentPath) lines.push("Unit: " + info.fragmentPath);
-            if (typeof info.active === "boolean") {
-                lines.push(statusLabel + " " + (info.active ? serviceStateActive : serviceStateInactive));
-            }
-            if (info.execStart) lines.push("ExecStart: " + info.execStart);
-            if (info.standardOutput) lines.push("StandardOutput: " + info.standardOutput);
-            if (info.logFile) lines.push("Log file: " + info.logFile);
-            if (info.autostartWanted === true) lines.push("Autostart: enabled");
-            if (info.autostartWanted === false) lines.push("Autostart: disabled");
-            let text = lines.join("\n");
-            if (text) text += "\n\n";
-            text += (info.statusText || "");
-            appendOrReplace(serviceInfoEl, text);
-        } catch (e) {
-        }
-    }
-
-    appendOrReplace(serviceInfoEl, serviceInfoEl.textContent || "");
-    setInterval(refreshInfo, 4000);
-</script>
-<?php endif; ?>
 <?= render_app_footer() ?>
 </body>
 </html>
