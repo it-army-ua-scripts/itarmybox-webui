@@ -120,12 +120,12 @@ h1 {
 }
 
 .menu a.main-status-active {
-    background: #1e824c;
-    color: #fff;
+    border: 1px solid #3a9f64;
+    box-shadow: 0 0 0 2px rgba(58, 159, 100, 0.18), 0 0 14px rgba(58, 159, 100, 0.28);
 }
 
 .menu a.main-status-active:hover {
-    background: #17663b;
+    box-shadow: 0 0 0 2px rgba(58, 159, 100, 0.24), 0 0 18px rgba(58, 159, 100, 0.36);
 }
 
 .form-container {
