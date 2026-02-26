@@ -29,23 +29,40 @@ function saveGlobalUserId(string $userId, array $config): bool
         return false;
     }
 
+    $updatedModules = [];
+    $updatedAny = false;
+
     $mhddosConfig = getConfigStringFromServiceFile('mhddos');
-    $distressConfig = getConfigStringFromServiceFile('distress');
-    if ($mhddosConfig === '' || $distressConfig === '') {
-        return false;
+    if ($mhddosConfig !== '') {
+        $mhddosOk = updateServiceFile(
+            'mhddos',
+            updateServiceConfigParams($mhddosConfig, ['user-id' => $userId], 'mhddos')
+        );
+        if ($mhddosOk) {
+            $updatedAny = true;
+            $updatedModules['mhddos'] = true;
+        }
     }
 
-    $mhddosOk = updateServiceFile(
-        'mhddos',
-        updateServiceConfigParams($mhddosConfig, ['user-id' => $userId], 'mhddos')
-    );
-    $distressOk = updateServiceFile(
-        'distress',
-        updateServiceConfigParams($distressConfig, ['user-id' => $userId], 'distress')
-    );
-    $x100Ok = setX100ConfigValues(['itArmyUserId' => $userId]);
+    $distressConfig = getConfigStringFromServiceFile('distress');
+    if ($distressConfig !== '') {
+        $distressOk = updateServiceFile(
+            'distress',
+            updateServiceConfigParams($distressConfig, ['user-id' => $userId], 'distress')
+        );
+        if ($distressOk) {
+            $updatedAny = true;
+            $updatedModules['distress'] = true;
+        }
+    }
 
-    if (!$mhddosOk || !$distressOk || !$x100Ok) {
+    $x100Ok = setX100ConfigValues(['itArmyUserId' => $userId]);
+    if ($x100Ok) {
+        $updatedAny = true;
+        $updatedModules['x100'] = true;
+    }
+
+    if (!$updatedAny) {
         return false;
     }
 
@@ -55,7 +72,11 @@ function saveGlobalUserId(string $userId, array $config): bool
         'lines' => 1,
     ]);
     $activeModule = (($status['ok'] ?? false) === true) ? ($status['activeModule'] ?? null) : null;
-    if (is_string($activeModule) && in_array($activeModule, $config['daemonNames'], true)) {
+    if (
+        is_string($activeModule) &&
+        in_array($activeModule, $config['daemonNames'], true) &&
+        isset($updatedModules[$activeModule])
+    ) {
         root_helper_request([
             'action' => 'service_restart',
             'modules' => $config['daemonNames'],
