@@ -1,6 +1,7 @@
 <?php
 require_once 'i18n.php';
 require_once 'lib/root_helper_client.php';
+require_once 'lib/footer.php';
 $config = require 'config/config.php';
 $daemonNames = $config['daemonNames'];
 
@@ -120,6 +121,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     updateStatus();
     setInterval(updateStatus, 2000);
 </script>
-<footer class="app-footer">&copy; 2022-<?= date('Y') ?> IT Army of Ukraine. <?= htmlspecialchars(t('footer_slogan'), ENT_QUOTES, 'UTF-8') ?>.</footer>
+<?= render_app_footer() ?>
 </body>
 </html>

@@ -26,8 +26,7 @@
         <ul class="menu">
             <li><a href="/status.php" id="link-status">Status</a></li>
             <li><a href="/tools_list.php" id="link-tools">Tools</a></li>
-            <li><a href="/autostart.php" id="link-autostart">Autostart</a></li>
-            <li><a href="/update.php" id="link-update">Update</a></li>
+            <li><a href="/settings.php" id="link-settings">Settings</a></li>
         </ul>
     </div>
 </div>
@@ -37,16 +36,18 @@
             title: "Main Menu",
             status: "Status",
             tools: "Tools",
-            update: "Update",
-            autostart: "Autostart",
+            settings: "Settings",
+            versionLabel: "Version",
+            githubLabel: "GitHub",
             footerSlogan: "Together to freedom"
         },
         uk: {
             title: "Головне меню",
             status: "Статус",
             tools: "Інструменти",
-            update: "Оновлення",
-            autostart: "Автостарт",
+            settings: "Налаштування",
+            versionLabel: "Версія",
+            githubLabel: "GitHub",
             footerSlogan: "Разом до свободи"
         }    };
 
@@ -55,9 +56,13 @@
     const titleEl = document.getElementById("title");
     const statusEl = document.getElementById("link-status");
     const toolsEl = document.getElementById("link-tools");
-    const updateEl = document.getElementById("link-update");
-    const autostartEl = document.getElementById("link-autostart");
+    const settingsEl = document.getElementById("link-settings");
+    const footerVersionCurrentLabelEl = document.getElementById("footer-version-current-label");
+    const footerVersionGithubLabelEl = document.getElementById("footer-version-github-label");
+    const footerVersionCurrentEl = document.getElementById("footer-version-current");
+    const footerVersionGithubEl = document.getElementById("footer-version-github");
     let activeLang = "en";
+    let versionInfo = { current: "...", github: "..." };
 
     function getCookie(name) {
         const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
@@ -67,8 +72,7 @@
     function updateLinks(lang) {
         statusEl.href = "/status.php?lang=" + encodeURIComponent(lang);
         toolsEl.href = "/tools_list.php?lang=" + encodeURIComponent(lang);
-        updateEl.href = "/update.php?lang=" + encodeURIComponent(lang);
-        autostartEl.href = "/autostart.php?lang=" + encodeURIComponent(lang);
+        settingsEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
     }
 
     function applyLang(lang) {
@@ -77,15 +81,34 @@
         titleEl.textContent = text.title;
         statusEl.textContent = text.status;
         toolsEl.textContent = text.tools;
-        updateEl.textContent = text.update;
-        autostartEl.textContent = text.autostart;
+        settingsEl.textContent = text.settings;
         const footerSloganEl = document.getElementById("footer-slogan");
         if (footerSloganEl) {
             footerSloganEl.textContent = text.footerSlogan;
         }
+        footerVersionCurrentLabelEl.textContent = text.versionLabel;
+        footerVersionGithubLabelEl.textContent = text.githubLabel;
+        footerVersionCurrentEl.textContent = versionInfo.current;
+        footerVersionGithubEl.textContent = versionInfo.github;
         langEnBtn.classList.toggle("active", activeLang === "en");
         langUkBtn.classList.toggle("active", activeLang === "uk");
         updateLinks(activeLang);
+    }
+
+    async function fetchVersionInfo() {
+        try {
+            const response = await fetch("/version_info.php", { cache: "no-store" });
+            const data = await response.json();
+            if (!data || data.ok !== true) {
+                return;
+            }
+            versionInfo = {
+                current: data.current || "unknown",
+                github: data.github || "unknown"
+            };
+            applyLang(activeLang);
+        } catch (e) {
+        }
     }
 
     function setLang(lang) {
@@ -96,12 +119,14 @@
     const params = new URLSearchParams(window.location.search);
     const initialLang = params.get("lang") || getCookie("lang") || "en";
     applyLang(initialLang);
+    fetchVersionInfo();
 
     langEnBtn.addEventListener("click", () => setLang("en"));
     langUkBtn.addEventListener("click", () => setLang("uk"));
 </script>
 <footer class="app-footer">
     <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Together to freedom</span>.</div>
+    <div class="footer-version"><span id="footer-version-current-label">Version</span>: <span id="footer-version-current">...</span> | <span id="footer-version-github-label">GitHub</span>: <span id="footer-version-github">...</span></div>
 </footer>
 <script>
     document.getElementById("copyright-year").textContent = String(new Date().getFullYear());

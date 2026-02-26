@@ -1,6 +1,7 @@
 <?php
 require_once 'i18n.php';
 require_once 'lib/root_helper_client.php';
+require_once 'lib/footer.php';
 $config = require 'config/config.php';
 $daemonNames = $config['daemonNames'];
 const MAX_SCHEDULE_INTERVALS = 2;
@@ -360,10 +361,7 @@ foreach ($currentSchedules as $idx => $entry) {
         </div>
     </div>
 </div>
-<footer class="app-footer">
-    <div class="footer-datetime" id="footer-datetime"></div>
-    <div>&copy; 2022-<?= date('Y') ?> IT Army of Ukraine. <?= htmlspecialchars(t('footer_slogan'), ENT_QUOTES, 'UTF-8') ?>.</div>
-</footer>
+<?= render_app_footer('<div class="footer-datetime" id="footer-datetime"></div>') ?>
 <script>
 (() => {
     const maxIntervals = <?= MAX_SCHEDULE_INTERVALS ?>;

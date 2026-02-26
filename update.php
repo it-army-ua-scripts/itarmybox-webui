@@ -1,5 +1,6 @@
 <?php
 require_once 'i18n.php';
+require_once 'lib/footer.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -25,6 +26,6 @@ require_once 'i18n.php';
         </div>
     </div>
 </div>
-<footer class="app-footer">&copy; 2022-<?= date('Y') ?> IT Army of Ukraine. <?= htmlspecialchars(t('footer_slogan'), ENT_QUOTES, 'UTF-8') ?>.</footer>
+<?= render_app_footer() ?>
 </body>
 </html>
