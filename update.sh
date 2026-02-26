@@ -4,6 +4,8 @@ echo "START UPDATE"
 set -euo pipefail
 
 REPO_DIR="/var/www/html/itarmybox-webui"
+GITHUB_REPO="https://github.com/it-army-ua-scripts/itarmybox-webui.git"
+GITHUB_BRANCH="main"
 
 cd "$REPO_DIR"
 
@@ -13,11 +15,11 @@ if [ -z "$current_version" ]; then
 fi
 echo "Current version: $current_version"
 
-/usr/bin/git fetch origin main
+/usr/bin/git fetch "$GITHUB_REPO" "$GITHUB_BRANCH"
 
-github_version="$(/usr/bin/git show origin/main:VERSION 2>/dev/null | tr -d ' \t\r\n' || true)"
+github_version="$(/usr/bin/git show FETCH_HEAD:VERSION 2>/dev/null | tr -d ' \t\r\n' || true)"
 if [ -z "$github_version" ]; then
-  echo "Cannot read VERSION from origin/main, update aborted."
+  echo "Cannot read VERSION from $GITHUB_REPO ($GITHUB_BRANCH), update aborted."
   exit 1
 fi
 echo "GitHub version: $github_version"
@@ -34,6 +36,6 @@ if [ "$latest_version" != "$github_version" ]; then
 fi
 
 echo "Updating to version $github_version ..."
-/usr/bin/git reset --hard origin/main
+/usr/bin/git reset --hard FETCH_HEAD
 /usr/bin/git clean -fd
 echo "DONE! Updated from $current_version to $github_version"

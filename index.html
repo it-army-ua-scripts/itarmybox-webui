@@ -39,6 +39,9 @@
             settings: "Settings",
             versionLabel: "Version",
             githubLabel: "GitHub",
+            updateAvailable: "Update available",
+            upToDate: "Up to date",
+            updateNow: "Update",
             footerSlogan: "Together to freedom"
         },
         uk: {
@@ -48,6 +51,9 @@
             settings: "Налаштування",
             versionLabel: "Версія",
             githubLabel: "GitHub",
+            updateAvailable: "Доступне оновлення",
+            upToDate: "Актуальна",
+            updateNow: "Оновити",
             footerSlogan: "Разом до свободи"
         }    };
 
@@ -61,6 +67,8 @@
     const footerVersionGithubLabelEl = document.getElementById("footer-version-github-label");
     const footerVersionCurrentEl = document.getElementById("footer-version-current");
     const footerVersionGithubEl = document.getElementById("footer-version-github");
+    const footerUpdateStateEl = document.getElementById("footer-update-state");
+    const footerUpdateActionEl = document.getElementById("footer-update-action");
     let activeLang = "en";
     let versionInfo = { current: "...", github: "..." };
 
@@ -73,6 +81,7 @@
         statusEl.href = "/status.php?lang=" + encodeURIComponent(lang);
         toolsEl.href = "/tools_list.php?lang=" + encodeURIComponent(lang);
         settingsEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
+        footerUpdateActionEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
     }
 
     function applyLang(lang) {
@@ -90,6 +99,13 @@
         footerVersionGithubLabelEl.textContent = text.githubLabel;
         footerVersionCurrentEl.textContent = versionInfo.current;
         footerVersionGithubEl.textContent = versionInfo.github;
+        const haveBoth = versionInfo.current !== "unknown" && versionInfo.github !== "unknown" && versionInfo.current !== "..." && versionInfo.github !== "...";
+        const updateNeeded = haveBoth && versionInfo.current !== versionInfo.github;
+        footerUpdateStateEl.textContent = updateNeeded ? text.updateAvailable : text.upToDate;
+        footerUpdateStateEl.classList.toggle("update-needed", updateNeeded);
+        footerUpdateStateEl.classList.toggle("up-to-date", !updateNeeded);
+        footerUpdateActionEl.textContent = text.updateNow;
+        footerUpdateActionEl.classList.toggle("visible", updateNeeded);
         langEnBtn.classList.toggle("active", activeLang === "en");
         langUkBtn.classList.toggle("active", activeLang === "uk");
         updateLinks(activeLang);
@@ -127,6 +143,7 @@
 <footer class="app-footer">
     <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Together to freedom</span>.</div>
     <div class="footer-version"><span id="footer-version-current-label">Version</span>: <span id="footer-version-current">...</span> | <span id="footer-version-github-label">GitHub</span>: <span id="footer-version-github">...</span></div>
+    <div class="footer-update-row"><span id="footer-update-state" class="footer-update-state up-to-date">Up to date</span> <a id="footer-update-action" class="footer-update-action" href="/settings.php">Update</a></div>
 </footer>
 <script>
     document.getElementById("copyright-year").textContent = String(new Date().getFullYear());

@@ -1,5 +1,8 @@
 <?php
 
+const WEBUI_GITHUB_REPO = 'https://github.com/it-army-ua-scripts/itarmybox-webui';
+const WEBUI_GITHUB_BRANCH = 'main';
+
 function webui_repo_root(): string
 {
     return dirname(__DIR__);
@@ -60,11 +63,19 @@ function webui_fetch_github_version(int $maxAgeSeconds = 300): string
         return (string)$cached['version'];
     }
 
-    $repoRoot = webui_repo_root();
-    $fetchCmd = '/usr/bin/git -C ' . escapeshellarg($repoRoot) . ' fetch --quiet origin main 2>/dev/null';
-    @shell_exec($fetchCmd);
-    $showCmd = '/usr/bin/git -C ' . escapeshellarg($repoRoot) . ' show origin/main:VERSION 2>/dev/null';
-    $remoteVersion = trim((string)@shell_exec($showCmd));
+    $rawUrl = 'https://raw.githubusercontent.com/it-army-ua-scripts/itarmybox-webui/'
+        . rawurlencode(WEBUI_GITHUB_BRANCH)
+        . '/VERSION';
+    $remoteVersion = '';
+
+    if (is_executable('/usr/bin/curl')) {
+        $cmd = '/usr/bin/curl -fsSL --max-time 5 ' . escapeshellarg($rawUrl) . ' 2>/dev/null';
+        $remoteVersion = trim((string)@shell_exec($cmd));
+    } elseif (is_executable('/usr/bin/wget')) {
+        $cmd = '/usr/bin/wget -q -T 5 -O - ' . escapeshellarg($rawUrl) . ' 2>/dev/null';
+        $remoteVersion = trim((string)@shell_exec($cmd));
+    }
+
     if ($remoteVersion !== '') {
         webui_cache_github_version($remoteVersion);
         return $remoteVersion;

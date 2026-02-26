@@ -420,3 +420,45 @@ h1 {
     margin-top: 2px;
     font-size: 0.8rem;
 }
+
+.footer-update-row {
+    margin-top: 4px;
+}
+
+.footer-update-state {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.footer-update-state.up-to-date {
+    background: #e6f7ed;
+    color: #166534;
+}
+
+.footer-update-state.update-needed {
+    background: #fde8e8;
+    color: #b91c1c;
+}
+
+.footer-update-action {
+    display: none;
+    margin-left: 8px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: #b91c1c;
+    color: #fff;
+    text-decoration: none;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.footer-update-action.visible {
+    display: inline-block;
+}
+
+.footer-update-action:hover {
+    background: #991b1b;
+}
