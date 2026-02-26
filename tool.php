@@ -112,6 +112,12 @@ $daemonName = $_GET['daemon'] ?? '';
                 echo '<div class="menu"><a href="' . htmlspecialchars(url_with_lang('/start.php?daemon=' . rawurlencode($daemonName)), ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars(t('start'), ENT_QUOTES, 'UTF-8') . '</a></div>';
             }
 
+            $statusText = trim((string)($info['statusText'] ?? ''));
+            if ($statusText !== '') {
+                echo '<br/><h2>systemctl status ' . htmlspecialchars($daemonName, ENT_QUOTES, 'UTF-8') . '</h2>';
+                echo '<div class="log-box tool-log-box">' . htmlspecialchars($statusText, ENT_QUOTES, 'UTF-8') . '</div>';
+            }
+
             echo "<br/><h2>" . htmlspecialchars(t('settings'), ENT_QUOTES, 'UTF-8') . "</h2>";
             echo '<div class="form-container">';
             include "forms/" . $daemonName . ".php";
