@@ -63,12 +63,6 @@
     const statusEl = document.getElementById("link-status");
     const toolsEl = document.getElementById("link-tools");
     const settingsEl = document.getElementById("link-settings");
-    const footerVersionCurrentLabelEl = document.getElementById("footer-version-current-label");
-    const footerVersionGithubLabelEl = document.getElementById("footer-version-github-label");
-    const footerVersionCurrentEl = document.getElementById("footer-version-current");
-    const footerVersionGithubEl = document.getElementById("footer-version-github");
-    const footerUpdateStateEl = document.getElementById("footer-update-state");
-    const footerUpdateActionEl = document.getElementById("footer-update-action");
     let activeLang = "en";
     let versionInfo = { current: "...", github: "..." };
 
@@ -81,7 +75,10 @@
         statusEl.href = "/status.php?lang=" + encodeURIComponent(lang);
         toolsEl.href = "/tools_list.php?lang=" + encodeURIComponent(lang);
         settingsEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
-        footerUpdateActionEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
+        const footerUpdateActionEl = document.getElementById("footer-update-action");
+        if (footerUpdateActionEl) {
+            footerUpdateActionEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
+        }
     }
 
     function applyLang(lang) {
@@ -95,17 +92,27 @@
         if (footerSloganEl) {
             footerSloganEl.textContent = text.footerSlogan;
         }
-        footerVersionCurrentLabelEl.textContent = text.versionLabel;
-        footerVersionGithubLabelEl.textContent = text.githubLabel;
-        footerVersionCurrentEl.textContent = versionInfo.current;
-        footerVersionGithubEl.textContent = versionInfo.github;
+        const footerVersionCurrentLabelEl = document.getElementById("footer-version-current-label");
+        const footerVersionGithubLabelEl = document.getElementById("footer-version-github-label");
+        const footerVersionCurrentEl = document.getElementById("footer-version-current");
+        const footerVersionGithubEl = document.getElementById("footer-version-github");
+        const footerUpdateStateEl = document.getElementById("footer-update-state");
+        const footerUpdateActionEl = document.getElementById("footer-update-action");
+        if (footerVersionCurrentLabelEl) footerVersionCurrentLabelEl.textContent = text.versionLabel;
+        if (footerVersionGithubLabelEl) footerVersionGithubLabelEl.textContent = text.githubLabel;
+        if (footerVersionCurrentEl) footerVersionCurrentEl.textContent = versionInfo.current;
+        if (footerVersionGithubEl) footerVersionGithubEl.textContent = versionInfo.github;
         const haveBoth = versionInfo.current !== "unknown" && versionInfo.github !== "unknown" && versionInfo.current !== "..." && versionInfo.github !== "...";
         const updateNeeded = haveBoth && versionInfo.current !== versionInfo.github;
-        footerUpdateStateEl.textContent = updateNeeded ? text.updateAvailable : text.upToDate;
-        footerUpdateStateEl.classList.toggle("update-needed", updateNeeded);
-        footerUpdateStateEl.classList.toggle("up-to-date", !updateNeeded);
-        footerUpdateActionEl.textContent = text.updateNow;
-        footerUpdateActionEl.classList.toggle("visible", updateNeeded);
+        if (footerUpdateStateEl) {
+            footerUpdateStateEl.textContent = updateNeeded ? text.updateAvailable : text.upToDate;
+            footerUpdateStateEl.classList.toggle("update-needed", updateNeeded);
+            footerUpdateStateEl.classList.toggle("up-to-date", !updateNeeded);
+        }
+        if (footerUpdateActionEl) {
+            footerUpdateActionEl.textContent = text.updateNow;
+            footerUpdateActionEl.classList.toggle("visible", updateNeeded);
+        }
         langEnBtn.classList.toggle("active", activeLang === "en");
         langUkBtn.classList.toggle("active", activeLang === "uk");
         updateLinks(activeLang);
