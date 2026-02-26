@@ -57,6 +57,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     <div class="service">
         <div class="service-title" id="common-log-title"><?= htmlspecialchars(t('common_logs'), ENT_QUOTES, 'UTF-8') ?></div>
         <div class="log-box" id="common-log"></div>
+        <div class="menu" id="active-module-actions"></div>
     </div>
 
     <div class="menu">
@@ -68,14 +69,18 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     const serviceState = {};
     const commonLogEl = document.getElementById("common-log");
     const commonLogTitleEl = document.getElementById("common-log-title");
+    const activeModuleActionsEl = document.getElementById("active-module-actions");
     const activeModuleNameEl = document.getElementById("active-module-name");
     const activeModuleStatusEl = document.getElementById("active-module-status");
     const text = <?= json_encode([
         'activeModule' => t('active_module'),
         'noModuleRunning' => t('no_module_running'),
         'commonLogsFor' => t('common_logs_for', ['module' => '{{module}}']),
-        'commonLogsNoActive' => t('common_logs_no_active')
+        'commonLogsNoActive' => t('common_logs_no_active'),
+        'start' => t('start'),
+        'stop' => t('stop')
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const lang = <?= json_encode(app_lang(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const ajaxUrl = <?= json_encode(url_with_lang('/status.php?ajax=1'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
     function appendOrReplace(el, newText, key) {
@@ -87,6 +92,25 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         }
         serviceState[key] = newText;
         el.scrollTop = el.scrollHeight;
+    }
+
+    function actionUrl(path, module) {
+        return path + "?daemon=" + encodeURIComponent(module) + "&lang=" + encodeURIComponent(lang);
+    }
+
+    function renderActiveModuleActions(moduleName) {
+        activeModuleActionsEl.innerHTML = "";
+        if (!moduleName) {
+            return;
+        }
+        const startLink = document.createElement("a");
+        startLink.href = actionUrl("/start.php", moduleName);
+        startLink.textContent = text.start;
+        const stopLink = document.createElement("a");
+        stopLink.href = actionUrl("/stop.php", moduleName);
+        stopLink.textContent = text.stop;
+        activeModuleActionsEl.appendChild(startLink);
+        activeModuleActionsEl.appendChild(stopLink);
     }
 
     async function updateStatus() {
@@ -106,12 +130,14 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
                 const path = data.logPath ? String(data.logPath) : "";
                 const suffix = src ? ` [${src}${path ? ": " + path : ""}]` : "";
                 commonLogTitleEl.textContent = text.commonLogsFor.replace("{{module}}", data.activeModule) + suffix;
+                renderActiveModuleActions(String(data.activeModule));
             } else {
                 activeModuleNameEl.textContent = text.activeModule;
                 activeModuleStatusEl.textContent = text.noModuleRunning;
                 activeModuleStatusEl.classList.add("inactive");
                 activeModuleStatusEl.classList.remove("active");
                 commonLogTitleEl.textContent = text.commonLogsNoActive;
+                renderActiveModuleActions("");
             }
             appendOrReplace(commonLogEl, data.commonLogs || "", "common");
         } catch (e) {
