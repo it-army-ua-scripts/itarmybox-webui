@@ -6,6 +6,7 @@ set -euo pipefail
 REPO_DIR="/var/www/html/itarmybox-webui"
 GITHUB_REPO="https://github.com/it-army-ua-scripts/itarmybox-webui.git"
 GITHUB_BRANCH="main"
+ITARMY_DIR="/opt/itarmy"
 
 cd "$REPO_DIR"
 
@@ -39,3 +40,18 @@ echo "Updating to version $github_version ..."
 /usr/bin/git reset --hard FETCH_HEAD
 /usr/bin/git clean -fd
 echo "DONE! Updated from $current_version to $github_version"
+
+if [ -d "$ITARMY_DIR/.git" ]; then
+  echo "Updating $ITARMY_DIR ..."
+  cd "$ITARMY_DIR"
+  current_branch="$(/usr/bin/git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+  if [ -z "$current_branch" ] || [ "$current_branch" = "HEAD" ]; then
+    current_branch="main"
+  fi
+  /usr/bin/git fetch origin "$current_branch"
+  /usr/bin/git reset --hard "origin/$current_branch"
+  /usr/bin/git clean -fd
+  echo "DONE! Updated $ITARMY_DIR (branch: $current_branch)"
+else
+  echo "Skip $ITARMY_DIR: not found or not a git repository."
+fi
