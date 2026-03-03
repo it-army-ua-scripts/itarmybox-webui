@@ -5,6 +5,7 @@ declare(strict_types=1);
 const SCHEDULE_BEGIN_MARKER = '# ITARMYBOX-SCHEDULE-BEGIN';
 const SCHEDULE_END_MARKER = '# ITARMYBOX-SCHEDULE-END';
 const MAX_SCHEDULE_ENTRIES = 2;
+const SCHEDULE_MANUAL_OVERRIDE_FILE = '/tmp/itarmybox-schedule-manual-override';
 
 function respond(array $data): void
 {
@@ -80,6 +81,23 @@ function parseDowField(string $dow): ?array
         return null;
     }
     return normalizeDays(explode(',', $dow));
+}
+
+function setScheduleManualOverride(string $module, string $action): void
+{
+    $payload = [
+        'module' => $module,
+        'action' => $action,
+        'timestamp' => time(),
+    ];
+    @file_put_contents(SCHEDULE_MANUAL_OVERRIDE_FILE, json_encode($payload, JSON_UNESCAPED_SLASHES));
+}
+
+function clearScheduleManualOverride(): void
+{
+    if (is_file(SCHEDULE_MANUAL_OVERRIDE_FILE)) {
+        @unlink(SCHEDULE_MANUAL_OVERRIDE_FILE);
+    }
 }
 
 function getAutostart(array $modules): array
@@ -270,6 +288,7 @@ function serviceActivateExclusive(array $modules, string $selected): array
         }
     }
 
+    setScheduleManualOverride($selected, 'start');
     return ['ok' => true];
 }
 
@@ -284,6 +303,7 @@ function serviceStop(string $module): array
     if ($stopCode !== 0) {
         return ['ok' => false, 'error' => 'service_stop_failed'];
     }
+    setScheduleManualOverride($module, 'stop');
     return ['ok' => true];
 }
 
@@ -523,9 +543,10 @@ function setScheduleEntries(array $entries): array
             [$startH, $startM] = parseTimeParts($start);
             [$stopH, $stopM] = parseTimeParts($stop);
             $service = $module . '.service';
+            $overrideSafe = escapeshellarg(SCHEDULE_MANUAL_OVERRIDE_FILE);
             $block[] = "# ITARMYBOX ENTRY MODULE=$module DOW=$dow START=$start STOP=$stop";
-            $block[] = "$startM $startH * * $dow systemctl start $service >/dev/null 2>&1";
-            $block[] = "$stopM $stopH * * $dow systemctl stop $service >/dev/null 2>&1";
+            $block[] = "$startM $startH * * $dow test ! -s $overrideSafe && systemctl start $service >/dev/null 2>&1";
+            $block[] = "$stopM $stopH * * $dow test ! -s $overrideSafe && systemctl stop $service >/dev/null 2>&1";
         }
         $block[] = SCHEDULE_END_MARKER;
         $new .= ($new === '' ? '' : "\n") . implode("\n", $block);
@@ -547,6 +568,8 @@ function setScheduleEntries(array $entries): array
         return ['ok' => false, 'error' => 'crontab_apply_failed'];
     }
 
+    // Re-enable scheduler decisions after explicit schedule save.
+    clearScheduleManualOverride();
     return ['ok' => true];
 }
 

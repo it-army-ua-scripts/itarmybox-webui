@@ -25,7 +25,7 @@ function detectGlobalUserId(): string
 
 function saveGlobalUserId(string $userId, array $config): bool
 {
-    if (preg_match('/^\d+$/', $userId) !== 1) {
+    if ($userId !== '' && preg_match('/^\d+$/', $userId) !== 1) {
         return false;
     }
 
@@ -91,8 +91,9 @@ $userId = detectGlobalUserId();
 $message = '';
 $messageClass = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $userIdSubmitted = trim((string)($_POST['global_user_id'] ?? ''));
-    if ($userIdSubmitted === '' || preg_match('/^\d+$/', $userIdSubmitted) !== 1) {
+    $userIdRaw = (string)($_POST['global_user_id'] ?? '');
+    $userIdSubmitted = trim($userIdRaw);
+    if ($userIdRaw !== $userIdSubmitted || ($userIdSubmitted !== '' && preg_match('/^\d+$/', $userIdSubmitted) !== 1)) {
         $message = t('error') . ': ' . t('invalid_user_id');
         $messageClass = 'status inactive';
     } else {
@@ -134,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <form method="post" action="">
                 <div class="form-group">
                     <label for="global_user_id"><?= htmlspecialchars(t('user_id_integer'), ENT_QUOTES, 'UTF-8') ?></label>
-                    <input type="text" id="global_user_id" name="global_user_id" value="<?= htmlspecialchars($userId, ENT_QUOTES, 'UTF-8') ?>" placeholder="digits only" required>
+                    <input type="text" id="global_user_id" name="global_user_id" value="<?= htmlspecialchars($userId, ENT_QUOTES, 'UTF-8') ?>" placeholder="digits only (optional)">
                 </div>
                 <button class="submit-btn" type="submit"><?= htmlspecialchars(t('save'), ENT_QUOTES, 'UTF-8') ?></button>
             </form>
