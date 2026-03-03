@@ -135,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <form method="post" action="">
                 <div class="form-group">
                     <label for="global_user_id"><?= htmlspecialchars(t('user_id_integer'), ENT_QUOTES, 'UTF-8') ?></label>
-                    <input type="text" id="global_user_id" name="global_user_id" value="<?= htmlspecialchars($userId, ENT_QUOTES, 'UTF-8') ?>" placeholder="digits only (optional)">
+                    <input type="text" id="global_user_id" name="global_user_id" value="<?= htmlspecialchars($userId, ENT_QUOTES, 'UTF-8') ?>" placeholder="<?= htmlspecialchars(t('placeholder_digits_optional'), ENT_QUOTES, 'UTF-8') ?>">
                 </div>
                 <button class="submit-btn" type="submit"><?= htmlspecialchars(t('save'), ENT_QUOTES, 'UTF-8') ?></button>
             </form>

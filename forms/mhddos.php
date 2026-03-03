@@ -14,15 +14,15 @@
     </div>
     <div class="form-group">
         <label for="copies"><?= htmlspecialchars(t('number_of_copies'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="text" id="copies" name="copies" value="<?= $currentAdjustableParams['copies']??"" ?>" placeholder="auto or number (default: auto)">
+        <input type="text" id="copies" name="copies" value="<?= $currentAdjustableParams['copies']??"" ?>" placeholder="<?= htmlspecialchars(t('placeholder_auto_or_number_default_auto'), ENT_QUOTES, 'UTF-8') ?>">
     </div>
     <div class="form-group">
         <label for="use-my-ip"><?= htmlspecialchars(t('percentage_personal_ip'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="number" id="use-my-ip" name="use-my-ip" min="0" max="100" value="<?= $currentAdjustableParams['use-my-ip']??"" ?>" placeholder="0..100 (default: 0)">
+        <input type="number" id="use-my-ip" name="use-my-ip" min="0" max="100" value="<?= $currentAdjustableParams['use-my-ip']??"" ?>" placeholder="<?= htmlspecialchars(t('placeholder_percent_default_0'), ENT_QUOTES, 'UTF-8') ?>">
     </div>
     <div class="form-group">
         <label for="threads"><?= htmlspecialchars(t('threads'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="text" id="threads" name="threads" value="<?= $currentAdjustableParams['threads']??"" ?>" placeholder="digits only (default: 8000)">
+        <input type="text" id="threads" name="threads" value="<?= $currentAdjustableParams['threads']??"" ?>" placeholder="<?= htmlspecialchars(t('placeholder_digits_default_8000'), ENT_QUOTES, 'UTF-8') ?>">
     </div>
     <div class="form-group">
         <label for="proxies"><?= htmlspecialchars(t('proxies_path_or_url'), ENT_QUOTES, 'UTF-8') ?></label>

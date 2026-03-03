@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 function app_lang(): string
 {
@@ -113,6 +113,21 @@ function t(string $key, array $vars = []): string
             'user_id' => 'User ID',
             'invalid_user_id' => 'Invalid User ID',
             'settings_not_saved' => 'settings were not saved',
+            'settings_saved_restart_failed' => 'Settings saved, but module restart failed.',
+            'invalid_distress_settings' => 'Invalid distress settings.',
+            'invalid_mhddos_settings' => 'Invalid mhddos settings.',
+            'invalid_use_my_ip_digits' => 'Invalid use-my-ip: only digits from 0 to 100, no spaces.',
+            'invalid_use_my_ip_range' => 'Invalid use-my-ip: value must be between 0 and 100.',
+            'invalid_use_tor_digits' => 'Invalid use-tor: only digits from 0 to 100, no spaces.',
+            'invalid_use_tor_range' => 'Invalid use-tor: value must be between 0 and 100.',
+            'invalid_concurrency' => 'Invalid concurrency: only digits, no spaces.',
+            'invalid_copies' => 'Invalid copies: use auto or digits, no spaces.',
+            'invalid_threads' => 'Invalid threads: only digits, no spaces.',
+            'placeholder_auto_or_number_default_auto' => 'auto or number (default: auto)',
+            'placeholder_percent_default_0' => '0..100 (default: 0)',
+            'placeholder_digits_default_8000' => 'digits only (default: 8000)',
+            'placeholder_digits_default_4096' => 'digits only (default: 4096)',
+            'placeholder_digits_optional' => 'digits only (optional)',
             'user_id_help_part1' => 'You can get your User ID from Telegram bot',
             'user_id_help_part2' => 'It helps track generated traffic and may get you into top 15 on'
         ],
@@ -205,6 +220,21 @@ function t(string $key, array $vars = []): string
             'user_id' => 'User ID',
             'invalid_user_id' => 'Некоректний User ID',
             'settings_not_saved' => 'налаштування не збережено',
+            'settings_saved_restart_failed' => 'Налаштування збережено, але перезапуск модуля не вдався.',
+            'invalid_distress_settings' => 'Некоректні налаштування distress.',
+            'invalid_mhddos_settings' => 'Некоректні налаштування mhddos.',
+            'invalid_use_my_ip_digits' => 'Некоректний use-my-ip: тільки цифри 0..100, без пробілів.',
+            'invalid_use_my_ip_range' => 'Некоректний use-my-ip: значення має бути в межах 0..100.',
+            'invalid_use_tor_digits' => 'Некоректний use-tor: тільки цифри 0..100, без пробілів.',
+            'invalid_use_tor_range' => 'Некоректний use-tor: значення має бути в межах 0..100.',
+            'invalid_concurrency' => 'Некоректний concurrency: тільки цифри, без пробілів.',
+            'invalid_copies' => 'Некоректний copies: вкажіть auto або число, без пробілів.',
+            'invalid_threads' => 'Некоректний threads: тільки цифри, без пробілів.',
+            'placeholder_auto_or_number_default_auto' => 'auto або число (за замовчуванням: auto)',
+            'placeholder_percent_default_0' => '0..100 (за замовчуванням: 0)',
+            'placeholder_digits_default_8000' => 'лише цифри (за замовчуванням: 8000)',
+            'placeholder_digits_default_4096' => 'лише цифри (за замовчуванням: 4096)',
+            'placeholder_digits_optional' => 'лише цифри (необов\'язково)',
             'user_id_help_part1' => 'User ID можна отримати у Telegram-бота',
             'user_id_help_part2' => 'Це дозволяє відслідковувати генерацію трафіку та потенційно потрапити в топ-15 на'
         ]

@@ -248,11 +248,11 @@ function normalizeAndValidateDistressPostParams(array $params): array
         $normalized['use-my-ip'] = '';
     } else {
         if ($useMyIpRaw !== trim($useMyIpRaw) || preg_match('/^\d+$/', $useMyIpRaw) !== 1) {
-            return ['ok' => false, 'error' => 'Invalid use-my-ip: only digits from 0 to 100, no spaces.'];
+            return ['ok' => false, 'error' => 'invalid_use_my_ip_digits'];
         }
         $useMyIp = (int)$useMyIpRaw;
         if ($useMyIp < 0 || $useMyIp > 100) {
-            return ['ok' => false, 'error' => 'Invalid use-my-ip: value must be between 0 and 100.'];
+            return ['ok' => false, 'error' => 'invalid_use_my_ip_range'];
         }
         $normalized['use-my-ip'] = (string)$useMyIp;
     }
@@ -262,21 +262,21 @@ function normalizeAndValidateDistressPostParams(array $params): array
         $normalized['use-tor'] = '';
     } else {
         if ($useTorRaw !== trim($useTorRaw) || preg_match('/^\d+$/', $useTorRaw) !== 1) {
-            return ['ok' => false, 'error' => 'Invalid use-tor: only digits from 0 to 100, no spaces.'];
+            return ['ok' => false, 'error' => 'invalid_use_tor_digits'];
         }
         $useTor = (int)$useTorRaw;
         if ($useTor < 0 || $useTor > 100) {
-            return ['ok' => false, 'error' => 'Invalid use-tor: value must be between 0 and 100.'];
+            return ['ok' => false, 'error' => 'invalid_use_tor_range'];
         }
         $normalized['use-tor'] = (string)$useTor;
     }
 
     $concurrencyRaw = (string)($params['concurrency'] ?? '');
     if ($concurrencyRaw === '') {
-        $normalized['concurrency'] = '';
+        $normalized['concurrency'] = '4096';
     } else {
         if ($concurrencyRaw !== trim($concurrencyRaw) || preg_match('/^\d+$/', $concurrencyRaw) !== 1) {
-            return ['ok' => false, 'error' => 'Invalid concurrency: only digits, no spaces.'];
+            return ['ok' => false, 'error' => 'invalid_concurrency'];
         }
         $normalized['concurrency'] = $concurrencyRaw;
     }
@@ -305,10 +305,10 @@ function normalizeAndValidateMhddosPostParams(array $params): array
 
     $copiesRaw = (string)($params['copies'] ?? '');
     if ($copiesRaw === '') {
-        $normalized['copies'] = '';
+        $normalized['copies'] = 'auto';
     } else {
         if ($copiesRaw !== trim($copiesRaw) || preg_match('/^(?:auto|\d+)$/i', $copiesRaw) !== 1) {
-            return ['ok' => false, 'error' => 'Invalid copies: use auto or digits, no spaces.'];
+            return ['ok' => false, 'error' => 'invalid_copies'];
         }
         $normalized['copies'] = strtolower($copiesRaw);
     }
@@ -318,21 +318,21 @@ function normalizeAndValidateMhddosPostParams(array $params): array
         $normalized['use-my-ip'] = '';
     } else {
         if ($useMyIpRaw !== trim($useMyIpRaw) || preg_match('/^\d+$/', $useMyIpRaw) !== 1) {
-            return ['ok' => false, 'error' => 'Invalid use-my-ip: only digits from 0 to 100, no spaces.'];
+            return ['ok' => false, 'error' => 'invalid_use_my_ip_digits'];
         }
         $useMyIp = (int)$useMyIpRaw;
         if ($useMyIp < 0 || $useMyIp > 100) {
-            return ['ok' => false, 'error' => 'Invalid use-my-ip: value must be between 0 and 100.'];
+            return ['ok' => false, 'error' => 'invalid_use_my_ip_range'];
         }
         $normalized['use-my-ip'] = (string)$useMyIp;
     }
 
     $threadsRaw = (string)($params['threads'] ?? '');
     if ($threadsRaw === '') {
-        $normalized['threads'] = '';
+        $normalized['threads'] = '8000';
     } else {
         if ($threadsRaw !== trim($threadsRaw) || preg_match('/^\d+$/', $threadsRaw) !== 1) {
-            return ['ok' => false, 'error' => 'Invalid threads: only digits, no spaces.'];
+            return ['ok' => false, 'error' => 'invalid_threads'];
         }
         $normalized['threads'] = $threadsRaw;
     }

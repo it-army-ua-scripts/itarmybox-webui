@@ -35,7 +35,7 @@ $daemonName = $_GET['daemon'] ?? '';
                     if ($daemonName === 'distress') {
                         $distressValidation = normalizeAndValidateDistressPostParams($paramsToSave);
                         if (($distressValidation['ok'] ?? false) !== true) {
-                            $saveError = (string)($distressValidation['error'] ?? 'Invalid distress settings.');
+                            $saveError = (string)($distressValidation['error'] ?? 'invalid_distress_settings');
                         } else {
                             $paramsToSave = (array)$distressValidation['params'];
                         }
@@ -43,7 +43,7 @@ $daemonName = $_GET['daemon'] ?? '';
                     if ($daemonName === 'mhddos') {
                         $mhddosValidation = normalizeAndValidateMhddosPostParams($paramsToSave);
                         if (($mhddosValidation['ok'] ?? false) !== true) {
-                            $saveError = (string)($mhddosValidation['error'] ?? 'Invalid mhddos settings.');
+                            $saveError = (string)($mhddosValidation['error'] ?? 'invalid_mhddos_settings');
                         } else {
                             $paramsToSave = (array)$mhddosValidation['params'];
                         }
@@ -68,19 +68,19 @@ $daemonName = $_GET['daemon'] ?? '';
                         'module' => $daemonName,
                     ]);
                     if (($restartResponse['ok'] ?? false) !== true) {
-                        $restartError = 'Settings saved, but module restart failed.';
+                        $restartError = 'settings_saved_restart_failed';
                     }
                 }
                 if ($saveOk) {
                     echo "<span style='color: green;'>" . htmlspecialchars(t('service_updated'), ENT_QUOTES, 'UTF-8') . "</span>";
                     if ($restartError !== '') {
-                        echo "<br><span style='color: red;'>" . htmlspecialchars($restartError, ENT_QUOTES, 'UTF-8') . "</span>";
+                        echo "<br><span style='color: red;'>" . htmlspecialchars(t($restartError), ENT_QUOTES, 'UTF-8') . "</span>";
                     }
                 } else {
                     if ($saveError !== '') {
-                        echo "<span style='color: red;'>" . htmlspecialchars($saveError, ENT_QUOTES, 'UTF-8') . "</span>";
+                        echo "<span style='color: red;'>" . htmlspecialchars(t($saveError), ENT_QUOTES, 'UTF-8') . "</span>";
                     } else {
-                        echo "<span style='color: red;'>" . htmlspecialchars(t('error'), ENT_QUOTES, 'UTF-8') . ": settings were not saved</span>";
+                        echo "<span style='color: red;'>" . htmlspecialchars(t('error'), ENT_QUOTES, 'UTF-8') . ": " . htmlspecialchars(t('settings_not_saved'), ENT_QUOTES, 'UTF-8') . "</span>";
                     }
                 }
             }
