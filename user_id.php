@@ -118,6 +118,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>ITUA</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
     <link href="/styles.css" rel="stylesheet" />
+    <style>
+        .user-id-feedback {
+            width: 100%;
+            max-width: 560px;
+            margin: 0 auto 18px;
+            padding: 16px 18px;
+            border-radius: 12px;
+            border: 2px solid transparent;
+            font-size: 1.05rem;
+            font-weight: 700;
+            line-height: 1.4;
+            text-align: center;
+            box-shadow: 0 10px 24px rgba(44, 62, 80, 0.12);
+        }
+
+        .user-id-feedback.status.active {
+            color: #155d36;
+            background: linear-gradient(180deg, #edfdf3 0%, #d8f6e4 100%);
+            border-color: #57b87a;
+        }
+
+        .user-id-feedback.status.inactive {
+            color: #8f2318;
+            background: linear-gradient(180deg, #fff1ef 0%, #ffdeda 100%);
+            border-color: #e07a6f;
+        }
+    </style>
 </head>
 <body class="padded">
 <div class="container">
