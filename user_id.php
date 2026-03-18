@@ -4,18 +4,17 @@ require_once 'lib/footer.php';
 require_once 'lib/tool_helpers.php';
 $config = require 'config/config.php';
 
-function detectGlobalUserId(): string
+function getUserIdAssignments(): array
 {
-    $mhddos = getCurrentAdjustableParams(getConfigStringFromServiceFile('mhddos'), ['user-id'], 'mhddos');
-    $distress = getCurrentAdjustableParams(getConfigStringFromServiceFile('distress'), ['user-id'], 'distress');
-    $x100 = getX100ConfigValues();
-
-    $candidates = [
-        trim((string)($mhddos['user-id'] ?? '')),
-        trim((string)($distress['user-id'] ?? '')),
-        trim((string)($x100['itArmyUserId'] ?? '')),
+    return [
+        'mhddos' => trim((string)(getCurrentAdjustableParams(getConfigStringFromServiceFile('mhddos'), ['user-id'], 'mhddos')['user-id'] ?? '')),
+        'distress' => trim((string)(getCurrentAdjustableParams(getConfigStringFromServiceFile('distress'), ['user-id'], 'distress')['user-id'] ?? '')),
     ];
-    foreach ($candidates as $candidate) {
+}
+
+function detectGlobalUserId(array $assignments): string
+{
+    foreach ($assignments as $candidate) {
         if ($candidate !== '') {
             return $candidate;
         }
@@ -36,7 +35,11 @@ function saveGlobalUserId(string $userId, array $config): bool
     if ($mhddosConfig !== '') {
         $mhddosOk = updateServiceFile(
             'mhddos',
-            updateServiceConfigParams($mhddosConfig, ['user-id' => $userId], 'mhddos')
+            updateServiceConfigParams(
+                $mhddosConfig,
+                ['user-id' => $userId],
+                'mhddos'
+            )
         );
         if ($mhddosOk) {
             $updatedAny = true;
@@ -48,18 +51,16 @@ function saveGlobalUserId(string $userId, array $config): bool
     if ($distressConfig !== '') {
         $distressOk = updateServiceFile(
             'distress',
-            updateServiceConfigParams($distressConfig, ['user-id' => $userId], 'distress')
+            updateServiceConfigParams(
+                $distressConfig,
+                ['user-id' => $userId],
+                'distress'
+            )
         );
         if ($distressOk) {
             $updatedAny = true;
             $updatedModules['distress'] = true;
         }
-    }
-
-    $x100Ok = setX100ConfigValues(['itArmyUserId' => $userId]);
-    if ($x100Ok) {
-        $updatedAny = true;
-        $updatedModules['x100'] = true;
     }
 
     if (!$updatedAny) {
@@ -87,12 +88,14 @@ function saveGlobalUserId(string $userId, array $config): bool
     return true;
 }
 
-$userId = detectGlobalUserId();
+$assignments = getUserIdAssignments();
+$userId = detectGlobalUserId($assignments);
 $message = '';
 $messageClass = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $userIdRaw = (string)($_POST['global_user_id'] ?? '');
     $userIdSubmitted = trim($userIdRaw);
+
     if ($userIdRaw !== $userIdSubmitted || ($userIdSubmitted !== '' && preg_match('/^\d+$/', $userIdSubmitted) !== 1)) {
         $message = t('error') . ': ' . t('invalid_user_id');
         $messageClass = 'status inactive';
@@ -121,7 +124,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="content centered">
         <h1><?= htmlspecialchars(t('user_id'), ENT_QUOTES, 'UTF-8') ?></h1>
         <?php if ($message !== ''): ?>
-            <div class="<?= htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="user-id-feedback <?= htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') ?>" role="status" aria-live="polite">
+                <?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?>
+            </div>
         <?php endif; ?>
         <div class="service" style="max-width: 760px; text-align: left;">
             <p>
