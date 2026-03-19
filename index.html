@@ -30,6 +30,21 @@
         </ul>
     </div>
 </div>
+<div class="modal-backdrop" id="user-id-modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="user-id-modal-title" aria-describedby="user-id-modal-text">
+        <div class="modal-badge" id="user-id-modal-badge">IT Army</div>
+        <h2 id="user-id-modal-title">User ID</h2>
+        <p id="user-id-modal-text"></p>
+        <div class="copy-bot-row">
+            <button type="button" class="copy-bot-btn" id="copy-bot-name" aria-describedby="copy-bot-hint" aria-label="Copy bot name">@itarmy_stats_bot</button>
+            <span class="copy-bot-hint" id="copy-bot-hint"></span>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="modal-btn modal-btn-secondary" id="user-id-modal-close">OK</button>
+            <a class="modal-btn modal-btn-primary" id="user-id-modal-link" href="/user_id.php">Settings</a>
+        </div>
+    </div>
+</div>
 <script>
     const translations = {
         en: {
@@ -37,6 +52,13 @@
             status: "Status",
             tools: "Tools",
             settings: "Settings",
+            userIdMissingBadge: "IT Army helper",
+            userIdMissingTitle: "User ID required",
+            userIdMissingNotice: "To receive personal statistics and participate in the user leaderboard, get your personal ID from the Telegram statistics bot and enter it in the corresponding field in Settings.",
+            openUserIdSettings: "Open settings",
+            closeModal: "OK",
+            copyBotHint: "Tap the bot name to copy",
+            copiedBotHint: "Copied",
             versionLabel: "Version",
             githubLabel: "GitHub",
             updateAvailable: "Update available",
@@ -49,6 +71,13 @@
             status: "Статус",
             tools: "Інструменти",
             settings: "Налаштування",
+            userIdMissingBadge: "Підказка IT Army",
+            userIdMissingTitle: "Потрібен User ID",
+            userIdMissingNotice: "Для отримання персональної статистики та участі в топі користувачів потрібно дізнатись свій персональний id у Telegram-бота статистики та вказати у відповідне поле в налаштуваннях.",
+            openUserIdSettings: "Відкрити налаштування",
+            closeModal: "OK",
+            copyBotHint: "Натисніть на назву бота, щоб скопіювати",
+            copiedBotHint: "Скопійовано",
             versionLabel: "Версія",
             githubLabel: "GitHub",
             updateAvailable: "Доступне оновлення",
@@ -63,8 +92,17 @@
     const statusEl = document.getElementById("link-status");
     const toolsEl = document.getElementById("link-tools");
     const settingsEl = document.getElementById("link-settings");
+    const userIdModalEl = document.getElementById("user-id-modal");
+    const userIdModalBadgeEl = document.getElementById("user-id-modal-badge");
+    const userIdModalTitleEl = document.getElementById("user-id-modal-title");
+    const userIdModalTextEl = document.getElementById("user-id-modal-text");
+    const userIdModalCloseEl = document.getElementById("user-id-modal-close");
+    const userIdModalLinkEl = document.getElementById("user-id-modal-link");
+    const copyBotNameEl = document.getElementById("copy-bot-name");
+    const copyBotHintEl = document.getElementById("copy-bot-hint");
     let activeLang = "en";
     let versionInfo = { current: "...", github: "..." };
+    let copyBotHintTimer = null;
 
     function getCookie(name) {
         const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
@@ -79,6 +117,7 @@
         if (footerUpdateActionEl) {
             footerUpdateActionEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
         }
+        userIdModalLinkEl.href = "/user_id.php?lang=" + encodeURIComponent(lang);
     }
 
     function applyLang(lang) {
@@ -113,9 +152,56 @@
             footerUpdateActionEl.textContent = text.updateNow;
             footerUpdateActionEl.classList.toggle("visible", updateNeeded);
         }
+        userIdModalTitleEl.textContent = text.userIdMissingTitle;
+        userIdModalBadgeEl.textContent = text.userIdMissingBadge;
+        userIdModalTextEl.textContent = text.userIdMissingNotice;
+        userIdModalCloseEl.textContent = text.closeModal;
+        userIdModalLinkEl.textContent = text.openUserIdSettings;
+        copyBotHintEl.textContent = text.copyBotHint;
         langEnBtn.classList.toggle("active", activeLang === "en");
         langUkBtn.classList.toggle("active", activeLang === "uk");
         updateLinks(activeLang);
+    }
+
+    async function copyBotName() {
+        const botName = copyBotNameEl.textContent.trim();
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(botName);
+            } else {
+                const textArea = document.createElement("textarea");
+                textArea.value = botName;
+                textArea.setAttribute("readonly", "");
+                textArea.style.position = "absolute";
+                textArea.style.left = "-9999px";
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textArea);
+            }
+            copyBotHintEl.textContent = translations[activeLang].copiedBotHint;
+            copyBotNameEl.classList.add("copied");
+            if (copyBotHintTimer) {
+                window.clearTimeout(copyBotHintTimer);
+            }
+            copyBotHintTimer = window.setTimeout(() => {
+                copyBotHintEl.textContent = translations[activeLang].copyBotHint;
+                copyBotNameEl.classList.remove("copied");
+            }, 1800);
+        } catch (e) {
+            copyBotHintEl.textContent = botName;
+        }
+    }
+
+    function showUserIdModal() {
+        userIdModalEl.hidden = false;
+        document.body.classList.add("modal-open");
+        userIdModalCloseEl.focus();
+    }
+
+    function hideUserIdModal() {
+        userIdModalEl.hidden = true;
+        document.body.classList.remove("modal-open");
     }
 
     async function fetchVersionInfo() {
@@ -145,6 +231,17 @@
         }
     }
 
+    async function notifyIfUserIdMissing() {
+        try {
+            const response = await fetch("/user_id.php?ajax=status", { cache: "no-store" });
+            const data = await response.json();
+            if (data && data.ok === true && data.userIdConfigured === false) {
+                showUserIdModal();
+            }
+        } catch (e) {
+        }
+    }
+
     function setLang(lang) {
         document.cookie = "lang=" + encodeURIComponent(lang) + "; path=/; max-age=31536000";
         applyLang(lang);
@@ -155,10 +252,31 @@
     applyLang(initialLang);
     fetchVersionInfo();
     refreshMainStatusIndicator();
+    notifyIfUserIdMissing();
     setInterval(refreshMainStatusIndicator, 5000);
+
+    function closeUserIdModalFromAction(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        hideUserIdModal();
+    }
 
     langEnBtn.addEventListener("click", () => setLang("en"));
     langUkBtn.addEventListener("click", () => setLang("uk"));
+    userIdModalCloseEl.addEventListener("click", closeUserIdModalFromAction);
+    userIdModalCloseEl.addEventListener("pointerup", closeUserIdModalFromAction);
+    userIdModalCloseEl.addEventListener("touchend", closeUserIdModalFromAction, { passive: false });
+    copyBotNameEl.addEventListener("click", copyBotName);
+    userIdModalEl.addEventListener("click", (event) => {
+        if (event.target === userIdModalEl) {
+            hideUserIdModal();
+        }
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !userIdModalEl.hidden) {
+            hideUserIdModal();
+        }
+    });
 </script>
 <footer class="app-footer">
     <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Together to freedom</span>.</div>
