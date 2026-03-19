@@ -90,6 +90,16 @@ function saveGlobalUserId(string $userId, array $config): bool
 
 $assignments = getUserIdAssignments();
 $userId = detectGlobalUserId($assignments);
+
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'status') {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'ok' => true,
+        'userIdConfigured' => ($userId !== ''),
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 $message = '';
 $messageClass = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
