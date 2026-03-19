@@ -30,6 +30,16 @@
         </ul>
     </div>
 </div>
+<div class="modal-backdrop" id="user-id-modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="user-id-modal-title" aria-describedby="user-id-modal-text">
+        <h2 id="user-id-modal-title">User ID</h2>
+        <p id="user-id-modal-text"></p>
+        <div class="modal-actions">
+            <button type="button" class="modal-btn modal-btn-secondary" id="user-id-modal-close">OK</button>
+            <a class="modal-btn modal-btn-primary" id="user-id-modal-link" href="/user_id.php">Settings</a>
+        </div>
+    </div>
+</div>
 <script>
     const translations = {
         en: {
@@ -37,7 +47,10 @@
             status: "Status",
             tools: "Tools",
             settings: "Settings",
+            userIdMissingTitle: "User ID required",
             userIdMissingNotice: "To receive personal statistics and participate in the user leaderboard, you need to get your personal ID from the statistics bot @itarmy_stats_bot and specify it in the corresponding field in Settings.",
+            openUserIdSettings: "Open settings",
+            closeModal: "OK",
             versionLabel: "Version",
             githubLabel: "GitHub",
             updateAvailable: "Update available",
@@ -50,7 +63,10 @@
             status: "Статус",
             tools: "Інструменти",
             settings: "Налаштування",
+            userIdMissingTitle: "Потрібен User ID",
             userIdMissingNotice: "Для отримання персональної статистики та участі в топі користувачів потрібно дізнатись свій персональний id у бота статистики @itarmy_stats_bot та вказати у відповідне поле в налаштуваннях",
+            openUserIdSettings: "Відкрити налаштування",
+            closeModal: "OK",
             versionLabel: "Версія",
             githubLabel: "GitHub",
             updateAvailable: "Доступне оновлення",
@@ -65,6 +81,11 @@
     const statusEl = document.getElementById("link-status");
     const toolsEl = document.getElementById("link-tools");
     const settingsEl = document.getElementById("link-settings");
+    const userIdModalEl = document.getElementById("user-id-modal");
+    const userIdModalTitleEl = document.getElementById("user-id-modal-title");
+    const userIdModalTextEl = document.getElementById("user-id-modal-text");
+    const userIdModalCloseEl = document.getElementById("user-id-modal-close");
+    const userIdModalLinkEl = document.getElementById("user-id-modal-link");
     let activeLang = "en";
     let versionInfo = { current: "...", github: "..." };
 
@@ -81,6 +102,7 @@
         if (footerUpdateActionEl) {
             footerUpdateActionEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
         }
+        userIdModalLinkEl.href = "/user_id.php?lang=" + encodeURIComponent(lang);
     }
 
     function applyLang(lang) {
@@ -115,9 +137,23 @@
             footerUpdateActionEl.textContent = text.updateNow;
             footerUpdateActionEl.classList.toggle("visible", updateNeeded);
         }
+        userIdModalTitleEl.textContent = text.userIdMissingTitle;
+        userIdModalTextEl.textContent = text.userIdMissingNotice;
+        userIdModalCloseEl.textContent = text.closeModal;
+        userIdModalLinkEl.textContent = text.openUserIdSettings;
         langEnBtn.classList.toggle("active", activeLang === "en");
         langUkBtn.classList.toggle("active", activeLang === "uk");
         updateLinks(activeLang);
+    }
+
+    function showUserIdModal() {
+        userIdModalEl.hidden = false;
+        document.body.classList.add("modal-open");
+    }
+
+    function hideUserIdModal() {
+        userIdModalEl.hidden = true;
+        document.body.classList.remove("modal-open");
     }
 
     async function fetchVersionInfo() {
@@ -152,7 +188,7 @@
             const response = await fetch("/user_id.php?ajax=status", { cache: "no-store" });
             const data = await response.json();
             if (data && data.ok === true && data.userIdConfigured === false) {
-                window.alert(translations[activeLang].userIdMissingNotice);
+                showUserIdModal();
             }
         } catch (e) {
         }
@@ -173,6 +209,12 @@
 
     langEnBtn.addEventListener("click", () => setLang("en"));
     langUkBtn.addEventListener("click", () => setLang("uk"));
+    userIdModalCloseEl.addEventListener("click", hideUserIdModal);
+    userIdModalEl.addEventListener("click", (event) => {
+        if (event.target === userIdModalEl) {
+            hideUserIdModal();
+        }
+    });
 </script>
 <footer class="app-footer">
     <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Together to freedom</span>.</div>
