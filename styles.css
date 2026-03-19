@@ -487,6 +487,10 @@ h1 {
     z-index: 120;
 }
 
+.modal-backdrop[hidden] {
+    display: none !important;
+}
+
 .modal-card {
     width: min(100%, 520px);
     background: #fff;
