@@ -511,6 +511,44 @@ h1 {
     line-height: 1.6;
 }
 
+.copy-bot-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}
+
+.copy-bot-btn {
+    border: 1px solid #7db4ff;
+    background: linear-gradient(180deg, #edf5ff 0%, #dcecff 100%);
+    color: #1450a3;
+    border-radius: 999px;
+    padding: 10px 16px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 10px 22px rgba(32, 91, 187, 0.14);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.copy-bot-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 28px rgba(32, 91, 187, 0.18);
+}
+
+.copy-bot-btn.copied {
+    background: linear-gradient(180deg, #e8fbef 0%, #d3f4df 100%);
+    border-color: #72c48d;
+    color: #1e7b46;
+}
+
+.copy-bot-hint {
+    color: #5b6d80;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
 .modal-actions {
     display: flex;
     justify-content: flex-end;

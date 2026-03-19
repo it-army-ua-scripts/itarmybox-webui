@@ -34,6 +34,10 @@
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="user-id-modal-title" aria-describedby="user-id-modal-text">
         <h2 id="user-id-modal-title">User ID</h2>
         <p id="user-id-modal-text"></p>
+        <div class="copy-bot-row">
+            <button type="button" class="copy-bot-btn" id="copy-bot-name" aria-describedby="copy-bot-hint">@itarmy_stats_bot</button>
+            <span class="copy-bot-hint" id="copy-bot-hint"></span>
+        </div>
         <div class="modal-actions">
             <button type="button" class="modal-btn modal-btn-secondary" id="user-id-modal-close">OK</button>
             <a class="modal-btn modal-btn-primary" id="user-id-modal-link" href="/user_id.php">Settings</a>
@@ -48,9 +52,11 @@
             tools: "Tools",
             settings: "Settings",
             userIdMissingTitle: "User ID required",
-            userIdMissingNotice: "To receive personal statistics and participate in the user leaderboard, you need to get your personal ID from the statistics bot @itarmy_stats_bot and specify it in the corresponding field in Settings.",
+            userIdMissingNotice: "To receive personal statistics and participate in the user leaderboard, get your personal ID from the statistics bot and enter it in the corresponding field in Settings.",
             openUserIdSettings: "Open settings",
             closeModal: "OK",
+            copyBotHint: "Tap the bot name to copy",
+            copiedBotHint: "Copied",
             versionLabel: "Version",
             githubLabel: "GitHub",
             updateAvailable: "Update available",
@@ -64,9 +70,11 @@
             tools: "Інструменти",
             settings: "Налаштування",
             userIdMissingTitle: "Потрібен User ID",
-            userIdMissingNotice: "Для отримання персональної статистики та участі в топі користувачів потрібно дізнатись свій персональний id у бота статистики @itarmy_stats_bot та вказати у відповідне поле в налаштуваннях",
+            userIdMissingNotice: "Для отримання персональної статистики та участі в топі користувачів потрібно дізнатись свій персональний id у бота статистики та вказати у відповідне поле в налаштуваннях.",
             openUserIdSettings: "Відкрити налаштування",
             closeModal: "OK",
+            copyBotHint: "Натисніть на назву бота, щоб скопіювати",
+            copiedBotHint: "Скопійовано",
             versionLabel: "Версія",
             githubLabel: "GitHub",
             updateAvailable: "Доступне оновлення",
@@ -86,8 +94,11 @@
     const userIdModalTextEl = document.getElementById("user-id-modal-text");
     const userIdModalCloseEl = document.getElementById("user-id-modal-close");
     const userIdModalLinkEl = document.getElementById("user-id-modal-link");
+    const copyBotNameEl = document.getElementById("copy-bot-name");
+    const copyBotHintEl = document.getElementById("copy-bot-hint");
     let activeLang = "en";
     let versionInfo = { current: "...", github: "..." };
+    let copyBotHintTimer = null;
 
     function getCookie(name) {
         const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
@@ -141,9 +152,40 @@
         userIdModalTextEl.textContent = text.userIdMissingNotice;
         userIdModalCloseEl.textContent = text.closeModal;
         userIdModalLinkEl.textContent = text.openUserIdSettings;
+        copyBotHintEl.textContent = text.copyBotHint;
         langEnBtn.classList.toggle("active", activeLang === "en");
         langUkBtn.classList.toggle("active", activeLang === "uk");
         updateLinks(activeLang);
+    }
+
+    async function copyBotName() {
+        const botName = copyBotNameEl.textContent.trim();
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(botName);
+            } else {
+                const textArea = document.createElement("textarea");
+                textArea.value = botName;
+                textArea.setAttribute("readonly", "");
+                textArea.style.position = "absolute";
+                textArea.style.left = "-9999px";
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textArea);
+            }
+            copyBotHintEl.textContent = translations[activeLang].copiedBotHint;
+            copyBotNameEl.classList.add("copied");
+            if (copyBotHintTimer) {
+                window.clearTimeout(copyBotHintTimer);
+            }
+            copyBotHintTimer = window.setTimeout(() => {
+                copyBotHintEl.textContent = translations[activeLang].copyBotHint;
+                copyBotNameEl.classList.remove("copied");
+            }, 1800);
+        } catch (e) {
+            copyBotHintEl.textContent = botName;
+        }
     }
 
     function showUserIdModal() {
@@ -210,6 +252,7 @@
     langEnBtn.addEventListener("click", () => setLang("en"));
     langUkBtn.addEventListener("click", () => setLang("uk"));
     userIdModalCloseEl.addEventListener("click", hideUserIdModal);
+    copyBotNameEl.addEventListener("click", copyBotName);
     userIdModalEl.addEventListener("click", (event) => {
         if (event.target === userIdModalEl) {
             hideUserIdModal();
