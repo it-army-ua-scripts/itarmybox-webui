@@ -80,7 +80,7 @@ if ($timezone !== '' && $timezone !== 'n/a' && !in_array($timezone, $timezoneOpt
     <div class="content centered">
         <h1><?= htmlspecialchars(t('time_sync_title'), ENT_QUOTES, 'UTF-8') ?></h1>
         <?php if ($message !== ''): ?>
-            <div class="<?= htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="form-message <?= htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
 
         <div class="service" style="max-width: 760px; width: 100%; text-align: left;">

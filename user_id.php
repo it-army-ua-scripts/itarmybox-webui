@@ -161,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="content centered">
         <h1><?= htmlspecialchars(t('user_id'), ENT_QUOTES, 'UTF-8') ?></h1>
         <?php if ($message !== ''): ?>
-            <div class="user-id-feedback <?= htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') ?>" role="status" aria-live="polite">
+            <div class="user-id-feedback form-message <?= htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') ?>" role="status" aria-live="polite">
                 <?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?>
             </div>
         <?php endif; ?>

@@ -41,6 +41,7 @@
     const userIdModalSkipLabelEl = document.getElementById("user-id-modal-skip-label");
 
     const userIdModalPreferenceKey = "itarmybox-hide-userid-modal";
+    const userIdModalSnoozeKey = "itarmybox-userid-snooze-until";
     const appLangStorageKey = "itarmybox-lang";
     let activeLang = "uk";
     let versionInfo = { current: "...", github: "..." };
@@ -73,6 +74,23 @@
             return;
         }
         shared.removeStorage(userIdModalPreferenceKey);
+    }
+
+    function getUserIdSnoozeUntil() {
+        const raw = shared.getStorage(userIdModalSnoozeKey);
+        const value = raw ? Number(raw) : 0;
+        return Number.isFinite(value) ? value : 0;
+    }
+
+    function setUserIdSnoozeUntil(timestampMs) {
+        if (!Number.isFinite(timestampMs)) {
+            return;
+        }
+        shared.setStorage(userIdModalSnoozeKey, String(Math.floor(timestampMs)));
+    }
+
+    function clearUserIdSnooze() {
+        shared.removeStorage(userIdModalSnoozeKey);
     }
 
     function updateLinks(lang) {
@@ -380,7 +398,12 @@
     }
 
     function hideUserIdModal() {
-        setUserIdModalHiddenPreference(userIdModalSkipEl.checked);
+        setUserIdModalHiddenPreference(false);
+        if (userIdModalSkipEl.checked) {
+            setUserIdSnoozeUntil(Date.now() + 24 * 60 * 60 * 1000);
+        } else {
+            clearUserIdSnooze();
+        }
         userIdModalEl.hidden = true;
         document.body.classList.remove("modal-open");
     }
@@ -416,10 +439,13 @@
     async function notifyIfUserIdMissing() {
         try {
             const data = await shared.fetchJson(config.userIdStatusUrl || "/user_id.php?ajax=status", { cache: "no-store" });
-            if (data && data.ok === true && data.userIdConfigured === false && !getUserIdModalHiddenPreference()) {
+            const snoozeUntil = getUserIdSnoozeUntil();
+            const shouldSnooze = snoozeUntil > Date.now();
+            if (data && data.ok === true && data.userIdConfigured === false && !getUserIdModalHiddenPreference() && !shouldSnooze) {
                 showUserIdModal();
             } else if (data && data.ok === true && data.userIdConfigured === true) {
                 setUserIdModalHiddenPreference(false);
+                clearUserIdSnooze();
             }
         } catch (e) {
         }

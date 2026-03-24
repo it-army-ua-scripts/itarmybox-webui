@@ -659,6 +659,32 @@ h1 {
     color: #c0392b;
 }
 
+.form-message {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto 16px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-weight: 600;
+    text-align: center;
+    border: 1px solid transparent;
+    background: #f5f7fb;
+    color: #2c3e50;
+    box-shadow: 0 10px 22px rgba(44, 62, 80, 0.08);
+}
+
+.form-message.status.active {
+    border-color: rgba(58, 159, 100, 0.35);
+    background: linear-gradient(180deg, #eef9f2 0%, #e4f4ea 100%);
+    color: #1e824c;
+}
+
+.form-message.status.inactive {
+    border-color: rgba(207, 75, 75, 0.35);
+    background: linear-gradient(180deg, #fdecec 0%, #fbe0e0 100%);
+    color: #c0392b;
+}
+
 .log-box {
     background: #111;
     color: #f1f1f1;
