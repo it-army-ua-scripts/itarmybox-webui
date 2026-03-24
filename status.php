@@ -86,6 +86,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         'noModuleRunning' => t('no_module_running'),
         'commonLogsFor' => t('common_logs_for', ['module' => '{{module}}']),
         'commonLogsNoActive' => t('common_logs_no_active'),
+        'start' => t('start'),
         'stop' => t('stop')
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const lang = <?= json_encode(app_lang(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
@@ -106,15 +107,19 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         return path + "?daemon=" + encodeURIComponent(module) + "&lang=" + encodeURIComponent(lang);
     }
 
-    function renderActiveModuleActions(moduleName) {
+    function renderActiveModuleActions(activeModuleName, selectedModuleName) {
         activeModuleActionsEl.innerHTML = "";
-        if (!moduleName) {
-            return;
+        if (activeModuleName) {
+            const stopLink = document.createElement("a");
+            stopLink.href = actionUrl("/stop.php", activeModuleName);
+            stopLink.textContent = text.stop;
+            activeModuleActionsEl.appendChild(stopLink);
+        } else if (selectedModuleName) {
+            const startLink = document.createElement("a");
+            startLink.href = actionUrl("/start.php", selectedModuleName);
+            startLink.textContent = text.start;
+            activeModuleActionsEl.appendChild(startLink);
         }
-        const stopLink = document.createElement("a");
-        stopLink.href = actionUrl("/stop.php", moduleName);
-        stopLink.textContent = text.stop;
-        activeModuleActionsEl.appendChild(stopLink);
     }
 
     async function updateStatus() {
@@ -134,14 +139,14 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
                 const path = data.logPath ? String(data.logPath) : "";
                 const suffix = src ? ` [${src}${path ? ": " + path : ""}]` : "";
                 commonLogTitleEl.textContent = text.commonLogsFor.replace("{{module}}", data.activeModule) + suffix;
-                renderActiveModuleActions(String(data.activeModule));
+                renderActiveModuleActions(String(data.activeModule), "");
             } else {
                 activeModuleNameEl.textContent = text.activeModule;
                 activeModuleStatusEl.textContent = text.noModuleRunning;
                 activeModuleStatusEl.classList.add("inactive");
                 activeModuleStatusEl.classList.remove("active");
                 commonLogTitleEl.textContent = text.commonLogsNoActive;
-                renderActiveModuleActions("");
+                renderActiveModuleActions("", typeof data.selectedModule === "string" ? data.selectedModule : "");
             }
             appendOrReplace(commonLogEl, data.commonLogs || "", "common");
         } catch (e) {

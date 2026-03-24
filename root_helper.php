@@ -324,6 +324,12 @@ function serviceRestart(string $module): array
     return ['ok' => true, 'restarted' => true];
 }
 
+function systemReboot(): array
+{
+    exec('/usr/bin/nohup /usr/bin/systemctl reboot >/dev/null 2>&1 &');
+    return ['ok' => true];
+}
+
 function statusSnapshot(array $modules, int $lines): array
 {
     $activeModule = getActiveModule($modules);
@@ -675,6 +681,11 @@ if ($action === 'service_restart') {
         fail('invalid_module');
     }
     respond(serviceRestart($module));
+    exit(0);
+}
+
+if ($action === 'system_reboot') {
+    respond(systemReboot());
     exit(0);
 }
 

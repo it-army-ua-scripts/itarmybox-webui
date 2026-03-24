@@ -20,6 +20,7 @@ require_once 'lib/footer.php';
             <li><a href="<?= htmlspecialchars(url_with_lang('/user_id.php'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('user_id'), ENT_QUOTES, 'UTF-8') ?></a></li>
             <li><a href="<?= htmlspecialchars(url_with_lang('/autostart.php'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('autostart'), ENT_QUOTES, 'UTF-8') ?></a></li>
             <li><a href="<?= htmlspecialchars(url_with_lang('/update.php'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('update'), ENT_QUOTES, 'UTF-8') ?></a></li>
+            <li><a href="<?= htmlspecialchars(url_with_lang('/reboot.php'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('reboot_system'), ENT_QUOTES, 'UTF-8') ?></a></li>
             <li><a href="<?= htmlspecialchars(url_with_lang('/'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('back'), ENT_QUOTES, 'UTF-8') ?></a></li>
         </ul>
     </div>
