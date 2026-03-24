@@ -176,6 +176,7 @@
     let copyBotHintTimer = null;
     const userIdModalPreferenceKey = "itarmybox-hide-userid-modal";
     let powerApplyTimer = null;
+    let powerPendingPercent = null;
 
     function getCookie(name) {
         const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
@@ -223,6 +224,13 @@
         powerPercentEl.textContent = String(normalized) + "%";
         powerRateEl.textContent = String(percentToMbit(normalized)) + " Мбіт/с";
         powerSliderEl.style.setProperty("--power-fill", ((normalized - 25) / 75 * 100).toFixed(2) + "%");
+    }
+
+    function schedulePowerApply() {
+        if (powerApplyTimer) {
+            window.clearTimeout(powerApplyTimer);
+        }
+        powerApplyTimer = window.setTimeout(() => applyTrafficLimit(powerSliderEl.value), 80);
     }
 
     function applyLang(lang) {
@@ -279,28 +287,39 @@
             if (!data || data.ok !== true) {
                 return;
             }
+            if (powerPendingPercent !== null) {
+                return;
+            }
             renderPowerState(data.percent);
         } catch (e) {
         }
     }
 
     async function applyTrafficLimit(percent) {
+        const normalized = Math.max(25, Math.min(100, Number(percent) || 100));
+        powerPendingPercent = normalized;
+        renderPowerState(normalized);
         powerStatusEl.textContent = translations[activeLang].powerApplying;
         try {
             const response = await fetch("/traffic_limit.php", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ percent })
+                body: JSON.stringify({ percent: normalized })
             });
             const data = await response.json();
             if (!data || data.ok !== true) {
                 powerStatusEl.textContent = translations[activeLang].powerApplyFailed;
+                powerPendingPercent = null;
+                refreshTrafficLimit();
                 return;
             }
             renderPowerState(data.percent);
             powerStatusEl.textContent = translations[activeLang].powerApplied;
+            powerPendingPercent = null;
         } catch (e) {
             powerStatusEl.textContent = translations[activeLang].powerApplyFailed;
+            powerPendingPercent = null;
+            refreshTrafficLimit();
         }
     }
 
@@ -448,12 +467,10 @@
         renderPowerState(powerSliderEl.value);
         powerStatusEl.textContent = "";
     });
-    powerSliderEl.addEventListener("change", () => {
-        if (powerApplyTimer) {
-            window.clearTimeout(powerApplyTimer);
-        }
-        powerApplyTimer = window.setTimeout(() => applyTrafficLimit(powerSliderEl.value), 50);
-    });
+    powerSliderEl.addEventListener("change", schedulePowerApply);
+    powerSliderEl.addEventListener("mouseup", schedulePowerApply);
+    powerSliderEl.addEventListener("touchend", schedulePowerApply, { passive: true });
+    powerSliderEl.addEventListener("pointerup", schedulePowerApply);
     userIdModalCloseEl.addEventListener("click", closeUserIdModalFromAction);
     userIdModalCloseEl.addEventListener("pointerup", closeUserIdModalFromAction);
     userIdModalCloseEl.addEventListener("touchend", closeUserIdModalFromAction, { passive: false });
