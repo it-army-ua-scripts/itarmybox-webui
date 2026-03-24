@@ -107,7 +107,7 @@ h1 {
 }
 
 .power-lever {
-    margin: 0 auto;
+    margin: 0 auto 10px;
     max-width: 760px;
     text-align: left;
     padding: 14px 16px;

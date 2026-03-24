@@ -76,6 +76,33 @@ function read_temperature_celsius(): ?float
     return null;
 }
 
+function read_memory_temperature_celsius(): ?float
+{
+    $paths = glob('/sys/class/hwmon/hwmon*/temp*_input');
+    if (!is_array($paths)) {
+        return null;
+    }
+    foreach ($paths as $inputPath) {
+        $labelPath = preg_replace('/_input$/', '_label', $inputPath);
+        $label = is_string($labelPath) ? strtolower(trim((string)@file_get_contents($labelPath))) : '';
+        if ($label === '' || (strpos($label, 'mem') === false && strpos($label, 'ddr') === false && strpos($label, 'ram') === false)) {
+            continue;
+        }
+        $raw = trim((string)@file_get_contents($inputPath));
+        if ($raw === '' || !preg_match('/^-?\d+$/', $raw)) {
+            continue;
+        }
+        $value = (int)$raw;
+        if ($value > 1000) {
+            return $value / 1000;
+        }
+        if ($value > 0) {
+            return (float)$value;
+        }
+    }
+    return null;
+}
+
 function format_rate_from_bytes(float $bytesPerSecond): string
 {
     if ($bytesPerSecond < 0) {
@@ -161,4 +188,5 @@ echo json_encode([
     'ramPercent' => $ramPercent,
     'cpuPercent' => read_cpu_usage_percent(),
     'temperatureC' => read_temperature_celsius(),
+    'memoryTemperatureC' => read_memory_temperature_celsius(),
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

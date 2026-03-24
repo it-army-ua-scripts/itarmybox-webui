@@ -15,28 +15,6 @@
         <button type="button" class="lang-btn" id="lang-en">EN</button>
         <button type="button" class="lang-btn" id="lang-uk">UA</button>
     </div>
-    <div class="content">
-        <section class="home-monitor" aria-label="Моніторинг системи">
-            <div class="home-monitor-grid">
-                <div class="monitor-card monitor-card-tx">
-                    <div class="monitor-label" id="monitor-tx-label">TX eth0</div>
-                    <div class="monitor-value" id="monitor-tx-value">...</div>
-                </div>
-                <div class="monitor-card">
-                    <div class="monitor-label" id="monitor-ram-label">RAM</div>
-                    <div class="monitor-value" id="monitor-ram-value">...</div>
-                </div>
-                <div class="monitor-card">
-                    <div class="monitor-label" id="monitor-cpu-label">CPU</div>
-                    <div class="monitor-value" id="monitor-cpu-value">...</div>
-                </div>
-                <div class="monitor-card">
-                    <div class="monitor-label" id="monitor-temp-label">Температура</div>
-                    <div class="monitor-value" id="monitor-temp-value">...</div>
-                </div>
-            </div>
-        </section>
-    </div>
     <div class="header">
         <div class="logo-row">
             <img src="/image/logo.png" alt="logo" class="header-logo">
@@ -66,6 +44,30 @@
             </div>
             <div class="power-help" id="power-help">Піднімайте потужність поступово. Важливо, щоб itarmybox не заважав комфортному доступу до інтернету.</div>
             <div class="power-status" id="power-status"></div>
+        </section>
+        <section class="home-monitor" aria-label="Моніторинг системи">
+            <div class="home-monitor-grid">
+                <div class="monitor-card monitor-card-tx">
+                    <div class="monitor-label" id="monitor-tx-label">TX eth0</div>
+                    <div class="monitor-value" id="monitor-tx-value">...</div>
+                </div>
+                <div class="monitor-card">
+                    <div class="monitor-label" id="monitor-ram-label">RAM</div>
+                    <div class="monitor-value" id="monitor-ram-value">...</div>
+                </div>
+                <div class="monitor-card">
+                    <div class="monitor-label" id="monitor-cpu-label">CPU</div>
+                    <div class="monitor-value" id="monitor-cpu-value">...</div>
+                </div>
+                <div class="monitor-card">
+                    <div class="monitor-label" id="monitor-temp-label">Температура</div>
+                    <div class="monitor-value" id="monitor-temp-value">...</div>
+                </div>
+                <div class="monitor-card" id="monitor-memory-temp-card" hidden>
+                    <div class="monitor-label" id="monitor-memory-temp-label">RAM Temp</div>
+                    <div class="monitor-value" id="monitor-memory-temp-value">...</div>
+                </div>
+            </div>
         </section>
     </div>
 </div>
@@ -114,6 +116,7 @@
             powerApplied: "Applied",
             powerApplyFailed: "Failed to apply",
             monitorTemperature: "Temperature",
+            monitorMemoryTemperature: "Memory temp",
             monitorUnavailable: "n/a",
             footerSlogan: "Glory to Ukraine!"
         },
@@ -141,6 +144,7 @@
             powerApplied: "Застосовано",
             powerApplyFailed: "Не вдалося застосувати",
             monitorTemperature: "Температура",
+            monitorMemoryTemperature: "Темп. пам'яті",
             monitorUnavailable: "н/д",
             footerSlogan: "Слава Україні!"
         }    };
@@ -163,6 +167,9 @@
     const monitorCpuValueEl = document.getElementById("monitor-cpu-value");
     const monitorTempLabelEl = document.getElementById("monitor-temp-label");
     const monitorTempValueEl = document.getElementById("monitor-temp-value");
+    const monitorMemoryTempCardEl = document.getElementById("monitor-memory-temp-card");
+    const monitorMemoryTempLabelEl = document.getElementById("monitor-memory-temp-label");
+    const monitorMemoryTempValueEl = document.getElementById("monitor-memory-temp-value");
     const userIdModalEl = document.getElementById("user-id-modal");
     const userIdModalBadgeEl = document.getElementById("user-id-modal-badge");
     const userIdModalTitleEl = document.getElementById("user-id-modal-title");
@@ -248,6 +255,7 @@
         powerNoteEl.textContent = text.powerNote;
         powerHelpEl.textContent = text.powerHelp;
         monitorTempLabelEl.textContent = text.monitorTemperature;
+        monitorMemoryTempLabelEl.textContent = text.monitorMemoryTemperature;
         const footerSloganEl = document.getElementById("footer-slogan");
         if (footerSloganEl) {
             footerSloganEl.textContent = text.footerSlogan;
@@ -349,12 +357,19 @@
             monitorRamValueEl.textContent = formatPercent(data.ramPercent);
             monitorCpuValueEl.textContent = formatPercent(data.cpuPercent);
             monitorTempValueEl.textContent = formatTemperature(data.temperatureC);
+            if (typeof data.memoryTemperatureC === "number" && Number.isFinite(data.memoryTemperatureC)) {
+                monitorMemoryTempCardEl.hidden = false;
+                monitorMemoryTempValueEl.textContent = formatTemperature(data.memoryTemperatureC);
+            } else {
+                monitorMemoryTempCardEl.hidden = true;
+            }
         } catch (e) {
             const fallback = translations[activeLang].monitorUnavailable;
             monitorTxValueEl.textContent = fallback;
             monitorRamValueEl.textContent = fallback;
             monitorCpuValueEl.textContent = fallback;
             monitorTempValueEl.textContent = fallback;
+            monitorMemoryTempCardEl.hidden = true;
         }
     }
 
