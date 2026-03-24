@@ -103,6 +103,29 @@ function read_memory_temperature_celsius(): ?float
     return null;
 }
 
+function read_interface_ipv4(string $iface): ?string
+{
+    $ipPath = null;
+    foreach (['/usr/sbin/ip', '/usr/bin/ip', '/sbin/ip', '/bin/ip'] as $candidate) {
+        if (is_executable($candidate)) {
+            $ipPath = $candidate;
+            break;
+        }
+    }
+    if ($ipPath === null) {
+        return null;
+    }
+
+    $output = @shell_exec($ipPath . ' -4 -o addr show dev ' . escapeshellarg($iface) . ' 2>/dev/null');
+    if (!is_string($output) || trim($output) === '') {
+        return null;
+    }
+    if (preg_match('/inet\s+([0-9.]+)\//', $output, $matches) === 1) {
+        return $matches[1];
+    }
+    return null;
+}
+
 function format_rate_from_bytes(float $bytesPerSecond): string
 {
     if ($bytesPerSecond < 0) {
@@ -189,4 +212,5 @@ echo json_encode([
     'cpuPercent' => read_cpu_usage_percent(),
     'temperatureC' => read_temperature_celsius(),
     'memoryTemperatureC' => read_memory_temperature_celsius(),
+    'ipv4' => read_interface_ipv4($iface),
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

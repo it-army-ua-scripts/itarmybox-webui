@@ -63,8 +63,12 @@
                     <div class="monitor-label" id="monitor-temp-label">Температура</div>
                     <div class="monitor-value" id="monitor-temp-value">...</div>
                 </div>
+                <div class="monitor-card">
+                    <div class="monitor-label" id="monitor-ip-label">eth0 IP</div>
+                    <div class="monitor-value" id="monitor-ip-value">...</div>
+                </div>
                 <div class="monitor-card" id="monitor-memory-temp-card" hidden>
-                    <div class="monitor-label" id="monitor-memory-temp-label">RAM Temp</div>
+                    <div class="monitor-label" id="monitor-memory-temp-label">DDR temp</div>
                     <div class="monitor-value" id="monitor-memory-temp-value">...</div>
                 </div>
             </div>
@@ -116,7 +120,8 @@
             powerApplied: "Applied",
             powerApplyFailed: "Failed to apply",
             monitorTemperature: "Temperature",
-            monitorMemoryTemperature: "Memory temp",
+            monitorMemoryTemperature: "DDR temp",
+            monitorIp: "eth0 IP",
             monitorUnavailable: "n/a",
             footerSlogan: "Glory to Ukraine!"
         },
@@ -144,7 +149,8 @@
             powerApplied: "Застосовано",
             powerApplyFailed: "Не вдалося застосувати",
             monitorTemperature: "Температура",
-            monitorMemoryTemperature: "Темп. пам'яті",
+            monitorMemoryTemperature: "DDR temp",
+            monitorIp: "eth0 IP",
             monitorUnavailable: "н/д",
             footerSlogan: "Слава Україні!"
         }    };
@@ -167,6 +173,8 @@
     const monitorCpuValueEl = document.getElementById("monitor-cpu-value");
     const monitorTempLabelEl = document.getElementById("monitor-temp-label");
     const monitorTempValueEl = document.getElementById("monitor-temp-value");
+    const monitorIpLabelEl = document.getElementById("monitor-ip-label");
+    const monitorIpValueEl = document.getElementById("monitor-ip-value");
     const monitorMemoryTempCardEl = document.getElementById("monitor-memory-temp-card");
     const monitorMemoryTempLabelEl = document.getElementById("monitor-memory-temp-label");
     const monitorMemoryTempValueEl = document.getElementById("monitor-memory-temp-value");
@@ -273,6 +281,7 @@
         powerNoteEl.textContent = text.powerNote;
         powerHelpEl.textContent = text.powerHelp;
         monitorTempLabelEl.textContent = text.monitorTemperature;
+        monitorIpLabelEl.textContent = text.monitorIp;
         monitorMemoryTempLabelEl.textContent = text.monitorMemoryTemperature;
         const footerSloganEl = document.getElementById("footer-slogan");
         if (footerSloganEl) {
@@ -384,6 +393,7 @@
             monitorRamValueEl.textContent = formatPercent(data.ramPercent);
             monitorCpuValueEl.textContent = formatPercent(data.cpuPercent);
             monitorTempValueEl.textContent = formatTemperature(data.temperatureC);
+            monitorIpValueEl.textContent = (typeof data.ipv4 === "string" && data.ipv4) ? data.ipv4 : translations[activeLang].monitorUnavailable;
             if (typeof data.memoryTemperatureC === "number" && Number.isFinite(data.memoryTemperatureC)) {
                 monitorMemoryTempCardEl.hidden = false;
                 monitorMemoryTempValueEl.textContent = formatTemperature(data.memoryTemperatureC);
@@ -396,6 +406,7 @@
             monitorRamValueEl.textContent = fallback;
             monitorCpuValueEl.textContent = fallback;
             monitorTempValueEl.textContent = fallback;
+            monitorIpValueEl.textContent = fallback;
             monitorMemoryTempCardEl.hidden = true;
         }
     }
