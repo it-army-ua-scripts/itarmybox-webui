@@ -66,12 +66,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     <div class="service">
         <div class="service-title"><?= htmlspecialchars(t('current_autostart'), ENT_QUOTES, 'UTF-8') ?></div>
         <div class="status inactive" id="autostart-status"><?= htmlspecialchars(t('checking'), ENT_QUOTES, 'UTF-8') ?></div>
-        <div class="service-title" style="margin-top: 14px;"><?= htmlspecialchars(t('selected_module'), ENT_QUOTES, 'UTF-8') ?></div>
-        <div class="status inactive" id="selected-module-status"><?= htmlspecialchars(t('checking'), ENT_QUOTES, 'UTF-8') ?></div>
     </div>
 
     <div class="service">
-        <div class="service-title" id="common-log-title"><?= htmlspecialchars(t('common_logs'), ENT_QUOTES, 'UTF-8') ?></div>
         <div class="log-box" id="common-log"></div>
         <div class="menu" id="active-module-actions"></div>
     </div>
@@ -84,21 +81,15 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
 <script>
     const serviceState = {};
     const commonLogEl = document.getElementById("common-log");
-    const commonLogTitleEl = document.getElementById("common-log-title");
     const activeModuleActionsEl = document.getElementById("active-module-actions");
     const activeModuleNameEl = document.getElementById("active-module-name");
     const activeModuleStatusEl = document.getElementById("active-module-status");
     const autostartStatusEl = document.getElementById("autostart-status");
-    const selectedModuleStatusEl = document.getElementById("selected-module-status");
     const text = <?= json_encode([
         'activeModule' => t('active_module'),
         'noModuleRunning' => t('no_module_running'),
-        'commonLogsFor' => t('common_logs_for', ['module' => '{{module}}']),
-        'commonLogsNoActive' => t('common_logs_no_active'),
         'autostartFor' => t('autostart_for', ['module' => '{{module}}']),
         'autostartNone' => t('autostart_none'),
-        'selectedModuleFor' => t('selected_module_for', ['module' => '{{module}}']),
-        'selectedModuleNone' => t('selected_module_none'),
         'start' => t('start'),
         'stop' => t('stop')
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
@@ -152,24 +143,17 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
             const selectedModuleName = typeof data.selectedModule === "string" ? data.selectedModule : "";
             if (selectedModuleName) {
                 setStatusBadge(autostartStatusEl, text.autostartFor.replace("{{module}}", selectedModuleName), true);
-                setStatusBadge(selectedModuleStatusEl, text.selectedModuleFor.replace("{{module}}", selectedModuleName), true);
             } else {
                 setStatusBadge(autostartStatusEl, text.autostartNone, false);
-                setStatusBadge(selectedModuleStatusEl, text.selectedModuleNone, false);
             }
 
             if (data.activeModule) {
                 activeModuleNameEl.textContent = text.activeModule;
                 setStatusBadge(activeModuleStatusEl, data.activeModule, true);
-                const src = data.logSource ? String(data.logSource) : "";
-                const path = data.logPath ? String(data.logPath) : "";
-                const suffix = src ? ` [${src}${path ? ": " + path : ""}]` : "";
-                commonLogTitleEl.textContent = text.commonLogsFor.replace("{{module}}", data.activeModule) + suffix;
                 renderActiveModuleActions(String(data.activeModule), "");
             } else {
                 activeModuleNameEl.textContent = text.activeModule;
                 setStatusBadge(activeModuleStatusEl, text.noModuleRunning, false);
-                commonLogTitleEl.textContent = text.commonLogsNoActive;
                 renderActiveModuleActions("", selectedModuleName);
             }
             appendOrReplace(commonLogEl, data.commonLogs || "", "common");
