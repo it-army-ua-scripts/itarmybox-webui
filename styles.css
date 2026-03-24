@@ -88,13 +88,13 @@ h1 {
     margin: 0 auto 18px;
     max-width: 760px;
     text-align: left;
-    padding: 18px 20px;
-    border-radius: 24px;
+    padding: 14px 16px;
+    border-radius: 20px;
     background:
         radial-gradient(circle at top left, rgba(255, 115, 115, 0.16), transparent 34%),
         linear-gradient(180deg, #fff7f4 0%, #f7fbff 100%);
     border: 1px solid rgba(224, 183, 168, 0.5);
-    box-shadow: 0 18px 38px rgba(44, 62, 80, 0.08);
+    box-shadow: 0 14px 28px rgba(44, 62, 80, 0.07);
 }
 
 .power-lever-head {
@@ -102,7 +102,7 @@ h1 {
     justify-content: space-between;
     align-items: flex-end;
     gap: 14px;
-    margin-bottom: 14px;
+    margin-bottom: 10px;
 }
 
 .power-lever-value {
@@ -113,13 +113,13 @@ h1 {
 }
 
 .power-lever-value span:first-child {
-    font-size: 2rem;
+    font-size: 1.7rem;
     font-weight: 800;
     color: #20364a;
 }
 
 .power-lever-value span:last-child {
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 700;
     color: #7b4d3a;
 }
@@ -134,7 +134,7 @@ h1 {
     --power-fill: 100%;
     width: 100%;
     appearance: none;
-    height: 14px;
+    height: 12px;
     border-radius: 999px;
     background: linear-gradient(
         90deg,
@@ -189,26 +189,31 @@ h1 {
 }
 
 .power-scale {
-    margin-top: 10px;
+    margin-top: 8px;
     display: flex;
     justify-content: space-between;
     color: #7d8ea0;
-    font-size: 0.86rem;
+    font-size: 0.8rem;
     font-weight: 700;
 }
 
 .power-help {
     margin-top: 10px;
-    color: #63788d;
-    font-size: 0.92rem;
-    line-height: 1.45;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(217, 196, 182, 0.7);
+    color: #5e7084;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .power-status {
     min-height: 1.2em;
-    margin-top: 10px;
+    margin-top: 8px;
     color: #516579;
-    font-size: 0.92rem;
+    font-size: 0.88rem;
     font-weight: 600;
 }
 
@@ -216,28 +221,28 @@ h1 {
     margin: 6px auto 0;
     max-width: 760px;
     text-align: left;
-    padding: 18px;
-    border-radius: 22px;
+    padding: 14px;
+    border-radius: 18px;
     background:
         radial-gradient(circle at top right, rgba(63, 137, 234, 0.18), transparent 34%),
         linear-gradient(180deg, #f9fbfe 0%, #eef4fa 100%);
     border: 1px solid rgba(170, 188, 208, 0.4);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 16px 36px rgba(44, 62, 80, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 12px 26px rgba(44, 62, 80, 0.07);
 }
 
 .home-monitor-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
+    gap: 10px;
 }
 
 .monitor-card {
     min-width: 0;
-    padding: 14px;
-    border-radius: 18px;
+    padding: 12px;
+    border-radius: 15px;
     background: rgba(255, 255, 255, 0.9);
     border: 1px solid rgba(201, 213, 227, 0.8);
-    box-shadow: 0 10px 24px rgba(44, 62, 80, 0.06);
+    box-shadow: 0 8px 18px rgba(44, 62, 80, 0.05);
 }
 
 .monitor-card-tx {
@@ -246,16 +251,16 @@ h1 {
 }
 
 .monitor-label {
-    font-size: 0.84rem;
+    font-size: 0.76rem;
     font-weight: 700;
     letter-spacing: 0.03em;
     text-transform: uppercase;
     color: #60758c;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .monitor-value {
-    font-size: 1.34rem;
+    font-size: 1.16rem;
     line-height: 1.15;
     font-weight: 700;
     color: #21364a;
@@ -614,13 +619,13 @@ h1 {
     }
 
     .home-monitor {
-        padding: 16px;
-        border-radius: 20px;
+        padding: 12px;
+        border-radius: 16px;
     }
 
     .power-lever {
-        padding: 16px;
-        border-radius: 20px;
+        padding: 12px;
+        border-radius: 16px;
     }
 
     .power-lever-head {
@@ -629,7 +634,7 @@ h1 {
     }
 
     .power-lever-value span:first-child {
-        font-size: 1.7rem;
+        font-size: 1.45rem;
     }
 
     .home-monitor-grid {
