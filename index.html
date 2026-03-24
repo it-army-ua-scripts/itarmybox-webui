@@ -24,10 +24,7 @@
     </div>
     <div class="content">
         <ul class="menu">
-            <li class="main-status-group">
-                <a href="/status.php" id="link-status">Статус</a>
-                <a href="/start.php" id="link-start" class="main-start-link" hidden>Запустити</a>
-            </li>
+            <li><a href="/status.php" id="link-status">Статус</a></li>
             <li><a href="/tools_list.php" id="link-tools">Інструменти</a></li>
             <li><a href="/settings.php" id="link-settings">Налаштування</a></li>
         </ul>
@@ -57,7 +54,6 @@
         en: {
             title: "Main Menu",
             status: "Status",
-            start: "Start",
             tools: "Tools",
             settings: "Settings",
             userIdMissingBadge: "IT Army helper",
@@ -78,7 +74,6 @@
         uk: {
             title: "Головне меню",
             status: "Статус",
-            start: "Запустити",
             tools: "Інструменти",
             settings: "Налаштування",
             userIdMissingBadge: "Підказка IT Army",
@@ -101,7 +96,6 @@
     const langUkBtn = document.getElementById("lang-uk");
     const titleEl = document.getElementById("title");
     const statusEl = document.getElementById("link-status");
-    const startEl = document.getElementById("link-start");
     const toolsEl = document.getElementById("link-tools");
     const settingsEl = document.getElementById("link-settings");
     const userIdModalEl = document.getElementById("user-id-modal");
@@ -147,11 +141,6 @@
         statusEl.href = "/status.php?lang=" + encodeURIComponent(lang);
         toolsEl.href = "/tools_list.php?lang=" + encodeURIComponent(lang);
         settingsEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
-        if (startEl.dataset.daemon) {
-            startEl.href = "/start.php?daemon=" + encodeURIComponent(startEl.dataset.daemon) + "&lang=" + encodeURIComponent(lang);
-        } else {
-            startEl.href = "/start.php?lang=" + encodeURIComponent(lang);
-        }
         const footerUpdateActionEl = document.getElementById("footer-update-action");
         if (footerUpdateActionEl) {
             footerUpdateActionEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
@@ -164,7 +153,6 @@
         const text = translations[activeLang];
         titleEl.textContent = text.title;
         statusEl.textContent = text.status;
-        startEl.textContent = text.start;
         toolsEl.textContent = text.tools;
         settingsEl.textContent = text.settings;
         const footerSloganEl = document.getElementById("footer-slogan");
@@ -268,22 +256,11 @@
             const response = await fetch("/status.php?ajax=1&lang=" + encodeURIComponent(activeLang), { cache: "no-store" });
             const data = await response.json();
             const isActive = !!(data && data.ok === true && data.activeModule);
-            const selectedModule = (data && data.ok === true && typeof data.selectedModule === "string" && data.selectedModule) ? data.selectedModule : "";
             statusEl.classList.toggle("main-status-active", isActive);
             statusEl.classList.toggle("main-status-inactive", !isActive);
-            if (selectedModule) {
-                startEl.dataset.daemon = selectedModule;
-                startEl.hidden = false;
-            } else {
-                delete startEl.dataset.daemon;
-                startEl.hidden = true;
-            }
-            updateLinks(activeLang);
         } catch (e) {
             statusEl.classList.remove("main-status-active");
             statusEl.classList.add("main-status-inactive");
-            delete startEl.dataset.daemon;
-            startEl.hidden = true;
         }
     }
 
