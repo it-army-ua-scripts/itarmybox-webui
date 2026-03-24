@@ -98,13 +98,18 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
 
     function appendOrReplace(el, newText, key) {
         const oldText = serviceState[key] || "";
+        const shouldStickToBottom =
+            oldText === "" ||
+            Math.abs(el.scrollHeight - el.clientHeight - el.scrollTop) < 24;
         if (newText.startsWith(oldText)) {
             el.textContent += newText.slice(oldText.length);
         } else {
             el.textContent = newText;
         }
         serviceState[key] = newText;
-        el.scrollTop = el.scrollHeight;
+        if (shouldStickToBottom) {
+            el.scrollTop = el.scrollHeight;
+        }
     }
 
     function actionUrl(path, module) {
