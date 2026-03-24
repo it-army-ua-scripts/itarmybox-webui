@@ -1,5 +1,5 @@
 ﻿<!DOCTYPE html>
-<html lang="en">
+<html lang="uk">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -20,28 +20,32 @@
             <img src="/image/logo.png" alt="logo" class="header-logo">
             <img src="/image/artline_logo.png" alt="artline-logo" class="header-logo header-logo-artline">
         </div>
-        <h1 id="title">Main Menu</h1>
+        <h1 id="title">Головне меню</h1>
     </div>
     <div class="content">
         <ul class="menu">
-            <li><a href="/status.php" id="link-status">Status</a></li>
-            <li><a href="/tools_list.php" id="link-tools">Tools</a></li>
-            <li><a href="/settings.php" id="link-settings">Settings</a></li>
+            <li><a href="/status.php" id="link-status">Статус</a></li>
+            <li><a href="/tools_list.php" id="link-tools">Інструменти</a></li>
+            <li><a href="/settings.php" id="link-settings">Налаштування</a></li>
         </ul>
     </div>
 </div>
 <div class="modal-backdrop" id="user-id-modal" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="user-id-modal-title" aria-describedby="user-id-modal-text">
-        <div class="modal-badge" id="user-id-modal-badge">IT Army</div>
-        <h2 id="user-id-modal-title">User ID</h2>
+        <div class="modal-badge" id="user-id-modal-badge">Підказка IT Army</div>
+        <h2 id="user-id-modal-title">Потрібен User ID</h2>
         <p id="user-id-modal-text"></p>
         <div class="copy-bot-row">
             <button type="button" class="copy-bot-btn" id="copy-bot-name" aria-describedby="copy-bot-hint" aria-label="Copy bot name">@itarmy_stats_bot</button>
             <span class="copy-bot-hint" id="copy-bot-hint"></span>
         </div>
+        <label class="modal-checkbox-row" for="user-id-modal-skip">
+            <input type="checkbox" id="user-id-modal-skip">
+            <span id="user-id-modal-skip-label">Не показувати в наступний раз</span>
+        </label>
         <div class="modal-actions">
             <button type="button" class="modal-btn modal-btn-secondary" id="user-id-modal-close">OK</button>
-            <a class="modal-btn modal-btn-primary" id="user-id-modal-link" href="/user_id.php">Settings</a>
+            <a class="modal-btn modal-btn-primary" id="user-id-modal-link" href="/user_id.php">Відкрити налаштування</a>
         </div>
     </div>
 </div>
@@ -59,6 +63,7 @@
             closeModal: "OK",
             copyBotHint: "Tap the bot name to copy",
             copiedBotHint: "Copied",
+            skipUserIdModal: "Do not show next time",
             versionLabel: "Version",
             githubLabel: "GitHub",
             updateAvailable: "Update available",
@@ -78,6 +83,7 @@
             closeModal: "OK",
             copyBotHint: "Натисніть на назву бота, щоб скопіювати",
             copiedBotHint: "Скопійовано",
+            skipUserIdModal: "Не показувати в наступний раз",
             versionLabel: "Версія",
             githubLabel: "GitHub",
             updateAvailable: "Доступне оновлення",
@@ -100,13 +106,35 @@
     const userIdModalLinkEl = document.getElementById("user-id-modal-link");
     const copyBotNameEl = document.getElementById("copy-bot-name");
     const copyBotHintEl = document.getElementById("copy-bot-hint");
-    let activeLang = "en";
+    const userIdModalSkipEl = document.getElementById("user-id-modal-skip");
+    const userIdModalSkipLabelEl = document.getElementById("user-id-modal-skip-label");
+    let activeLang = "uk";
     let versionInfo = { current: "...", github: "..." };
     let copyBotHintTimer = null;
+    const userIdModalPreferenceKey = "itarmybox-hide-userid-modal";
 
     function getCookie(name) {
         const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
         return parts ? decodeURIComponent(parts.split("=")[1]) : null;
+    }
+
+    function getUserIdModalHiddenPreference() {
+        try {
+            return window.localStorage.getItem(userIdModalPreferenceKey) === "1";
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function setUserIdModalHiddenPreference(hidden) {
+        try {
+            if (hidden) {
+                window.localStorage.setItem(userIdModalPreferenceKey, "1");
+            } else {
+                window.localStorage.removeItem(userIdModalPreferenceKey);
+            }
+        } catch (e) {
+        }
     }
 
     function updateLinks(lang) {
@@ -158,6 +186,7 @@
         userIdModalCloseEl.textContent = text.closeModal;
         userIdModalLinkEl.textContent = text.openUserIdSettings;
         copyBotHintEl.textContent = text.copyBotHint;
+        userIdModalSkipLabelEl.textContent = text.skipUserIdModal;
         langEnBtn.classList.toggle("active", activeLang === "en");
         langUkBtn.classList.toggle("active", activeLang === "uk");
         updateLinks(activeLang);
@@ -194,12 +223,14 @@
     }
 
     function showUserIdModal() {
+        userIdModalSkipEl.checked = getUserIdModalHiddenPreference();
         userIdModalEl.hidden = false;
         document.body.classList.add("modal-open");
         userIdModalCloseEl.focus();
     }
 
     function hideUserIdModal() {
+        setUserIdModalHiddenPreference(userIdModalSkipEl.checked);
         userIdModalEl.hidden = true;
         document.body.classList.remove("modal-open");
     }
@@ -235,8 +266,10 @@
         try {
             const response = await fetch("/user_id.php?ajax=status", { cache: "no-store" });
             const data = await response.json();
-            if (data && data.ok === true && data.userIdConfigured === false) {
+            if (data && data.ok === true && data.userIdConfigured === false && !getUserIdModalHiddenPreference()) {
                 showUserIdModal();
+            } else if (data && data.ok === true && data.userIdConfigured === true) {
+                setUserIdModalHiddenPreference(false);
             }
         } catch (e) {
         }
@@ -248,7 +281,7 @@
     }
 
     const params = new URLSearchParams(window.location.search);
-    const initialLang = params.get("lang") || getCookie("lang") || "en";
+    const initialLang = params.get("lang") || getCookie("lang") || "uk";
     applyLang(initialLang);
     fetchVersionInfo();
     refreshMainStatusIndicator();
@@ -279,9 +312,9 @@
     });
 </script>
 <footer class="app-footer">
-    <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Together to freedom</span>.</div>
-    <div class="footer-version"><span id="footer-version-current-label">Version</span>: <span id="footer-version-current">...</span> | <span id="footer-version-github-label">GitHub</span>: <span id="footer-version-github">...</span></div>
-    <div class="footer-update-row"><span id="footer-update-state" class="footer-update-state up-to-date">Up to date</span> <a id="footer-update-action" class="footer-update-action" href="/settings.php">Update</a></div>
+    <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Разом до свободи</span>.</div>
+    <div class="footer-version"><span id="footer-version-current-label">Версія</span>: <span id="footer-version-current">...</span> | <span id="footer-version-github-label">GitHub</span>: <span id="footer-version-github">...</span></div>
+    <div class="footer-update-row"><span id="footer-update-state" class="footer-update-state up-to-date">Актуальна</span> <a id="footer-update-action" class="footer-update-action" href="/settings.php">Оновити</a></div>
 </footer>
 <script>
     document.getElementById("copyright-year").textContent = String(new Date().getFullYear());

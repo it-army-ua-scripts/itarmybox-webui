@@ -309,23 +309,40 @@ h1 {
 }
 
 .branch-switch-actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 12px;
-    margin-top: 16px;
+    margin-top: 18px;
 }
 
 .branch-switch-actions .submit-btn {
     margin: 0;
+    min-height: 54px;
+    border-radius: 14px;
+    border: 1px solid #d7e2ec;
+    background: linear-gradient(180deg, #f8fbfd 0%, #edf3f8 100%);
+    color: #24384c;
+    font-weight: 700;
+    box-shadow: 0 10px 22px rgba(44, 62, 80, 0.08);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.branch-switch-actions .submit-btn:hover {
+    background: linear-gradient(180deg, #ffffff 0%, #eef4fb 100%);
+    color: #1f3347;
+    transform: translateY(-1px);
+    box-shadow: 0 14px 28px rgba(44, 62, 80, 0.12);
 }
 
 .active-branch-btn {
-    background: #1f6fd1;
-    box-shadow: 0 0 0 2px rgba(31, 111, 209, 0.18);
+    border-color: #2f74d8 !important;
+    background: linear-gradient(180deg, #3f89ea 0%, #2f74d8 100%) !important;
+    color: #fff !important;
+    box-shadow: 0 0 0 2px rgba(31, 111, 209, 0.14), 0 16px 30px rgba(47, 116, 216, 0.24) !important;
 }
 
 .active-branch-btn:hover {
-    background: #195fb3;
+    background: linear-gradient(180deg, #357dde 0%, #2766c1 100%) !important;
 }
 
 .lang-switcher {
@@ -588,6 +605,26 @@ h1 {
     color: #5b6d80;
     font-size: 0.96rem;
     font-weight: 500;
+}
+
+.modal-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 18px;
+    color: #44576b;
+    font-size: 0.98rem;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+}
+
+.modal-checkbox-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #2f74d8;
+    cursor: pointer;
+    flex: 0 0 auto;
 }
 
 .modal-actions {

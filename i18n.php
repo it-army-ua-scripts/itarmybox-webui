@@ -8,9 +8,9 @@ function app_lang(): string
     }
 
     $allowed = ['en', 'uk'];
-    $requested = $_GET['lang'] ?? ($_COOKIE['lang'] ?? 'en');
+    $requested = $_GET['lang'] ?? ($_COOKIE['lang'] ?? 'uk');
     if (!in_array($requested, $allowed, true)) {
-        $requested = 'en';
+        $requested = 'uk';
     }
 
     if (!isset($_COOKIE['lang']) || $_COOKIE['lang'] !== $requested) {
