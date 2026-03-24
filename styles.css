@@ -55,6 +55,10 @@ body.modal-open {
     backdrop-filter: blur(4px);
 }
 
+.app-header-bar.is-empty .header-stat-pill {
+    display: none;
+}
+
 .home-container .content {
     display: flex;
     flex-direction: column;

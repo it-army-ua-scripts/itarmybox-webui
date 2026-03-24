@@ -9,6 +9,7 @@
     const statusEl = document.getElementById("link-status");
     const toolsEl = document.getElementById("link-tools");
     const settingsEl = document.getElementById("link-settings");
+    const headerBarEl = document.getElementById("app-header-bar");
     const todayTxLabelEl = document.getElementById("today-tx-label");
     const todayTxValueEl = document.getElementById("today-tx-value");
     const powerPercentEl = document.getElementById("power-percent");
@@ -46,6 +47,7 @@
     let copyBotHintTimer = null;
     let powerApplyTimer = null;
     let powerPendingPercent = null;
+    let headerHasData = false;
 
     function getText() {
         return translations[activeLang] || translations.uk || translations.en || {};
@@ -114,7 +116,9 @@
         statusEl.textContent = text.status;
         toolsEl.textContent = text.tools;
         settingsEl.textContent = text.settings;
-        todayTxLabelEl.textContent = text.todayTxLabel;
+        if (headerHasData) {
+            todayTxLabelEl.textContent = text.todayTxLabel;
+        }
         powerNoteEl.textContent = text.powerNote;
         powerHelpEl.textContent = text.powerHelp;
         monitorTempLabelEl.textContent = text.monitorTemperature;
@@ -273,6 +277,21 @@
         return converted.toFixed(digits) + " " + decimalUnit;
     }
 
+    function setHeaderStat(rawValue) {
+        const text = getText();
+        const hasData = typeof rawValue === "string" && rawValue.trim() !== "";
+        headerHasData = hasData;
+        if (!hasData) {
+            todayTxLabelEl.textContent = "";
+            todayTxValueEl.textContent = "";
+            shared.setBooleanClass(headerBarEl, "is-empty", true);
+            return;
+        }
+        todayTxLabelEl.textContent = text.todayTxLabel;
+        todayTxValueEl.textContent = formatVnstatAmount(rawValue);
+        shared.setBooleanClass(headerBarEl, "is-empty", false);
+    }
+
     async function refreshSystemMonitor() {
         try {
             const data = await shared.fetchJson(config.systemMonitorUrl || "/system_monitor.php", { cache: "no-store" });
@@ -282,7 +301,7 @@
             const iface = typeof data.iface === "string" && data.iface ? data.iface : "eth0";
             monitorTxLabelEl.textContent = "TX " + iface;
             monitorTxValueEl.textContent = typeof data.txRate === "string" && data.txRate ? data.txRate : getText().monitorUnavailable;
-            todayTxValueEl.textContent = formatVnstatAmount(data.todayTx);
+            setHeaderStat(data.todayTx);
             monitorRamValueEl.textContent = formatPercent(data.ramPercent);
             monitorCpuValueEl.textContent = formatPercent(data.cpuPercent);
             monitorTempValueEl.textContent = formatTemperature(data.temperatureC);
@@ -296,7 +315,7 @@
             }
         } catch (e) {
             const fallback = getText().monitorUnavailable;
-            todayTxValueEl.textContent = fallback;
+            setHeaderStat("");
             monitorTxValueEl.textContent = fallback;
             monitorRamValueEl.textContent = fallback;
             monitorCpuValueEl.textContent = fallback;
