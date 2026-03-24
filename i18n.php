@@ -14,7 +14,11 @@ function app_lang(): string
     }
 
     if (!isset($_COOKIE['lang']) || $_COOKIE['lang'] !== $requested) {
-        setcookie('lang', $requested, time() + 31536000, '/');
+        setcookie('lang', $requested, [
+            'expires' => time() + 31536000,
+            'path' => '/',
+            'samesite' => 'Lax',
+        ]);
     }
 
     $lang = $requested;

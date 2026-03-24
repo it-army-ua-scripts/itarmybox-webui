@@ -184,12 +184,29 @@
     let versionInfo = { current: "...", github: "..." };
     let copyBotHintTimer = null;
     const userIdModalPreferenceKey = "itarmybox-hide-userid-modal";
+    const appLangStorageKey = "itarmybox-lang";
     let powerApplyTimer = null;
     let powerPendingPercent = null;
 
     function getCookie(name) {
         const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
         return parts ? decodeURIComponent(parts.split("=")[1]) : null;
+    }
+
+    function getStoredLang() {
+        try {
+            const stored = window.localStorage.getItem(appLangStorageKey);
+            return (stored === "uk" || stored === "en") ? stored : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function setStoredLang(lang) {
+        try {
+            window.localStorage.setItem(appLangStorageKey, lang);
+        } catch (e) {
+        }
     }
 
     function getUserIdModalHiddenPreference() {
@@ -247,6 +264,7 @@
 
     function applyLang(lang) {
         activeLang = (lang === "uk" || lang === "en") ? lang : "en";
+        document.documentElement.lang = activeLang;
         const text = translations[activeLang];
         titleEl.textContent = text.title;
         statusEl.textContent = text.status;
@@ -291,6 +309,15 @@
         langEnBtn.classList.toggle("active", activeLang === "en");
         langUkBtn.classList.toggle("active", activeLang === "uk");
         updateLinks(activeLang);
+    }
+
+    function syncLangUrl(lang) {
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set("lang", lang);
+            window.history.replaceState({}, "", url.toString());
+        } catch (e) {
+        }
     }
 
     async function refreshTrafficLimit() {
@@ -460,11 +487,15 @@
 
     function setLang(lang) {
         document.cookie = "lang=" + encodeURIComponent(lang) + "; path=/; max-age=31536000";
+        setStoredLang(lang);
+        syncLangUrl(lang);
         applyLang(lang);
     }
 
     const params = new URLSearchParams(window.location.search);
-    const initialLang = params.get("lang") || getCookie("lang") || "uk";
+    const initialLang = params.get("lang") || getCookie("lang") || getStoredLang() || "uk";
+    setStoredLang(initialLang);
+    syncLangUrl(initialLang);
     applyLang(initialLang);
     fetchVersionInfo();
     refreshMainStatusIndicator();
