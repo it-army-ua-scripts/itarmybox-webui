@@ -80,12 +80,28 @@ function read_memory_temperature_celsius(): ?float
 {
     $paths = glob('/sys/class/hwmon/hwmon*/temp*_input');
     if (!is_array($paths)) {
-        return null;
+        $paths = [];
     }
+
     foreach ($paths as $inputPath) {
+        $hwmonDir = dirname($inputPath);
         $labelPath = preg_replace('/_input$/', '_label', $inputPath);
+        $typePath = preg_replace('/_input$/', '_type', $inputPath);
+        $namePath = $hwmonDir . '/name';
         $label = is_string($labelPath) ? strtolower(trim((string)@file_get_contents($labelPath))) : '';
-        if ($label === '' || (strpos($label, 'mem') === false && strpos($label, 'ddr') === false && strpos($label, 'ram') === false)) {
+        $type = is_string($typePath) ? strtolower(trim((string)@file_get_contents($typePath))) : '';
+        $name = strtolower(trim((string)@file_get_contents($namePath)));
+        $sensorMeta = $label . ' ' . $type . ' ' . $name;
+        if (
+            $sensorMeta === '' ||
+            (
+                strpos($sensorMeta, 'mem') === false &&
+                strpos($sensorMeta, 'ddr') === false &&
+                strpos($sensorMeta, 'ram') === false &&
+                strpos($sensorMeta, 'dram') === false &&
+                strpos($sensorMeta, 'memory') === false
+            )
+        ) {
             continue;
         }
         $raw = trim((string)@file_get_contents($inputPath));
@@ -100,6 +116,39 @@ function read_memory_temperature_celsius(): ?float
             return (float)$value;
         }
     }
+
+    $zonePaths = glob('/sys/class/thermal/thermal_zone*/temp');
+    if (!is_array($zonePaths)) {
+        return null;
+    }
+    foreach ($zonePaths as $tempPath) {
+        $zoneDir = dirname($tempPath);
+        $type = strtolower(trim((string)@file_get_contents($zoneDir . '/type')));
+        if (
+            $type === '' ||
+            (
+                strpos($type, 'mem') === false &&
+                strpos($type, 'ddr') === false &&
+                strpos($type, 'ram') === false &&
+                strpos($type, 'dram') === false &&
+                strpos($type, 'memory') === false
+            )
+        ) {
+            continue;
+        }
+        $raw = trim((string)@file_get_contents($tempPath));
+        if ($raw === '' || !preg_match('/^-?\d+$/', $raw)) {
+            continue;
+        }
+        $value = (int)$raw;
+        if ($value > 1000) {
+            return $value / 1000;
+        }
+        if ($value > 0) {
+            return (float)$value;
+        }
+    }
+
     return null;
 }
 
