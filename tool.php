@@ -8,7 +8,7 @@ $config = require 'config/config.php';
 $daemonName = $_GET['daemon'] ?? '';
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= htmlspecialchars(app_lang(), ENT_QUOTES, 'UTF-8') ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -27,6 +27,9 @@ $daemonName = $_GET['daemon'] ?? '';
                 $saveOk = false;
                 $saveError = '';
                 $restartError = '';
+                $feedbackClass = '';
+                $feedbackText = '';
+                $feedbackSecondary = '';
                 if ($daemonName === 'x100') {
                     $saveOk = setX100ConfigValues($_POST);
                 } else {
@@ -72,16 +75,27 @@ $daemonName = $_GET['daemon'] ?? '';
                     }
                 }
                 if ($saveOk) {
-                    echo "<span style='color: green;'>" . htmlspecialchars(t('service_updated'), ENT_QUOTES, 'UTF-8') . "</span>";
+                    $feedbackClass = 'status active';
+                    $feedbackText = t('service_updated');
                     if ($restartError !== '') {
-                        echo "<br><span style='color: red;'>" . htmlspecialchars(t($restartError), ENT_QUOTES, 'UTF-8') . "</span>";
+                        $feedbackSecondary = t($restartError);
                     }
                 } else {
                     if ($saveError !== '') {
-                        echo "<span style='color: red;'>" . htmlspecialchars(t($saveError), ENT_QUOTES, 'UTF-8') . "</span>";
+                        $feedbackClass = 'status inactive';
+                        $feedbackText = t($saveError);
                     } else {
-                        echo "<span style='color: red;'>" . htmlspecialchars(t('error'), ENT_QUOTES, 'UTF-8') . ": " . htmlspecialchars(t('settings_not_saved'), ENT_QUOTES, 'UTF-8') . "</span>";
+                        $feedbackClass = 'status inactive';
+                        $feedbackText = t('error') . ': ' . t('settings_not_saved');
                     }
+                }
+                if ($feedbackText !== '') {
+                    echo '<div class="form-message ' . htmlspecialchars($feedbackClass, ENT_QUOTES, 'UTF-8') . '">'
+                        . htmlspecialchars($feedbackText, ENT_QUOTES, 'UTF-8')
+                        . '</div>';
+                }
+                if ($feedbackSecondary !== '') {
+                    echo '<div class="form-message status inactive">' . htmlspecialchars($feedbackSecondary, ENT_QUOTES, 'UTF-8') . '</div>';
                 }
             }
 
@@ -132,5 +146,6 @@ $daemonName = $_GET['daemon'] ?? '';
     </div>
 </div>
 <?= render_app_footer() ?>
+<script src="/js/form_messages.js"></script>
 </body>
 </html>

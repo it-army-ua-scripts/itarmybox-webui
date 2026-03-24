@@ -13,10 +13,16 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         'modules' => $daemonNames,
         'lines' => 80,
     ]);
+    $autostartResponse = root_helper_request([
+        'action' => 'autostart_get',
+        'modules' => $daemonNames,
+    ]);
     $activeModule = ($response['ok'] ?? false) ? ($response['activeModule'] ?? null) : null;
     $commonLogs = ($response['ok'] ?? false) ? (string)($response['commonLogs'] ?? '') : '';
-    $logSource = ($response['ok'] ?? false) ? ($response['logSource'] ?? null) : null;
-    $logPath = ($response['ok'] ?? false) ? ($response['logPath'] ?? null) : null;
+    $selectedModule = (($autostartResponse['ok'] ?? false) === true) ? ($autostartResponse['active'] ?? null) : null;
+    if (!is_string($selectedModule) || !in_array($selectedModule, $daemonNames, true)) {
+        $selectedModule = null;
+    }
 
     if (trim($commonLogs) === '') {
         $commonLogs = (string)shell_exec("tail -n80 /var/log/adss.log 2>/dev/null");
@@ -26,9 +32,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         [
             'ok' => true,
             'activeModule' => $activeModule,
+            'selectedModule' => $selectedModule,
             'commonLogs' => $commonLogs,
-            'logSource' => $logSource,
-            'logPath' => $logPath,
         ],
         JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
     );
@@ -36,7 +41,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= htmlspecialchars(app_lang(), ENT_QUOTES, 'UTF-8') ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -48,6 +53,17 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
 <body class="padded status-page">
 <div class="container status-container">
     <h1><?= htmlspecialchars(t('tools_status'), ENT_QUOTES, 'UTF-8') ?></h1>
+    <?php
+    $messageKey = $_GET['msg'] ?? '';
+    $messageOk = ($_GET['ok'] ?? '') === '1';
+    $allowedMessages = ['start_requested', 'start_failed', 'stop_requested', 'stop_failed'];
+    if (is_string($messageKey) && in_array($messageKey, $allowedMessages, true)) {
+        $messageClass = $messageOk ? 'status active' : 'status inactive';
+        echo '<div class="form-message ' . htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') . '">'
+            . htmlspecialchars(t($messageKey), ENT_QUOTES, 'UTF-8')
+            . '</div>';
+    }
+    ?>
 
     <div class="service">
         <div class="service-title" id="active-module-name"><?= htmlspecialchars(t('active_module'), ENT_QUOTES, 'UTF-8') ?></div>
@@ -55,7 +71,11 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     </div>
 
     <div class="service">
-        <div class="service-title" id="common-log-title"><?= htmlspecialchars(t('common_logs'), ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="service-title"><?= htmlspecialchars(t('current_autostart'), ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="status inactive" id="autostart-status"><?= htmlspecialchars(t('checking'), ENT_QUOTES, 'UTF-8') ?></div>
+    </div>
+
+    <div class="service">
         <div class="log-box" id="common-log"></div>
         <div class="menu" id="active-module-actions"></div>
     </div>
@@ -64,84 +84,21 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         <a href="<?= htmlspecialchars(url_with_lang('/'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('back'), ENT_QUOTES, 'UTF-8') ?></a>
     </div>
 </div>
-
-<script>
-    const serviceState = {};
-    const commonLogEl = document.getElementById("common-log");
-    const commonLogTitleEl = document.getElementById("common-log-title");
-    const activeModuleActionsEl = document.getElementById("active-module-actions");
-    const activeModuleNameEl = document.getElementById("active-module-name");
-    const activeModuleStatusEl = document.getElementById("active-module-status");
-    const text = <?= json_encode([
+<script id="status-config" type="application/json"><?= json_encode([
+    'text' => [
         'activeModule' => t('active_module'),
         'noModuleRunning' => t('no_module_running'),
-        'commonLogsFor' => t('common_logs_for', ['module' => '{{module}}']),
-        'commonLogsNoActive' => t('common_logs_no_active'),
-        'stop' => t('stop')
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-    const lang = <?= json_encode(app_lang(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-    const ajaxUrl = <?= json_encode(url_with_lang('/status.php?ajax=1'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-
-    function appendOrReplace(el, newText, key) {
-        const oldText = serviceState[key] || "";
-        if (newText.startsWith(oldText)) {
-            el.textContent += newText.slice(oldText.length);
-        } else {
-            el.textContent = newText;
-        }
-        serviceState[key] = newText;
-        el.scrollTop = el.scrollHeight;
-    }
-
-    function actionUrl(path, module) {
-        return path + "?daemon=" + encodeURIComponent(module) + "&lang=" + encodeURIComponent(lang);
-    }
-
-    function renderActiveModuleActions(moduleName) {
-        activeModuleActionsEl.innerHTML = "";
-        if (!moduleName) {
-            return;
-        }
-        const stopLink = document.createElement("a");
-        stopLink.href = actionUrl("/stop.php", moduleName);
-        stopLink.textContent = text.stop;
-        activeModuleActionsEl.appendChild(stopLink);
-    }
-
-    async function updateStatus() {
-        try {
-            const response = await fetch(ajaxUrl, { cache: "no-store" });
-            const data = await response.json();
-            if (!data || !data.ok) {
-                return;
-            }
-
-            if (data.activeModule) {
-                activeModuleNameEl.textContent = text.activeModule;
-                activeModuleStatusEl.textContent = data.activeModule;
-                activeModuleStatusEl.classList.add("active");
-                activeModuleStatusEl.classList.remove("inactive");
-                const src = data.logSource ? String(data.logSource) : "";
-                const path = data.logPath ? String(data.logPath) : "";
-                const suffix = src ? ` [${src}${path ? ": " + path : ""}]` : "";
-                commonLogTitleEl.textContent = text.commonLogsFor.replace("{{module}}", data.activeModule) + suffix;
-                renderActiveModuleActions(String(data.activeModule));
-            } else {
-                activeModuleNameEl.textContent = text.activeModule;
-                activeModuleStatusEl.textContent = text.noModuleRunning;
-                activeModuleStatusEl.classList.add("inactive");
-                activeModuleStatusEl.classList.remove("active");
-                commonLogTitleEl.textContent = text.commonLogsNoActive;
-                renderActiveModuleActions("");
-            }
-            appendOrReplace(commonLogEl, data.commonLogs || "", "common");
-        } catch (e) {
-        }
-    }
-
-    updateStatus();
-    setInterval(updateStatus, 2000);
-</script>
+        'autostartFor' => t('autostart_for', ['module' => '{{module}}']),
+        'autostartNone' => t('autostart_none'),
+        'start' => t('start'),
+        'stop' => t('stop'),
+    ],
+    'lang' => app_lang(),
+    'ajaxUrl' => url_with_lang('/status.php?ajax=1'),
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
+<script src="/js/app_shared.js"></script>
+<script src="/js/status.js"></script>
+<script src="/js/form_messages.js"></script>
 <?= render_app_footer() ?>
 </body>
 </html>

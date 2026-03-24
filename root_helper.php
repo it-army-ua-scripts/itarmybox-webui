@@ -6,6 +6,7 @@ const SCHEDULE_BEGIN_MARKER = '# ITARMYBOX-SCHEDULE-BEGIN';
 const SCHEDULE_END_MARKER = '# ITARMYBOX-SCHEDULE-END';
 const MAX_SCHEDULE_ENTRIES = 2;
 const SCHEDULE_MANUAL_OVERRIDE_FILE = '/tmp/itarmybox-schedule-manual-override';
+const TRAFFIC_LIMIT_STATE_FILE = '/tmp/itarmybox-traffic-limit.json';
 
 function respond(array $data): void
 {
@@ -25,6 +26,297 @@ function runCommand(string $command, ?int &$exitCode = null): string
     exec($command . ' 2>/dev/null', $output, $code);
     $exitCode = $code;
     return implode("\n", $output);
+}
+
+function findTcBinary(): ?string
+{
+    foreach (['/usr/sbin/tc', '/sbin/tc'] as $path) {
+        if (is_executable($path)) {
+            return $path;
+        }
+    }
+    return null;
+}
+
+function findExecutable(array $paths): ?string
+{
+    foreach ($paths as $path) {
+        if (is_string($path) && $path !== '' && is_executable($path)) {
+            return $path;
+        }
+    }
+    return null;
+}
+
+function findAptGet(): ?string
+{
+    return findExecutable(['/usr/bin/apt-get', '/bin/apt-get', '/usr/bin/apt', '/bin/apt']);
+}
+
+function isVnstatInstalled(): bool
+{
+    return is_executable('/usr/bin/vnstat') || is_executable('/bin/vnstat');
+}
+
+function installVnstat(): array
+{
+    if (isVnstatInstalled()) {
+        return ['ok' => true, 'installed' => true, 'already' => true];
+    }
+
+    $apt = findAptGet();
+    if ($apt === null) {
+        return ['ok' => false, 'error' => 'apt_not_found'];
+    }
+
+    $cmd = 'DEBIAN_FRONTEND=noninteractive ' . escapeshellarg($apt) . ' install -y vnstat';
+    $output = runCommand($cmd, $code);
+    if ($code !== 0) {
+        return ['ok' => false, 'error' => 'vnstat_install_failed', 'output' => $output];
+    }
+
+    return ['ok' => true, 'installed' => isVnstatInstalled()];
+}
+
+function parseBoolString(string $value): ?bool
+{
+    $normalized = strtolower(trim($value));
+    return match ($normalized) {
+        'yes', 'true', '1' => true,
+        'no', 'false', '0' => false,
+        default => null,
+    };
+}
+
+function findTimedatectl(): ?string
+{
+    return findExecutable(['/usr/bin/timedatectl', '/bin/timedatectl']);
+}
+
+function findSystemctl(): ?string
+{
+    return findExecutable(['/usr/bin/systemctl', '/bin/systemctl']);
+}
+
+function getTimeSyncStatus(): array
+{
+    $timedatectl = findTimedatectl();
+    $systemctl = findSystemctl();
+    if ($timedatectl === null) {
+        return ['ok' => false, 'error' => 'timedatectl_not_found'];
+    }
+
+    $output = runCommand(escapeshellarg($timedatectl) . ' show --property=Timezone --property=NTP --property=NTPSynchronized --property=NTPService --value', $code);
+    if ($code !== 0) {
+        return ['ok' => false, 'error' => 'timedatectl_show_failed'];
+    }
+
+    $lines = preg_split('/\r\n|\r|\n/', trim($output));
+    $timezone = trim((string)($lines[0] ?? ''));
+    $ntpEnabled = parseBoolString((string)($lines[1] ?? ''));
+    $ntpSynced = parseBoolString((string)($lines[2] ?? ''));
+    $ntpService = trim((string)($lines[3] ?? ''));
+    if ($ntpService === '' && $systemctl !== null) {
+        $services = ['systemd-timesyncd', 'chronyd', 'ntp', 'ntpd'];
+        foreach ($services as $service) {
+            $serviceSafe = escapeshellarg($service . '.service');
+            $state = trim(runCommand(escapeshellarg($systemctl) . " is-active $serviceSafe", $svcCode));
+            if ($svcCode === 0 && $state !== '') {
+                $ntpService = $service;
+                break;
+            }
+        }
+    }
+
+    return [
+        'ok' => true,
+        'timezone' => $timezone,
+        'ntpEnabled' => $ntpEnabled,
+        'ntpSynchronized' => $ntpSynced,
+        'ntpService' => $ntpService !== '' ? $ntpService : null,
+        'timezoneOk' => $timezone === 'Europe/Kyiv',
+        'ntpOk' => $ntpEnabled === true,
+    ];
+}
+
+function ensureTimeSync(): array
+{
+    return ensureTimeSyncForTimezone('Europe/Kyiv');
+}
+
+function ensureTimeSyncForTimezone(string $timezone): array
+{
+    if (preg_match('/^[A-Za-z0-9._+-]+(?:\/[A-Za-z0-9._+\-]+)+$/', $timezone) !== 1) {
+        return ['ok' => false, 'error' => 'invalid_timezone'];
+    }
+
+    $timedatectl = findTimedatectl();
+    $systemctl = findSystemctl();
+    if ($timedatectl === null) {
+        return ['ok' => false, 'error' => 'timedatectl_not_found'];
+    }
+
+    $timesyncd = findExecutable(['/lib/systemd/systemd-timesyncd', '/usr/lib/systemd/systemd-timesyncd']);
+    if ($timesyncd !== null && $systemctl !== null) {
+        runCommand(escapeshellarg($systemctl) . ' enable systemd-timesyncd.service', $enableCode);
+        runCommand(escapeshellarg($systemctl) . ' start systemd-timesyncd.service', $startCode);
+    }
+
+    runCommand(escapeshellarg($timedatectl) . ' set-timezone ' . escapeshellarg($timezone), $timezoneCode);
+    if ($timezoneCode !== 0) {
+        return ['ok' => false, 'error' => 'set_timezone_failed'];
+    }
+
+    runCommand(escapeshellarg($timedatectl) . ' set-ntp true', $ntpCode);
+    if ($ntpCode !== 0) {
+        return ['ok' => false, 'error' => 'set_ntp_failed'];
+    }
+
+    if ($timesyncd !== null && $systemctl !== null) {
+        runCommand(escapeshellarg($systemctl) . ' restart systemd-timesyncd.service', $restartCode);
+    }
+
+    $status = getTimeSyncStatus();
+    if (($status['ok'] ?? false) !== true) {
+        return $status;
+    }
+
+    if (($status['timezone'] ?? '') !== $timezone || ($status['ntpOk'] ?? false) !== true) {
+        return ['ok' => false, 'error' => 'time_sync_verification_failed'] + $status;
+    }
+
+    return $status;
+}
+
+function appendRebootLog(string $message): void
+{
+    $line = '[' . date('c') . '] ' . $message . "\n";
+    @file_put_contents('/tmp/itarmybox-reboot.log', $line, FILE_APPEND);
+}
+
+function trafficLimitPercentToMbit(int $percent): int
+{
+    $percent = max(25, min(100, $percent));
+    if ($percent <= 80) {
+        return (int)round(20 + (($percent - 25) * (300 - 20) / (80 - 25)));
+    }
+    return (int)round(300 + (($percent - 80) * (750 - 300) / (100 - 80)));
+}
+
+function trafficLimitStateDefault(): array
+{
+    return [
+        'ok' => true,
+        'iface' => 'eth0',
+        'percent' => trafficLimitMbitToPercent(50),
+        'mbit' => 50,
+    ];
+}
+
+function trafficLimitMbitToPercent(int $mbit): int
+{
+    $mbit = max(20, min(750, $mbit));
+    if ($mbit <= 300) {
+        return (int)round(25 + (($mbit - 20) * (80 - 25) / (300 - 20)));
+    }
+    return (int)round(80 + (($mbit - 300) * (100 - 80) / (750 - 300)));
+}
+
+function readTrafficLimitFromTc(): ?array
+{
+    $tc = findTcBinary();
+    if ($tc === null) {
+        return null;
+    }
+    $iface = 'eth0';
+    $output = runCommand(escapeshellarg($tc) . ' qdisc show dev ' . escapeshellarg($iface), $code);
+    if ($code !== 0 || trim($output) === '') {
+        return null;
+    }
+
+    if (preg_match('/\brate\s+(\d+)([kmg])bit\b/i', $output, $matches) !== 1) {
+        return null;
+    }
+
+    $value = (int)$matches[1];
+    $unit = strtolower($matches[2]);
+    $mbit = match ($unit) {
+        'g' => $value * 1000,
+        'm' => $value,
+        'k' => max(1, (int)round($value / 1000)),
+        default => $value,
+    };
+
+    return [
+        'ok' => true,
+        'iface' => $iface,
+        'percent' => trafficLimitMbitToPercent($mbit),
+        'mbit' => max(20, min(750, $mbit)),
+        'source' => 'tc',
+    ];
+}
+
+function getTrafficLimitState(): array
+{
+    $default = trafficLimitStateDefault();
+    $tcState = readTrafficLimitFromTc();
+    if ($tcState !== null) {
+        return $tcState;
+    }
+    $raw = @file_get_contents(TRAFFIC_LIMIT_STATE_FILE);
+    if (!is_string($raw) || trim($raw) === '') {
+        return $default;
+    }
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        return $default;
+    }
+    $percent = (int)($data['percent'] ?? $default['percent']);
+    $iface = (string)($data['iface'] ?? $default['iface']);
+    if ($iface !== 'eth0' || $percent < 25 || $percent > 100) {
+        return $default;
+    }
+    return [
+        'ok' => true,
+        'iface' => 'eth0',
+        'percent' => $percent,
+        'mbit' => trafficLimitPercentToMbit($percent),
+        'source' => 'state',
+    ];
+}
+
+function setTrafficLimit(int $percent): array
+{
+    if ($percent < 25 || $percent > 100) {
+        return ['ok' => false, 'error' => 'invalid_traffic_limit_percent'];
+    }
+    $tc = findTcBinary();
+    if ($tc === null) {
+        return ['ok' => false, 'error' => 'tc_not_found'];
+    }
+    $iface = 'eth0';
+    $mbit = trafficLimitPercentToMbit($percent);
+    $rate = $mbit . 'mbit';
+    $burst = ($mbit >= 500) ? '1536kb' : (($mbit >= 200) ? '1024kb' : '384kb');
+    runCommand(escapeshellarg($tc) . ' qdisc replace dev ' . escapeshellarg($iface) . ' root tbf rate ' . escapeshellarg($rate) . ' burst ' . escapeshellarg($burst) . ' latency 70ms', $code);
+    if ($code !== 0) {
+        return ['ok' => false, 'error' => 'traffic_limit_apply_failed'];
+    }
+    @file_put_contents(
+        TRAFFIC_LIMIT_STATE_FILE,
+        json_encode([
+            'iface' => $iface,
+            'percent' => $percent,
+            'updated_at' => time(),
+        ], JSON_UNESCAPED_SLASHES)
+    );
+    return [
+        'ok' => true,
+        'iface' => $iface,
+        'percent' => $percent,
+        'mbit' => $mbit,
+        'source' => 'set',
+    ];
 }
 
 function isValidModule(string $module): bool
@@ -322,6 +614,44 @@ function serviceRestart(string $module): array
         return ['ok' => false, 'error' => 'service_restart_failed'];
     }
     return ['ok' => true, 'restarted' => true];
+}
+
+function systemReboot(): array
+{
+    $systemctl = findExecutable(['/usr/bin/systemctl', '/bin/systemctl']);
+    $shutdown = findExecutable(['/usr/sbin/shutdown', '/sbin/shutdown', '/usr/bin/shutdown', '/bin/shutdown']);
+    $reboot = findExecutable(['/usr/sbin/reboot', '/sbin/reboot', '/usr/bin/reboot', '/bin/reboot']);
+
+    $uid = function_exists('posix_geteuid') ? (string)posix_geteuid() : 'unknown';
+    appendRebootLog('request: uid=' . $uid);
+
+    $candidates = [];
+    if ($systemctl !== null) {
+        $candidates[] = ['name' => 'systemctl', 'cmd' => escapeshellarg($systemctl) . ' reboot'];
+    }
+    if ($shutdown !== null) {
+        $candidates[] = ['name' => 'shutdown', 'cmd' => escapeshellarg($shutdown) . ' -r now'];
+    }
+    if ($reboot !== null) {
+        $candidates[] = ['name' => 'reboot', 'cmd' => escapeshellarg($reboot)];
+    }
+
+    if ($candidates === []) {
+        appendRebootLog('error: reboot_command_not_found');
+        return ['ok' => false, 'error' => 'reboot_command_not_found'];
+    }
+
+    foreach ($candidates as $candidate) {
+        $name = $candidate['name'];
+        $cmd = $candidate['cmd'];
+        $output = runCommand($cmd, $code);
+        appendRebootLog('try ' . $name . ' exit=' . $code . ' output=' . str_replace("\n", ' ', $output));
+        if ($code === 0) {
+            return ['ok' => true, 'method' => $name];
+        }
+    }
+
+    return ['ok' => false, 'error' => 'reboot_failed'];
 }
 
 function statusSnapshot(array $modules, int $lines): array
@@ -675,6 +1005,46 @@ if ($action === 'service_restart') {
         fail('invalid_module');
     }
     respond(serviceRestart($module));
+    exit(0);
+}
+
+if ($action === 'system_reboot') {
+    respond(systemReboot());
+    exit(0);
+}
+
+if ($action === 'traffic_limit_get') {
+    respond(getTrafficLimitState());
+    exit(0);
+}
+
+if ($action === 'traffic_limit_set') {
+    $percent = (int)($request['percent'] ?? 0);
+    respond(setTrafficLimit($percent));
+    exit(0);
+}
+
+if ($action === 'vnstat_status') {
+    respond(['ok' => true, 'installed' => isVnstatInstalled()]);
+    exit(0);
+}
+
+if ($action === 'vnstat_install') {
+    respond(installVnstat());
+    exit(0);
+}
+
+if ($action === 'time_sync_status') {
+    respond(getTimeSyncStatus());
+    exit(0);
+}
+
+if ($action === 'time_sync_ensure') {
+    $timezone = $request['timezone'] ?? 'Europe/Kyiv';
+    if (!is_string($timezone) || trim($timezone) === '') {
+        fail('invalid_timezone');
+    }
+    respond(ensureTimeSyncForTimezone(trim($timezone)));
     exit(0);
 }
 

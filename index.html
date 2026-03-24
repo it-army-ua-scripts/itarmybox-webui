@@ -1,291 +1,197 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="uk">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="/image/ukraine.png" rel="icon">
     <title>ITUA</title>
-    <!-- Import Google Font -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
     <link href="/styles.css" rel="stylesheet" />
 </head>
 <body>
+<div class="app-header-bar is-empty" id="app-header-bar">
+    <div class="header-stat-pill">
+        <span class="header-stat-label" id="today-tx-label"></span>
+        <span class="header-stat-value" id="today-tx-value"></span>
+    </div>
+</div>
+
 <div class="container home-container">
     <div class="lang-switcher">
         <button type="button" class="lang-btn" id="lang-en">EN</button>
-        <button type="button" class="lang-btn" id="lang-uk">UA</button>
+        <button type="button" class="lang-btn active" id="lang-uk">UA</button>
     </div>
+
     <div class="header">
         <div class="logo-row">
             <img src="/image/logo.png" alt="logo" class="header-logo">
             <img src="/image/artline_logo.png" alt="artline-logo" class="header-logo header-logo-artline">
         </div>
-        <h1 id="title">Main Menu</h1>
+        <h1 id="title">Головне меню</h1>
     </div>
+
     <div class="content">
         <ul class="menu">
-            <li><a href="/status.php" id="link-status">Status</a></li>
-            <li><a href="/tools_list.php" id="link-tools">Tools</a></li>
-            <li><a href="/settings.php" id="link-settings">Settings</a></li>
+            <li><a href="/status.php" id="link-status">Статус</a></li>
+            <li><a href="/tools_list.php" id="link-tools">Інструменти</a></li>
+            <li><a href="/settings.php" id="link-settings">Налаштування</a></li>
         </ul>
+
+        <section class="power-lever" aria-label="Керування потужністю">
+            <div class="power-lever-head">
+                <div class="power-lever-value">
+                    <span id="power-percent">31%</span>
+                    <span id="power-rate">50 Мбіт/с</span>
+                </div>
+                <div class="power-lever-note" id="power-note">eth0 outgoing</div>
+            </div>
+            <input type="range" min="25" max="100" step="1" value="31" id="power-slider" class="power-slider">
+            <div class="power-scale">
+                <span>25%</span>
+                <span>50%</span>
+                <span>80%</span>
+                <span>100%</span>
+            </div>
+            <div class="power-help" id="power-help">Піднімайте потужність поступово. Важливо, щоб itarmybox не заважав комфортному доступу до інтернету.</div>
+            <div class="power-status" id="power-status"></div>
+        </section>
+
+        <section class="home-monitor" aria-label="Моніторинг системи">
+            <div class="home-monitor-grid">
+                <div class="monitor-card monitor-card-tx">
+                    <div class="monitor-label" id="monitor-tx-label">TX eth0</div>
+                    <div class="monitor-value" id="monitor-tx-value">...</div>
+                </div>
+                <div class="monitor-card">
+                    <div class="monitor-label" id="monitor-ram-label">RAM</div>
+                    <div class="monitor-value" id="monitor-ram-value">...</div>
+                </div>
+                <div class="monitor-card">
+                    <div class="monitor-label" id="monitor-cpu-label">CPU</div>
+                    <div class="monitor-value" id="monitor-cpu-value">...</div>
+                </div>
+                <div class="monitor-card">
+                    <div class="monitor-label" id="monitor-temp-label">CPU TEMP</div>
+                    <div class="monitor-value" id="monitor-temp-value">...</div>
+                </div>
+                <div class="monitor-card">
+                    <div class="monitor-label" id="monitor-ip-label">eth0 IP</div>
+                    <div class="monitor-value" id="monitor-ip-value">...</div>
+                </div>
+                <div class="monitor-card" id="monitor-memory-temp-card" hidden>
+                    <div class="monitor-label" id="monitor-memory-temp-label">DDR temp</div>
+                    <div class="monitor-value" id="monitor-memory-temp-value">...</div>
+                </div>
+            </div>
+        </section>
     </div>
 </div>
+
 <div class="modal-backdrop" id="user-id-modal" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="user-id-modal-title" aria-describedby="user-id-modal-text">
-        <div class="modal-badge" id="user-id-modal-badge">IT Army</div>
-        <h2 id="user-id-modal-title">User ID</h2>
+        <div class="modal-badge" id="user-id-modal-badge">Підказка IT Army</div>
+        <h2 id="user-id-modal-title">Потрібен User ID</h2>
         <p id="user-id-modal-text"></p>
         <div class="copy-bot-row">
             <button type="button" class="copy-bot-btn" id="copy-bot-name" aria-describedby="copy-bot-hint" aria-label="Copy bot name">@itarmy_stats_bot</button>
             <span class="copy-bot-hint" id="copy-bot-hint"></span>
         </div>
+        <label class="modal-checkbox-row" for="user-id-modal-skip">
+            <input type="checkbox" id="user-id-modal-skip">
+            <span id="user-id-modal-skip-label">Нагадати пізніше</span>
+        </label>
         <div class="modal-actions">
             <button type="button" class="modal-btn modal-btn-secondary" id="user-id-modal-close">OK</button>
-            <a class="modal-btn modal-btn-primary" id="user-id-modal-link" href="/user_id.php">Settings</a>
+            <a class="modal-btn modal-btn-primary" id="user-id-modal-link" href="/user_id.php">Відкрити налаштування</a>
         </div>
     </div>
 </div>
-<script>
-    const translations = {
-        en: {
-            title: "Main Menu",
-            status: "Status",
-            tools: "Tools",
-            settings: "Settings",
-            userIdMissingBadge: "IT Army helper",
-            userIdMissingTitle: "User ID required",
-            userIdMissingNotice: "To receive personal statistics and participate in the user leaderboard, get your personal ID from the Telegram statistics bot and enter it in the corresponding field in Settings.",
-            openUserIdSettings: "Open settings",
-            closeModal: "OK",
-            copyBotHint: "Tap the bot name to copy",
-            copiedBotHint: "Copied",
-            versionLabel: "Version",
-            githubLabel: "GitHub",
-            updateAvailable: "Update available",
-            upToDate: "Up to date",
-            updateNow: "Update",
-            footerSlogan: "Together to freedom"
-        },
-        uk: {
-            title: "Головне меню",
-            status: "Статус",
-            tools: "Інструменти",
-            settings: "Налаштування",
-            userIdMissingBadge: "Підказка IT Army",
-            userIdMissingTitle: "Потрібен User ID",
-            userIdMissingNotice: "Для отримання персональної статистики та участі в топі користувачів потрібно дізнатись свій персональний id у Telegram-бота статистики та вказати у відповідне поле в налаштуваннях.",
-            openUserIdSettings: "Відкрити налаштування",
-            closeModal: "OK",
-            copyBotHint: "Натисніть на назву бота, щоб скопіювати",
-            copiedBotHint: "Скопійовано",
-            versionLabel: "Версія",
-            githubLabel: "GitHub",
-            updateAvailable: "Доступне оновлення",
-            upToDate: "Актуальна",
-            updateNow: "Оновити",
-            footerSlogan: "Разом до свободи"
-        }    };
 
-    const langEnBtn = document.getElementById("lang-en");
-    const langUkBtn = document.getElementById("lang-uk");
-    const titleEl = document.getElementById("title");
-    const statusEl = document.getElementById("link-status");
-    const toolsEl = document.getElementById("link-tools");
-    const settingsEl = document.getElementById("link-settings");
-    const userIdModalEl = document.getElementById("user-id-modal");
-    const userIdModalBadgeEl = document.getElementById("user-id-modal-badge");
-    const userIdModalTitleEl = document.getElementById("user-id-modal-title");
-    const userIdModalTextEl = document.getElementById("user-id-modal-text");
-    const userIdModalCloseEl = document.getElementById("user-id-modal-close");
-    const userIdModalLinkEl = document.getElementById("user-id-modal-link");
-    const copyBotNameEl = document.getElementById("copy-bot-name");
-    const copyBotHintEl = document.getElementById("copy-bot-hint");
-    let activeLang = "en";
-    let versionInfo = { current: "...", github: "..." };
-    let copyBotHintTimer = null;
-
-    function getCookie(name) {
-        const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
-        return parts ? decodeURIComponent(parts.split("=")[1]) : null;
-    }
-
-    function updateLinks(lang) {
-        statusEl.href = "/status.php?lang=" + encodeURIComponent(lang);
-        toolsEl.href = "/tools_list.php?lang=" + encodeURIComponent(lang);
-        settingsEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
-        const footerUpdateActionEl = document.getElementById("footer-update-action");
-        if (footerUpdateActionEl) {
-            footerUpdateActionEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
-        }
-        userIdModalLinkEl.href = "/user_id.php?lang=" + encodeURIComponent(lang);
-    }
-
-    function applyLang(lang) {
-        activeLang = (lang === "uk" || lang === "en") ? lang : "en";
-        const text = translations[activeLang];
-        titleEl.textContent = text.title;
-        statusEl.textContent = text.status;
-        toolsEl.textContent = text.tools;
-        settingsEl.textContent = text.settings;
-        const footerSloganEl = document.getElementById("footer-slogan");
-        if (footerSloganEl) {
-            footerSloganEl.textContent = text.footerSlogan;
-        }
-        const footerVersionCurrentLabelEl = document.getElementById("footer-version-current-label");
-        const footerVersionGithubLabelEl = document.getElementById("footer-version-github-label");
-        const footerVersionCurrentEl = document.getElementById("footer-version-current");
-        const footerVersionGithubEl = document.getElementById("footer-version-github");
-        const footerUpdateStateEl = document.getElementById("footer-update-state");
-        const footerUpdateActionEl = document.getElementById("footer-update-action");
-        if (footerVersionCurrentLabelEl) footerVersionCurrentLabelEl.textContent = text.versionLabel;
-        if (footerVersionGithubLabelEl) footerVersionGithubLabelEl.textContent = text.githubLabel;
-        if (footerVersionCurrentEl) footerVersionCurrentEl.textContent = versionInfo.current;
-        if (footerVersionGithubEl) footerVersionGithubEl.textContent = versionInfo.github;
-        const haveBoth = versionInfo.current !== "unknown" && versionInfo.github !== "unknown" && versionInfo.current !== "..." && versionInfo.github !== "...";
-        const updateNeeded = haveBoth && versionInfo.current !== versionInfo.github;
-        if (footerUpdateStateEl) {
-            footerUpdateStateEl.textContent = updateNeeded ? text.updateAvailable : text.upToDate;
-            footerUpdateStateEl.classList.toggle("update-needed", updateNeeded);
-            footerUpdateStateEl.classList.toggle("up-to-date", !updateNeeded);
-        }
-        if (footerUpdateActionEl) {
-            footerUpdateActionEl.textContent = text.updateNow;
-            footerUpdateActionEl.classList.toggle("visible", updateNeeded);
-        }
-        userIdModalTitleEl.textContent = text.userIdMissingTitle;
-        userIdModalBadgeEl.textContent = text.userIdMissingBadge;
-        userIdModalTextEl.textContent = text.userIdMissingNotice;
-        userIdModalCloseEl.textContent = text.closeModal;
-        userIdModalLinkEl.textContent = text.openUserIdSettings;
-        copyBotHintEl.textContent = text.copyBotHint;
-        langEnBtn.classList.toggle("active", activeLang === "en");
-        langUkBtn.classList.toggle("active", activeLang === "uk");
-        updateLinks(activeLang);
-    }
-
-    async function copyBotName() {
-        const botName = copyBotNameEl.textContent.trim();
-        try {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                await navigator.clipboard.writeText(botName);
-            } else {
-                const textArea = document.createElement("textarea");
-                textArea.value = botName;
-                textArea.setAttribute("readonly", "");
-                textArea.style.position = "absolute";
-                textArea.style.left = "-9999px";
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand("copy");
-                document.body.removeChild(textArea);
-            }
-            copyBotHintEl.textContent = translations[activeLang].copiedBotHint;
-            copyBotNameEl.classList.add("copied");
-            if (copyBotHintTimer) {
-                window.clearTimeout(copyBotHintTimer);
-            }
-            copyBotHintTimer = window.setTimeout(() => {
-                copyBotHintEl.textContent = translations[activeLang].copyBotHint;
-                copyBotNameEl.classList.remove("copied");
-            }, 1800);
-        } catch (e) {
-            copyBotHintEl.textContent = botName;
-        }
-    }
-
-    function showUserIdModal() {
-        userIdModalEl.hidden = false;
-        document.body.classList.add("modal-open");
-        userIdModalCloseEl.focus();
-    }
-
-    function hideUserIdModal() {
-        userIdModalEl.hidden = true;
-        document.body.classList.remove("modal-open");
-    }
-
-    async function fetchVersionInfo() {
-        try {
-            const response = await fetch("/version_info.php", { cache: "no-store" });
-            const data = await response.json();
-            if (!data || data.ok !== true) {
-                return;
-            }
-            versionInfo = {
-                current: data.current || "unknown",
-                github: data.github || "unknown"
-            };
-            applyLang(activeLang);
-        } catch (e) {
-        }
-    }
-
-    async function refreshMainStatusIndicator() {
-        try {
-            const response = await fetch("/status.php?ajax=1&lang=" + encodeURIComponent(activeLang), { cache: "no-store" });
-            const data = await response.json();
-            const isActive = !!(data && data.ok === true && data.activeModule);
-            statusEl.classList.toggle("main-status-active", isActive);
-        } catch (e) {
-            statusEl.classList.remove("main-status-active");
-        }
-    }
-
-    async function notifyIfUserIdMissing() {
-        try {
-            const response = await fetch("/user_id.php?ajax=status", { cache: "no-store" });
-            const data = await response.json();
-            if (data && data.ok === true && data.userIdConfigured === false) {
-                showUserIdModal();
-            }
-        } catch (e) {
-        }
-    }
-
-    function setLang(lang) {
-        document.cookie = "lang=" + encodeURIComponent(lang) + "; path=/; max-age=31536000";
-        applyLang(lang);
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    const initialLang = params.get("lang") || getCookie("lang") || "en";
-    applyLang(initialLang);
-    fetchVersionInfo();
-    refreshMainStatusIndicator();
-    notifyIfUserIdMissing();
-    setInterval(refreshMainStatusIndicator, 5000);
-
-    function closeUserIdModalFromAction(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        hideUserIdModal();
-    }
-
-    langEnBtn.addEventListener("click", () => setLang("en"));
-    langUkBtn.addEventListener("click", () => setLang("uk"));
-    userIdModalCloseEl.addEventListener("click", closeUserIdModalFromAction);
-    userIdModalCloseEl.addEventListener("pointerup", closeUserIdModalFromAction);
-    userIdModalCloseEl.addEventListener("touchend", closeUserIdModalFromAction, { passive: false });
-    copyBotNameEl.addEventListener("click", copyBotName);
-    userIdModalEl.addEventListener("click", (event) => {
-        if (event.target === userIdModalEl) {
-            hideUserIdModal();
-        }
-    });
-    document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && !userIdModalEl.hidden) {
-            hideUserIdModal();
-        }
-    });
-</script>
 <footer class="app-footer">
-    <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Together to freedom</span>.</div>
-    <div class="footer-version"><span id="footer-version-current-label">Version</span>: <span id="footer-version-current">...</span> | <span id="footer-version-github-label">GitHub</span>: <span id="footer-version-github">...</span></div>
-    <div class="footer-update-row"><span id="footer-update-state" class="footer-update-state up-to-date">Up to date</span> <a id="footer-update-action" class="footer-update-action" href="/settings.php">Update</a></div>
+    <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Слава Україні!</span>.</div>
+    <div class="footer-version"><span id="footer-version-current-label">Версія</span>: <span id="footer-version-current">...</span> | <span id="footer-version-github-label">GitHub</span>: <span id="footer-version-github">...</span></div>
+    <div class="footer-update-row"><span id="footer-update-state" class="footer-update-state up-to-date">Актуальна</span> <a id="footer-update-action" class="footer-update-action" href="/settings.php">Оновити</a></div>
 </footer>
+
+<script id="home-translations" type="application/json">
+{
+  "en": {
+    "title": "Main Menu",
+    "status": "Status",
+    "tools": "Tools",
+    "settings": "Settings",
+    "userIdMissingBadge": "IT Army helper",
+    "userIdMissingTitle": "User ID required",
+    "userIdMissingNotice": "To receive personal statistics and participate in the user leaderboard, get your personal ID from the Telegram statistics bot and enter it in the corresponding field in Settings.",
+    "openUserIdSettings": "Open settings",
+    "closeModal": "OK",
+    "copyBotHint": "Tap the bot name to copy",
+    "copiedBotHint": "Copied",
+    "skipUserIdModal": "Remind me later",
+    "versionLabel": "Version",
+    "githubLabel": "GitHub",
+    "updateAvailable": "Update available",
+    "upToDate": "Up to date",
+    "updateNow": "Update",
+    "powerNote": "eth0 outgoing",
+    "powerHelp": "Increase power gradually. Make sure itarmybox does not interfere with comfortable internet access.",
+    "powerApplying": "Applying...",
+    "powerApplied": "Applied",
+    "powerApplyFailed": "Failed to apply",
+    "todayTxLabel": "Sent today:",
+    "monitorTemperature": "CPU TEMP",
+    "monitorMemoryTemperature": "DDR temp",
+    "monitorIp": "eth0 IP",
+    "monitorUnavailable": "n/a",
+    "footerSlogan": "Glory to Ukraine!"
+  },
+  "uk": {
+    "title": "Головне меню",
+    "status": "Статус",
+    "tools": "Інструменти",
+    "settings": "Налаштування",
+    "userIdMissingBadge": "Підказка IT Army",
+    "userIdMissingTitle": "Потрібен User ID",
+    "userIdMissingNotice": "Для отримання персональної статистики та участі в топі користувачів потрібно дізнатись свій персональний id у Telegram-бота статистики та вказати у відповідне поле в налаштуваннях.",
+    "openUserIdSettings": "Відкрити налаштування",
+    "closeModal": "OK",
+    "copyBotHint": "Натисніть на назву бота, щоб скопіювати",
+    "copiedBotHint": "Скопійовано",
+    "skipUserIdModal": "Нагадати пізніше",
+    "versionLabel": "Версія",
+    "githubLabel": "GitHub",
+    "updateAvailable": "Доступне оновлення",
+    "upToDate": "Актуальна",
+    "updateNow": "Оновити",
+    "powerNote": "eth0 outgoing",
+    "powerHelp": "Піднімайте потужність поступово. Важливо, щоб itarmybox не заважав комфортному доступу до інтернету.",
+    "powerApplying": "Застосування...",
+    "powerApplied": "Застосовано",
+    "powerApplyFailed": "Не вдалося застосувати",
+    "todayTxLabel": "Відправлено за сьогодні:",
+    "monitorTemperature": "CPU TEMP",
+    "monitorMemoryTemperature": "DDR temp",
+    "monitorIp": "eth0 IP",
+    "monitorUnavailable": "н/д",
+    "footerSlogan": "Слава Україні!"
+  }
+}
+</script>
+<script id="home-config" type="application/json">
+{
+  "versionInfoUrl": "/version_info.php",
+  "trafficLimitUrl": "/traffic_limit.php",
+  "systemMonitorUrl": "/system_monitor.php",
+  "statusAjaxBaseUrl": "/status.php?ajax=1",
+  "userIdStatusUrl": "/user_id.php?ajax=status",
+  "vnstatInstallUrl": "/vnstat.php",
+  "vnstatAutoInstall": true
+}
+</script>
+<script src="/js/app_shared.js"></script>
+<script src="/js/home.js"></script>
 <script>
     document.getElementById("copyright-year").textContent = String(new Date().getFullYear());
 </script>
 </body>
 </html>
-

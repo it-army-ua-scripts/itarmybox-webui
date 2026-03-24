@@ -218,7 +218,7 @@ foreach ($currentSchedules as $idx => $entry) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= htmlspecialchars(app_lang(), ENT_QUOTES, 'UTF-8') ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -232,7 +232,7 @@ foreach ($currentSchedules as $idx => $entry) {
     <div class="content">
         <h1><?= htmlspecialchars(t('autostart_settings'), ENT_QUOTES, 'UTF-8') ?></h1>
         <?php if ($message !== ''): ?>
-            <div class="<?= htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="form-message <?= htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
 
         <div class="service">
@@ -362,6 +362,7 @@ foreach ($currentSchedules as $idx => $entry) {
     </div>
 </div>
 <?= render_app_footer('<div class="footer-datetime" id="footer-datetime"></div>') ?>
+<script src="/js/form_messages.js"></script>
 <script>
 (() => {
     const maxIntervals = <?= MAX_SCHEDULE_INTERVALS ?>;

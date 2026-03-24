@@ -120,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= htmlspecialchars(app_lang(), ENT_QUOTES, 'UTF-8') ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -161,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="content centered">
         <h1><?= htmlspecialchars(t('user_id'), ENT_QUOTES, 'UTF-8') ?></h1>
         <?php if ($message !== ''): ?>
-            <div class="user-id-feedback <?= htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') ?>" role="status" aria-live="polite">
+            <div class="user-id-feedback form-message <?= htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') ?>" role="status" aria-live="polite">
                 <?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?>
             </div>
         <?php endif; ?>
@@ -188,5 +188,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </div>
 <?= render_app_footer() ?>
+<script src="/js/form_messages.js"></script>
 </body>
 </html>

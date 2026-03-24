@@ -1,8 +1,11 @@
 <?php
-require_once 'lib/navigation.php';
+require_once 'i18n.php';
 require_once 'lib/root_helper_client.php';
 require_once 'lib/tool_helpers.php';
 $config = require 'config/config.php';
+
+$messageKey = '';
+$messageOk = false;
 
 if (isset($_GET['daemon']) && in_array($_GET['daemon'], $config['daemonNames'], true)) {
     $daemon = (string)$_GET['daemon'];
@@ -16,12 +19,24 @@ if (isset($_GET['daemon']) && in_array($_GET['daemon'], $config['daemonNames'], 
         }
     }
     if ($canStart) {
-        root_helper_request([
+        $response = root_helper_request([
             'action' => 'service_activate_exclusive',
             'modules' => $config['daemonNames'],
             'selected' => $daemon,
         ]);
+        $messageOk = (($response['ok'] ?? false) === true);
+        $messageKey = $messageOk ? 'start_requested' : 'start_failed';
+    } else {
+        $messageKey = 'start_failed';
+        $messageOk = false;
     }
 }
 
-redirect_back_or_default(['/tool.php', '/tools_list.php', '/status.php', '/index.html', '/'], '/tools_list.php');
+if ($messageKey !== '') {
+    $target = '/status.php?msg=' . rawurlencode($messageKey) . '&ok=' . ($messageOk ? '1' : '0');
+    header('Location: ' . url_with_lang($target));
+    exit;
+}
+
+header('Location: ' . url_with_lang('/status.php'));
+exit;
