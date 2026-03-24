@@ -93,9 +93,15 @@ function findTimedatectl(): ?string
     return findExecutable(['/usr/bin/timedatectl', '/bin/timedatectl']);
 }
 
+function findSystemctl(): ?string
+{
+    return findExecutable(['/usr/bin/systemctl', '/bin/systemctl']);
+}
+
 function getTimeSyncStatus(): array
 {
     $timedatectl = findTimedatectl();
+    $systemctl = findSystemctl();
     if ($timedatectl === null) {
         return ['ok' => false, 'error' => 'timedatectl_not_found'];
     }
@@ -110,6 +116,17 @@ function getTimeSyncStatus(): array
     $ntpEnabled = parseBoolString((string)($lines[1] ?? ''));
     $ntpSynced = parseBoolString((string)($lines[2] ?? ''));
     $ntpService = trim((string)($lines[3] ?? ''));
+    if ($ntpService === '' && $systemctl !== null) {
+        $services = ['systemd-timesyncd', 'chronyd', 'ntp', 'ntpd'];
+        foreach ($services as $service) {
+            $serviceSafe = escapeshellarg($service . '.service');
+            $state = trim(runCommand(escapeshellarg($systemctl) . " is-active $serviceSafe", $svcCode));
+            if ($svcCode === 0 && $state !== '') {
+                $ntpService = $service;
+                break;
+            }
+        }
+    }
 
     return [
         'ok' => true,
@@ -134,14 +151,15 @@ function ensureTimeSyncForTimezone(string $timezone): array
     }
 
     $timedatectl = findTimedatectl();
+    $systemctl = findSystemctl();
     if ($timedatectl === null) {
         return ['ok' => false, 'error' => 'timedatectl_not_found'];
     }
 
     $timesyncd = findExecutable(['/lib/systemd/systemd-timesyncd', '/usr/lib/systemd/systemd-timesyncd']);
-    if ($timesyncd !== null) {
-        runCommand('systemctl enable systemd-timesyncd.service', $enableCode);
-        runCommand('systemctl start systemd-timesyncd.service', $startCode);
+    if ($timesyncd !== null && $systemctl !== null) {
+        runCommand(escapeshellarg($systemctl) . ' enable systemd-timesyncd.service', $enableCode);
+        runCommand(escapeshellarg($systemctl) . ' start systemd-timesyncd.service', $startCode);
     }
 
     runCommand(escapeshellarg($timedatectl) . ' set-timezone ' . escapeshellarg($timezone), $timezoneCode);
@@ -154,8 +172,8 @@ function ensureTimeSyncForTimezone(string $timezone): array
         return ['ok' => false, 'error' => 'set_ntp_failed'];
     }
 
-    if ($timesyncd !== null) {
-        runCommand('systemctl restart systemd-timesyncd.service', $restartCode);
+    if ($timesyncd !== null && $systemctl !== null) {
+        runCommand(escapeshellarg($systemctl) . ' restart systemd-timesyncd.service', $restartCode);
     }
 
     $status = getTimeSyncStatus();
