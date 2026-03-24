@@ -53,6 +53,17 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
 <body class="padded status-page">
 <div class="container status-container">
     <h1><?= htmlspecialchars(t('tools_status'), ENT_QUOTES, 'UTF-8') ?></h1>
+    <?php
+    $messageKey = $_GET['msg'] ?? '';
+    $messageOk = ($_GET['ok'] ?? '') === '1';
+    $allowedMessages = ['start_requested', 'start_failed', 'stop_requested', 'stop_failed'];
+    if (is_string($messageKey) && in_array($messageKey, $allowedMessages, true)) {
+        $messageClass = $messageOk ? 'status active' : 'status inactive';
+        echo '<div class="form-message ' . htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') . '">'
+            . htmlspecialchars(t($messageKey), ENT_QUOTES, 'UTF-8')
+            . '</div>';
+    }
+    ?>
 
     <div class="service">
         <div class="service-title" id="active-module-name"><?= htmlspecialchars(t('active_module'), ENT_QUOTES, 'UTF-8') ?></div>
@@ -87,6 +98,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
 <script src="/js/app_shared.js"></script>
 <script src="/js/status.js"></script>
+<script src="/js/form_messages.js"></script>
 <?= render_app_footer() ?>
 </body>
 </html>

@@ -116,5 +116,6 @@ if ($timezone !== '' && $timezone !== 'n/a' && !in_array($timezone, $timezoneOpt
     </div>
 </div>
 <?= render_app_footer() ?>
+<script src="/js/form_messages.js"></script>
 </body>
 </html>

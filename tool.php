@@ -146,5 +146,6 @@ $daemonName = $_GET['daemon'] ?? '';
     </div>
 </div>
 <?= render_app_footer() ?>
+<script src="/js/form_messages.js"></script>
 </body>
 </html>

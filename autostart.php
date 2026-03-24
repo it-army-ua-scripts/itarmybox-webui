@@ -362,6 +362,7 @@ foreach ($currentSchedules as $idx => $entry) {
     </div>
 </div>
 <?= render_app_footer('<div class="footer-datetime" id="footer-datetime"></div>') ?>
+<script src="/js/form_messages.js"></script>
 <script>
 (() => {
     const maxIntervals = <?= MAX_SCHEDULE_INTERVALS ?>;

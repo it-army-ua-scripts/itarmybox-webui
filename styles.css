@@ -685,6 +685,21 @@ h1 {
     color: #c0392b;
 }
 
+.form-message.is-fading {
+    animation: formMessageFade 0.45s ease-in forwards;
+}
+
+@keyframes formMessageFade {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+}
+
 .log-box {
     background: #111;
     color: #f1f1f1;
