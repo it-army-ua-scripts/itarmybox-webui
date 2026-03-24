@@ -1,6 +1,22 @@
 <?php
 require_once 'i18n.php';
 require_once 'lib/footer.php';
+require_once 'lib/version.php';
+
+$selectedBranch = webui_selected_branch();
+$updateLog = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $requestedBranch = trim((string)($_POST['branch'] ?? ''));
+    if (!in_array($requestedBranch, WEBUI_ALLOWED_BRANCHES, true)) {
+        $updateLog = t('update_branch_invalid');
+    } elseif (!webui_set_selected_branch($requestedBranch)) {
+        $updateLog = t('update_branch_save_failed');
+    } else {
+        $selectedBranch = $requestedBranch;
+        $updateLog = (string)shell_exec("/bin/bash update.sh 2>&1");
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -17,10 +33,20 @@ require_once 'lib/footer.php';
 
 <div class="container">
     <div class="content">
+        <h1><?= htmlspecialchars(t('update'), ENT_QUOTES, 'UTF-8') ?></h1>
+        <div class="service" style="max-width: 760px; margin: 0 auto 20px; text-align: left;">
+            <div class="service-title"><?= htmlspecialchars(t('update_branch'), ENT_QUOTES, 'UTF-8') ?></div>
+            <p><strong><?= htmlspecialchars(t('current_update_branch'), ENT_QUOTES, 'UTF-8') ?>:</strong> <?= htmlspecialchars($selectedBranch, ENT_QUOTES, 'UTF-8') ?></p>
+            <p><?= htmlspecialchars(t('dev_branch_note'), ENT_QUOTES, 'UTF-8') ?></p>
+            <form method="post" action="" class="branch-switch-actions">
+                <button class="submit-btn<?= $selectedBranch === 'main' ? ' active-branch-btn' : '' ?>" type="submit" name="branch" value="main"><?= htmlspecialchars(t('update_branch_main'), ENT_QUOTES, 'UTF-8') ?></button>
+                <button class="submit-btn<?= $selectedBranch === 'dev' ? ' active-branch-btn' : '' ?>" type="submit" name="branch" value="dev"><?= htmlspecialchars(t('update_branch_dev'), ENT_QUOTES, 'UTF-8') ?></button>
+            </form>
+        </div>
         <h1><?= htmlspecialchars(t('update_log'), ENT_QUOTES, 'UTF-8') ?>:</h1>
-        <?php
-        echo nl2br(shell_exec("/bin/bash update.sh 2>&1"));
-        ?>
+        <div class="service" style="max-width: 760px; margin: 0 auto;">
+            <div class="log-box tool-log-box"><?= nl2br(htmlspecialchars($updateLog !== '' ? $updateLog : t('update_branch_select_hint'), ENT_QUOTES, 'UTF-8')) ?></div>
+        </div>
         <div class="menu">
             <a href="<?= htmlspecialchars(url_with_lang('/'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('back'), ENT_QUOTES, 'UTF-8') ?></a>
         </div>
