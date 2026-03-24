@@ -236,6 +236,25 @@ function read_tx_rate_vnstat(string $iface): ?string
     return null;
 }
 
+function read_today_tx_vnstat(string $iface): ?string
+{
+    $vnstatPath = is_executable('/usr/bin/vnstat') ? '/usr/bin/vnstat' : (is_executable('/bin/vnstat') ? '/bin/vnstat' : null);
+    if ($vnstatPath === null) {
+        return null;
+    }
+    $ifaceArg = escapeshellarg($iface);
+    $output = @shell_exec($vnstatPath . ' -i ' . $ifaceArg . ' --oneline 2>/dev/null');
+    if (!is_string($output) || trim($output) === '') {
+        return null;
+    }
+    $parts = explode(';', trim($output));
+    if (!isset($parts[4])) {
+        return null;
+    }
+    $value = trim($parts[4]);
+    return $value !== '' ? $value : null;
+}
+
 $iface = 'eth0';
 $meminfo = read_meminfo();
 $memTotal = (int)($meminfo['MemTotal'] ?? 0);
@@ -256,6 +275,7 @@ echo json_encode([
     'ok' => true,
     'iface' => $iface,
     'txRate' => $txRate,
+    'todayTx' => read_today_tx_vnstat($iface),
     'txSource' => $txSource,
     'ramPercent' => $ramPercent,
     'cpuPercent' => read_cpu_usage_percent(),

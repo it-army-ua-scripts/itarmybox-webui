@@ -38,6 +38,16 @@ function findTcBinary(): ?string
     return null;
 }
 
+function findExecutable(array $paths): ?string
+{
+    foreach ($paths as $path) {
+        if (is_string($path) && $path !== '' && is_executable($path)) {
+            return $path;
+        }
+    }
+    return null;
+}
+
 function trafficLimitPercentToMbit(int $percent): int
 {
     $percent = max(25, min(100, $percent));
@@ -462,7 +472,35 @@ function serviceRestart(string $module): array
 
 function systemReboot(): array
 {
-    exec('/usr/bin/nohup /usr/bin/systemctl reboot >/dev/null 2>&1 &');
+    $nohup = findExecutable(['/usr/bin/nohup', '/bin/nohup']);
+    $sh = findExecutable(['/bin/sh', '/usr/bin/sh']);
+    $systemctl = findExecutable(['/usr/bin/systemctl', '/bin/systemctl']);
+    $shutdown = findExecutable(['/usr/sbin/shutdown', '/sbin/shutdown', '/usr/bin/shutdown', '/bin/shutdown']);
+
+    if ($nohup === null || $sh === null) {
+        return ['ok' => false, 'error' => 'reboot_launcher_not_found'];
+    }
+
+    $command = null;
+    if ($systemctl !== null) {
+        $command = escapeshellarg($systemctl) . ' reboot';
+    } elseif ($shutdown !== null) {
+        $command = escapeshellarg($shutdown) . ' -r now';
+    } else {
+        return ['ok' => false, 'error' => 'reboot_command_not_found'];
+    }
+
+    $backgroundCommand =
+        escapeshellarg($nohup) . ' ' .
+        escapeshellarg($sh) . ' -c ' .
+        escapeshellarg('sleep 1; ' . $command) .
+        ' >/dev/null 2>&1 &';
+
+    exec($backgroundCommand, $output, $exitCode);
+    if ($exitCode !== 0) {
+        return ['ok' => false, 'error' => 'reboot_launch_failed'];
+    }
+
     return ['ok' => true];
 }
 

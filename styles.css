@@ -68,6 +68,30 @@ body.status-page {
     margin-bottom: 12px;
 }
 
+.header-stat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(235, 243, 252, 0.96) 100%);
+    border: 1px solid rgba(167, 188, 211, 0.7);
+    box-shadow: 0 10px 24px rgba(44, 62, 80, 0.07);
+}
+
+.header-stat-label {
+    color: #60758c;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.header-stat-value {
+    color: #20364a;
+    font-size: 0.98rem;
+    font-weight: 800;
+}
+
 .logo-row {
     display: flex;
     justify-content: center;
@@ -711,6 +735,22 @@ h1 {
 
     .home-container .header {
         margin-bottom: 8px;
+    }
+
+    .header-stat-pill {
+        margin-bottom: 8px;
+        padding: 7px 11px;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .header-stat-label {
+        font-size: 0.76rem;
+    }
+
+    .header-stat-value {
+        font-size: 0.88rem;
     }
 
     .home-container .logo-row {

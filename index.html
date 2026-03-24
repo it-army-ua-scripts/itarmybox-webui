@@ -16,6 +16,10 @@
         <button type="button" class="lang-btn" id="lang-uk">UA</button>
     </div>
     <div class="header">
+        <div class="header-stat-pill">
+            <span class="header-stat-label" id="today-tx-label">Відправлено за сьогодні:</span>
+            <span class="header-stat-value" id="today-tx-value">...</span>
+        </div>
         <div class="logo-row">
             <img src="/image/logo.png" alt="logo" class="header-logo">
             <img src="/image/artline_logo.png" alt="artline-logo" class="header-logo header-logo-artline">
@@ -119,6 +123,7 @@
             powerApplying: "Applying...",
             powerApplied: "Applied",
             powerApplyFailed: "Failed to apply",
+            todayTxLabel: "Sent today:",
             monitorTemperature: "CPU TEMP",
             monitorMemoryTemperature: "DDR temp",
             monitorIp: "eth0 IP",
@@ -148,6 +153,7 @@
             powerApplying: "Застосування...",
             powerApplied: "Застосовано",
             powerApplyFailed: "Не вдалося застосувати",
+            todayTxLabel: "Відправлено за сьогодні:",
             monitorTemperature: "CPU TEMP",
             monitorMemoryTemperature: "DDR temp",
             monitorIp: "eth0 IP",
@@ -161,6 +167,8 @@
     const statusEl = document.getElementById("link-status");
     const toolsEl = document.getElementById("link-tools");
     const settingsEl = document.getElementById("link-settings");
+    const todayTxLabelEl = document.getElementById("today-tx-label");
+    const todayTxValueEl = document.getElementById("today-tx-value");
     const powerPercentEl = document.getElementById("power-percent");
     const powerRateEl = document.getElementById("power-rate");
     const powerNoteEl = document.getElementById("power-note");
@@ -278,6 +286,7 @@
         statusEl.textContent = text.status;
         toolsEl.textContent = text.tools;
         settingsEl.textContent = text.settings;
+        todayTxLabelEl.textContent = text.todayTxLabel;
         powerNoteEl.textContent = text.powerNote;
         powerHelpEl.textContent = text.powerHelp;
         monitorTempLabelEl.textContent = text.monitorTemperature;
@@ -390,6 +399,7 @@
             const iface = (typeof data.iface === "string" && data.iface) ? data.iface : "eth0";
             monitorTxLabelEl.textContent = "TX " + iface;
             monitorTxValueEl.textContent = (typeof data.txRate === "string" && data.txRate) ? data.txRate : translations[activeLang].monitorUnavailable;
+            todayTxValueEl.textContent = (typeof data.todayTx === "string" && data.todayTx) ? data.todayTx : translations[activeLang].monitorUnavailable;
             monitorRamValueEl.textContent = formatPercent(data.ramPercent);
             monitorCpuValueEl.textContent = formatPercent(data.cpuPercent);
             monitorTempValueEl.textContent = formatTemperature(data.temperatureC);
@@ -402,6 +412,7 @@
             }
         } catch (e) {
             const fallback = translations[activeLang].monitorUnavailable;
+            todayTxValueEl.textContent = fallback;
             monitorTxValueEl.textContent = fallback;
             monitorRamValueEl.textContent = fallback;
             monitorCpuValueEl.textContent = fallback;
