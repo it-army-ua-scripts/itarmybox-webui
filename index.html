@@ -28,11 +28,24 @@
             <li><a href="/tools_list.php" id="link-tools">Інструменти</a></li>
             <li><a href="/settings.php" id="link-settings">Налаштування</a></li>
         </ul>
-        <section class="home-monitor" aria-labelledby="monitor-title">
-            <div class="home-monitor-head">
-                <h2 id="monitor-title">Системний моніторинг</h2>
-                <span class="home-monitor-badge" id="monitor-badge">eth0</span>
+        <section class="power-lever" aria-label="Керування потужністю">
+            <div class="power-lever-head">
+                <div>
+                    <div class="power-lever-kicker" id="power-kicker">Потужність виходу</div>
+                    <div class="power-lever-value"><span id="power-percent">100%</span> <span id="power-rate">1000 Мбіт/с</span></div>
+                </div>
+                <div class="power-lever-note" id="power-note">eth0 outgoing</div>
             </div>
+            <input type="range" min="25" max="100" step="1" value="100" id="power-slider" class="power-slider">
+            <div class="power-scale">
+                <span>25%</span>
+                <span>50%</span>
+                <span>75%</span>
+                <span>100%</span>
+            </div>
+            <div class="power-status" id="power-status"></div>
+        </section>
+        <section class="home-monitor" aria-label="Моніторинг системи">
             <div class="home-monitor-grid">
                 <div class="monitor-card monitor-card-tx">
                     <div class="monitor-label" id="monitor-tx-label">TX eth0</div>
@@ -93,7 +106,11 @@
             updateAvailable: "Update available",
             upToDate: "Up to date",
             updateNow: "Update",
-            monitorTitle: "System monitoring",
+            powerKicker: "Outgoing power",
+            powerNote: "eth0 outgoing",
+            powerApplying: "Applying...",
+            powerApplied: "Applied",
+            powerApplyFailed: "Failed to apply",
             monitorTemperature: "Temperature",
             monitorUnavailable: "n/a",
             footerSlogan: "Glory to Ukraine!"
@@ -116,7 +133,11 @@
             updateAvailable: "Доступне оновлення",
             upToDate: "Актуальна",
             updateNow: "Оновити",
-            monitorTitle: "Системний моніторинг",
+            powerKicker: "Потужність виходу",
+            powerNote: "eth0 outgoing",
+            powerApplying: "Застосування...",
+            powerApplied: "Застосовано",
+            powerApplyFailed: "Не вдалося застосувати",
             monitorTemperature: "Температура",
             monitorUnavailable: "н/д",
             footerSlogan: "Слава Україні!"
@@ -128,8 +149,12 @@
     const statusEl = document.getElementById("link-status");
     const toolsEl = document.getElementById("link-tools");
     const settingsEl = document.getElementById("link-settings");
-    const monitorTitleEl = document.getElementById("monitor-title");
-    const monitorBadgeEl = document.getElementById("monitor-badge");
+    const powerKickerEl = document.getElementById("power-kicker");
+    const powerPercentEl = document.getElementById("power-percent");
+    const powerRateEl = document.getElementById("power-rate");
+    const powerNoteEl = document.getElementById("power-note");
+    const powerSliderEl = document.getElementById("power-slider");
+    const powerStatusEl = document.getElementById("power-status");
     const monitorTxLabelEl = document.getElementById("monitor-tx-label");
     const monitorTxValueEl = document.getElementById("monitor-tx-value");
     const monitorRamValueEl = document.getElementById("monitor-ram-value");
@@ -150,6 +175,7 @@
     let versionInfo = { current: "...", github: "..." };
     let copyBotHintTimer = null;
     const userIdModalPreferenceKey = "itarmybox-hide-userid-modal";
+    let powerApplyTimer = null;
 
     function getCookie(name) {
         const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
@@ -186,6 +212,19 @@
         userIdModalLinkEl.href = "/user_id.php?lang=" + encodeURIComponent(lang);
     }
 
+    function percentToMbit(percent) {
+        const clamped = Math.max(25, Math.min(100, Number(percent) || 100));
+        return Math.round(25 + ((clamped - 25) * (1000 - 25) / (100 - 25)));
+    }
+
+    function renderPowerState(percent) {
+        const normalized = Math.max(25, Math.min(100, Number(percent) || 100));
+        powerSliderEl.value = String(normalized);
+        powerPercentEl.textContent = String(normalized) + "%";
+        powerRateEl.textContent = String(percentToMbit(normalized)) + " Мбіт/с";
+        powerSliderEl.style.setProperty("--power-fill", ((normalized - 25) / 75 * 100).toFixed(2) + "%");
+    }
+
     function applyLang(lang) {
         activeLang = (lang === "uk" || lang === "en") ? lang : "en";
         const text = translations[activeLang];
@@ -193,7 +232,8 @@
         statusEl.textContent = text.status;
         toolsEl.textContent = text.tools;
         settingsEl.textContent = text.settings;
-        monitorTitleEl.textContent = text.monitorTitle;
+        powerKickerEl.textContent = text.powerKicker;
+        powerNoteEl.textContent = text.powerNote;
         monitorTempLabelEl.textContent = text.monitorTemperature;
         const footerSloganEl = document.getElementById("footer-slogan");
         if (footerSloganEl) {
@@ -232,6 +272,38 @@
         updateLinks(activeLang);
     }
 
+    async function refreshTrafficLimit() {
+        try {
+            const response = await fetch("/traffic_limit.php", { cache: "no-store" });
+            const data = await response.json();
+            if (!data || data.ok !== true) {
+                return;
+            }
+            renderPowerState(data.percent);
+        } catch (e) {
+        }
+    }
+
+    async function applyTrafficLimit(percent) {
+        powerStatusEl.textContent = translations[activeLang].powerApplying;
+        try {
+            const response = await fetch("/traffic_limit.php", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ percent })
+            });
+            const data = await response.json();
+            if (!data || data.ok !== true) {
+                powerStatusEl.textContent = translations[activeLang].powerApplyFailed;
+                return;
+            }
+            renderPowerState(data.percent);
+            powerStatusEl.textContent = translations[activeLang].powerApplied;
+        } catch (e) {
+            powerStatusEl.textContent = translations[activeLang].powerApplyFailed;
+        }
+    }
+
     function formatPercent(value) {
         return (typeof value === "number" && Number.isFinite(value)) ? value.toFixed(1) + "%" : translations[activeLang].monitorUnavailable;
     }
@@ -248,7 +320,6 @@
                 return;
             }
             const iface = (typeof data.iface === "string" && data.iface) ? data.iface : "eth0";
-            monitorBadgeEl.textContent = iface;
             monitorTxLabelEl.textContent = "TX " + iface;
             monitorTxValueEl.textContent = (typeof data.txRate === "string" && data.txRate) ? data.txRate : translations[activeLang].monitorUnavailable;
             monitorRamValueEl.textContent = formatPercent(data.ramPercent);
@@ -358,10 +429,12 @@
     applyLang(initialLang);
     fetchVersionInfo();
     refreshMainStatusIndicator();
+    refreshTrafficLimit();
     refreshSystemMonitor();
     notifyIfUserIdMissing();
     setInterval(refreshMainStatusIndicator, 5000);
     setInterval(refreshSystemMonitor, 4000);
+    setInterval(refreshTrafficLimit, 15000);
 
     function closeUserIdModalFromAction(event) {
         event.preventDefault();
@@ -371,6 +444,16 @@
 
     langEnBtn.addEventListener("click", () => setLang("en"));
     langUkBtn.addEventListener("click", () => setLang("uk"));
+    powerSliderEl.addEventListener("input", () => {
+        renderPowerState(powerSliderEl.value);
+        powerStatusEl.textContent = "";
+    });
+    powerSliderEl.addEventListener("change", () => {
+        if (powerApplyTimer) {
+            window.clearTimeout(powerApplyTimer);
+        }
+        powerApplyTimer = window.setTimeout(() => applyTrafficLimit(powerSliderEl.value), 50);
+    });
     userIdModalCloseEl.addEventListener("click", closeUserIdModalFromAction);
     userIdModalCloseEl.addEventListener("pointerup", closeUserIdModalFromAction);
     userIdModalCloseEl.addEventListener("touchend", closeUserIdModalFromAction, { passive: false });

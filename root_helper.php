@@ -6,6 +6,7 @@ const SCHEDULE_BEGIN_MARKER = '# ITARMYBOX-SCHEDULE-BEGIN';
 const SCHEDULE_END_MARKER = '# ITARMYBOX-SCHEDULE-END';
 const MAX_SCHEDULE_ENTRIES = 2;
 const SCHEDULE_MANUAL_OVERRIDE_FILE = '/tmp/itarmybox-schedule-manual-override';
+const TRAFFIC_LIMIT_STATE_FILE = '/tmp/itarmybox-traffic-limit.json';
 
 function respond(array $data): void
 {
@@ -25,6 +26,89 @@ function runCommand(string $command, ?int &$exitCode = null): string
     exec($command . ' 2>/dev/null', $output, $code);
     $exitCode = $code;
     return implode("\n", $output);
+}
+
+function findTcBinary(): ?string
+{
+    foreach (['/usr/sbin/tc', '/sbin/tc'] as $path) {
+        if (is_executable($path)) {
+            return $path;
+        }
+    }
+    return null;
+}
+
+function trafficLimitPercentToMbit(int $percent): int
+{
+    $percent = max(25, min(100, $percent));
+    return (int)round(25 + (($percent - 25) * (1000 - 25) / (100 - 25)));
+}
+
+function trafficLimitStateDefault(): array
+{
+    return [
+        'ok' => true,
+        'iface' => 'eth0',
+        'percent' => 100,
+        'mbit' => 1000,
+    ];
+}
+
+function getTrafficLimitState(): array
+{
+    $default = trafficLimitStateDefault();
+    $raw = @file_get_contents(TRAFFIC_LIMIT_STATE_FILE);
+    if (!is_string($raw) || trim($raw) === '') {
+        return $default;
+    }
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        return $default;
+    }
+    $percent = (int)($data['percent'] ?? $default['percent']);
+    $iface = (string)($data['iface'] ?? $default['iface']);
+    if ($iface !== 'eth0' || $percent < 25 || $percent > 100) {
+        return $default;
+    }
+    return [
+        'ok' => true,
+        'iface' => 'eth0',
+        'percent' => $percent,
+        'mbit' => trafficLimitPercentToMbit($percent),
+    ];
+}
+
+function setTrafficLimit(int $percent): array
+{
+    if ($percent < 25 || $percent > 100) {
+        return ['ok' => false, 'error' => 'invalid_traffic_limit_percent'];
+    }
+    $tc = findTcBinary();
+    if ($tc === null) {
+        return ['ok' => false, 'error' => 'tc_not_found'];
+    }
+    $iface = 'eth0';
+    $mbit = trafficLimitPercentToMbit($percent);
+    $rate = $mbit . 'mbit';
+    $burst = ($mbit >= 500) ? '2048kb' : (($mbit >= 200) ? '1024kb' : '512kb');
+    runCommand(escapeshellarg($tc) . ' qdisc replace dev ' . escapeshellarg($iface) . ' root tbf rate ' . escapeshellarg($rate) . ' burst ' . escapeshellarg($burst) . ' latency 70ms', $code);
+    if ($code !== 0) {
+        return ['ok' => false, 'error' => 'traffic_limit_apply_failed'];
+    }
+    @file_put_contents(
+        TRAFFIC_LIMIT_STATE_FILE,
+        json_encode([
+            'iface' => $iface,
+            'percent' => $percent,
+            'updated_at' => time(),
+        ], JSON_UNESCAPED_SLASHES)
+    );
+    return [
+        'ok' => true,
+        'iface' => $iface,
+        'percent' => $percent,
+        'mbit' => $mbit,
+    ];
 }
 
 function isValidModule(string $module): bool
@@ -686,6 +770,17 @@ if ($action === 'service_restart') {
 
 if ($action === 'system_reboot') {
     respond(systemReboot());
+    exit(0);
+}
+
+if ($action === 'traffic_limit_get') {
+    respond(getTrafficLimitState());
+    exit(0);
+}
+
+if ($action === 'traffic_limit_set') {
+    $percent = (int)($request['percent'] ?? 0);
+    respond(setTrafficLimit($percent));
     exit(0);
 }
 
