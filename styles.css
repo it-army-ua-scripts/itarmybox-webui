@@ -105,6 +105,13 @@ h1 {
     margin-right: auto;
 }
 
+.main-status-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+}
+
 .menu a {
     display: inline-block;
     padding: 12px 20px;
@@ -130,6 +137,26 @@ h1 {
 
 .menu a.main-status-active:hover {
     box-shadow: 0 0 0 2px rgba(58, 159, 100, 0.24), 0 0 18px rgba(58, 159, 100, 0.36);
+}
+
+.menu a.main-status-inactive {
+    border: 1px solid #cf4b4b;
+    box-shadow: 0 0 0 2px rgba(207, 75, 75, 0.16), 0 0 14px rgba(207, 75, 75, 0.24);
+}
+
+.menu a.main-status-inactive:hover {
+    box-shadow: 0 0 0 2px rgba(207, 75, 75, 0.22), 0 0 18px rgba(207, 75, 75, 0.32);
+}
+
+.main-start-link {
+    background: linear-gradient(180deg, #eef6ff 0%, #dfeeff 100%);
+    border: 1px solid #9abeee;
+    color: #1f5ea8 !important;
+    box-shadow: 0 8px 18px rgba(36, 87, 166, 0.12);
+}
+
+.main-start-link:hover {
+    background: linear-gradient(180deg, #f7fbff 0%, #e4f0ff 100%);
 }
 
 .form-container {

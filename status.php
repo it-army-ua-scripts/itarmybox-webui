@@ -13,10 +13,18 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         'modules' => $daemonNames,
         'lines' => 80,
     ]);
+    $autostartResponse = root_helper_request([
+        'action' => 'autostart_get',
+        'modules' => $daemonNames,
+    ]);
     $activeModule = ($response['ok'] ?? false) ? ($response['activeModule'] ?? null) : null;
     $commonLogs = ($response['ok'] ?? false) ? (string)($response['commonLogs'] ?? '') : '';
     $logSource = ($response['ok'] ?? false) ? ($response['logSource'] ?? null) : null;
     $logPath = ($response['ok'] ?? false) ? ($response['logPath'] ?? null) : null;
+    $selectedModule = (($autostartResponse['ok'] ?? false) === true) ? ($autostartResponse['active'] ?? null) : null;
+    if (!is_string($selectedModule) || !in_array($selectedModule, $daemonNames, true)) {
+        $selectedModule = null;
+    }
 
     if (trim($commonLogs) === '') {
         $commonLogs = (string)shell_exec("tail -n80 /var/log/adss.log 2>/dev/null");
@@ -26,6 +34,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         [
             'ok' => true,
             'activeModule' => $activeModule,
+            'selectedModule' => $selectedModule,
             'commonLogs' => $commonLogs,
             'logSource' => $logSource,
             'logPath' => $logPath,
