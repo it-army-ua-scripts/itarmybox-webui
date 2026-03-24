@@ -138,6 +138,12 @@ function ensureTimeSyncForTimezone(string $timezone): array
         return ['ok' => false, 'error' => 'timedatectl_not_found'];
     }
 
+    $timesyncd = findExecutable(['/lib/systemd/systemd-timesyncd', '/usr/lib/systemd/systemd-timesyncd']);
+    if ($timesyncd !== null) {
+        runCommand('systemctl enable systemd-timesyncd.service', $enableCode);
+        runCommand('systemctl start systemd-timesyncd.service', $startCode);
+    }
+
     runCommand(escapeshellarg($timedatectl) . ' set-timezone ' . escapeshellarg($timezone), $timezoneCode);
     if ($timezoneCode !== 0) {
         return ['ok' => false, 'error' => 'set_timezone_failed'];
@@ -146,6 +152,10 @@ function ensureTimeSyncForTimezone(string $timezone): array
     runCommand(escapeshellarg($timedatectl) . ' set-ntp true', $ntpCode);
     if ($ntpCode !== 0) {
         return ['ok' => false, 'error' => 'set_ntp_failed'];
+    }
+
+    if ($timesyncd !== null) {
+        runCommand('systemctl restart systemd-timesyncd.service', $restartCode);
     }
 
     $status = getTimeSyncStatus();
