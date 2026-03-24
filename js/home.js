@@ -50,6 +50,8 @@
     let powerPendingPercent = null;
     let headerHasData = false;
     let vnstatInstallAttempted = false;
+    let lastAutoApplyAt = 0;
+    const trafficDesiredKey = 'itarmybox-traffic-desired';
 
     function getText() {
         return translations[activeLang] || translations.uk || translations.en || {};
@@ -118,6 +120,19 @@
         powerPercentEl.textContent = String(normalized) + "%";
         powerRateEl.textContent = String(percentToMbit(normalized)) + " Мбіт/с";
         powerSliderEl.style.setProperty("--power-fill", ((normalized - 25) / 75 * 100).toFixed(2) + "%");
+    }
+
+    function getDesiredTrafficPercent() {
+        const raw = shared.getStorage(trafficDesiredKey);
+        const value = raw ? Number(raw) : 0;
+        return Number.isFinite(value) ? value : 0;
+    }
+
+    function setDesiredTrafficPercent(value) {
+        if (!Number.isFinite(value)) {
+            return;
+        }
+        shared.setStorage(trafficDesiredKey, String(Math.round(value)));
     }
 
     function schedulePowerApply() {
@@ -203,6 +218,19 @@
                 return;
             }
             renderPowerState(data.percent);
+            const desired = getDesiredTrafficPercent();
+            if (desired >= 25 && desired <= 100 && Math.abs(desired - data.percent) >= 2) {
+                powerStatusEl.textContent = getText().powerApplying;
+            } else {
+                powerStatusEl.textContent = getText().powerApplied;
+            }
+            const now = Date.now();
+            if (desired >= 25 && desired <= 100 && Math.abs(desired - data.percent) >= 2) {
+                if (now - lastAutoApplyAt > 30000) {
+                    lastAutoApplyAt = now;
+                    applyTrafficLimit(desired);
+                }
+            }
         } catch (e) {
         }
     }
@@ -211,6 +239,7 @@
         const normalized = Math.max(25, Math.min(100, Number(percent) || 100));
         powerPendingPercent = normalized;
         renderPowerState(normalized);
+        setDesiredTrafficPercent(normalized);
         powerStatusEl.textContent = getText().powerApplying;
         try {
             const data = await shared.fetchJson(config.trafficLimitUrl || "/traffic_limit.php", {
@@ -225,6 +254,7 @@
                 return;
             }
             renderPowerState(data.percent);
+            setDesiredTrafficPercent(data.percent);
             powerStatusEl.textContent = getText().powerApplied;
             powerPendingPercent = null;
         } catch (e) {
