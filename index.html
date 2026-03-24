@@ -28,6 +28,30 @@
             <li><a href="/tools_list.php" id="link-tools">Інструменти</a></li>
             <li><a href="/settings.php" id="link-settings">Налаштування</a></li>
         </ul>
+        <section class="home-monitor" aria-labelledby="monitor-title">
+            <div class="home-monitor-head">
+                <h2 id="monitor-title">Системний моніторинг</h2>
+                <span class="home-monitor-badge" id="monitor-badge">eth0</span>
+            </div>
+            <div class="home-monitor-grid">
+                <div class="monitor-card monitor-card-tx">
+                    <div class="monitor-label" id="monitor-tx-label">TX eth0</div>
+                    <div class="monitor-value" id="monitor-tx-value">...</div>
+                </div>
+                <div class="monitor-card">
+                    <div class="monitor-label" id="monitor-ram-label">RAM</div>
+                    <div class="monitor-value" id="monitor-ram-value">...</div>
+                </div>
+                <div class="monitor-card">
+                    <div class="monitor-label" id="monitor-cpu-label">CPU</div>
+                    <div class="monitor-value" id="monitor-cpu-value">...</div>
+                </div>
+                <div class="monitor-card">
+                    <div class="monitor-label" id="monitor-temp-label">Температура</div>
+                    <div class="monitor-value" id="monitor-temp-value">...</div>
+                </div>
+            </div>
+        </section>
     </div>
 </div>
 <div class="modal-backdrop" id="user-id-modal" hidden>
@@ -69,7 +93,10 @@
             updateAvailable: "Update available",
             upToDate: "Up to date",
             updateNow: "Update",
-            footerSlogan: "Together to freedom"
+            monitorTitle: "System monitoring",
+            monitorTemperature: "Temperature",
+            monitorUnavailable: "n/a",
+            footerSlogan: "Glory to Ukraine!"
         },
         uk: {
             title: "Головне меню",
@@ -89,7 +116,10 @@
             updateAvailable: "Доступне оновлення",
             upToDate: "Актуальна",
             updateNow: "Оновити",
-            footerSlogan: "Разом до свободи"
+            monitorTitle: "Системний моніторинг",
+            monitorTemperature: "Температура",
+            monitorUnavailable: "н/д",
+            footerSlogan: "Слава Україні!"
         }    };
 
     const langEnBtn = document.getElementById("lang-en");
@@ -98,6 +128,14 @@
     const statusEl = document.getElementById("link-status");
     const toolsEl = document.getElementById("link-tools");
     const settingsEl = document.getElementById("link-settings");
+    const monitorTitleEl = document.getElementById("monitor-title");
+    const monitorBadgeEl = document.getElementById("monitor-badge");
+    const monitorTxLabelEl = document.getElementById("monitor-tx-label");
+    const monitorTxValueEl = document.getElementById("monitor-tx-value");
+    const monitorRamValueEl = document.getElementById("monitor-ram-value");
+    const monitorCpuValueEl = document.getElementById("monitor-cpu-value");
+    const monitorTempLabelEl = document.getElementById("monitor-temp-label");
+    const monitorTempValueEl = document.getElementById("monitor-temp-value");
     const userIdModalEl = document.getElementById("user-id-modal");
     const userIdModalBadgeEl = document.getElementById("user-id-modal-badge");
     const userIdModalTitleEl = document.getElementById("user-id-modal-title");
@@ -155,6 +193,8 @@
         statusEl.textContent = text.status;
         toolsEl.textContent = text.tools;
         settingsEl.textContent = text.settings;
+        monitorTitleEl.textContent = text.monitorTitle;
+        monitorTempLabelEl.textContent = text.monitorTemperature;
         const footerSloganEl = document.getElementById("footer-slogan");
         if (footerSloganEl) {
             footerSloganEl.textContent = text.footerSlogan;
@@ -190,6 +230,37 @@
         langEnBtn.classList.toggle("active", activeLang === "en");
         langUkBtn.classList.toggle("active", activeLang === "uk");
         updateLinks(activeLang);
+    }
+
+    function formatPercent(value) {
+        return (typeof value === "number" && Number.isFinite(value)) ? value.toFixed(1) + "%" : translations[activeLang].monitorUnavailable;
+    }
+
+    function formatTemperature(value) {
+        return (typeof value === "number" && Number.isFinite(value)) ? value.toFixed(1) + "°C" : translations[activeLang].monitorUnavailable;
+    }
+
+    async function refreshSystemMonitor() {
+        try {
+            const response = await fetch("/system_monitor.php", { cache: "no-store" });
+            const data = await response.json();
+            if (!data || data.ok !== true) {
+                return;
+            }
+            const iface = (typeof data.iface === "string" && data.iface) ? data.iface : "eth0";
+            monitorBadgeEl.textContent = iface;
+            monitorTxLabelEl.textContent = "TX " + iface;
+            monitorTxValueEl.textContent = (typeof data.txRate === "string" && data.txRate) ? data.txRate : translations[activeLang].monitorUnavailable;
+            monitorRamValueEl.textContent = formatPercent(data.ramPercent);
+            monitorCpuValueEl.textContent = formatPercent(data.cpuPercent);
+            monitorTempValueEl.textContent = formatTemperature(data.temperatureC);
+        } catch (e) {
+            const fallback = translations[activeLang].monitorUnavailable;
+            monitorTxValueEl.textContent = fallback;
+            monitorRamValueEl.textContent = fallback;
+            monitorCpuValueEl.textContent = fallback;
+            monitorTempValueEl.textContent = fallback;
+        }
     }
 
     async function copyBotName() {
@@ -287,8 +358,10 @@
     applyLang(initialLang);
     fetchVersionInfo();
     refreshMainStatusIndicator();
+    refreshSystemMonitor();
     notifyIfUserIdMissing();
     setInterval(refreshMainStatusIndicator, 5000);
+    setInterval(refreshSystemMonitor, 4000);
 
     function closeUserIdModalFromAction(event) {
         event.preventDefault();
@@ -314,7 +387,7 @@
     });
 </script>
 <footer class="app-footer">
-    <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Разом до свободи</span>.</div>
+    <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Слава Україні!</span>.</div>
     <div class="footer-version"><span id="footer-version-current-label">Версія</span>: <span id="footer-version-current">...</span> | <span id="footer-version-github-label">GitHub</span>: <span id="footer-version-github">...</span></div>
     <div class="footer-update-row"><span id="footer-update-state" class="footer-update-state up-to-date">Актуальна</span> <a id="footer-update-action" class="footer-update-action" href="/settings.php">Оновити</a></div>
 </footer>
