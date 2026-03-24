@@ -16,6 +16,7 @@
     const powerRateEl = document.getElementById("power-rate");
     const powerNoteEl = document.getElementById("power-note");
     const powerHelpEl = document.getElementById("power-help");
+    const powerLeverEl = document.querySelector(".power-lever");
     const powerSliderEl = document.getElementById("power-slider");
     const powerStatusEl = document.getElementById("power-status");
     const monitorTxLabelEl = document.getElementById("monitor-tx-label");
@@ -51,6 +52,7 @@
     let headerHasData = false;
     let vnstatInstallAttempted = false;
     let lastAutoApplyAt = 0;
+    let isDraggingPower = false;
     const trafficDesiredKey = 'itarmybox-traffic-desired';
 
     function getText() {
@@ -139,7 +141,7 @@
         if (powerApplyTimer) {
             window.clearTimeout(powerApplyTimer);
         }
-        powerApplyTimer = window.setTimeout(() => applyTrafficLimit(powerSliderEl.value), 80);
+        powerApplyTimer = window.setTimeout(() => applyTrafficLimit(powerSliderEl.value), 140);
     }
 
     function applyLang(lang) {
@@ -214,7 +216,7 @@
     async function refreshTrafficLimit() {
         try {
             const data = await shared.fetchJson(config.trafficLimitUrl || "/traffic_limit.php", { cache: "no-store" });
-            if (!data || data.ok !== true || powerPendingPercent !== null) {
+            if (!data || data.ok !== true || powerPendingPercent !== null || isDraggingPower) {
                 return;
             }
             renderPowerState(data.percent);
@@ -225,7 +227,7 @@
                 powerStatusEl.textContent = getText().powerApplied;
             }
             const now = Date.now();
-            if (desired >= 25 && desired <= 100 && Math.abs(desired - data.percent) >= 2) {
+            if (!isDraggingPower && desired >= 25 && desired <= 100 && Math.abs(desired - data.percent) >= 2) {
                 if (now - lastAutoApplyAt > 30000) {
                     lastAutoApplyAt = now;
                     applyTrafficLimit(desired);
@@ -513,14 +515,62 @@
 
         langEnBtn.addEventListener("click", () => setLang("en"));
         langUkBtn.addEventListener("click", () => setLang("uk"));
+        powerSliderEl.addEventListener("pointerdown", () => {
+            isDraggingPower = true;
+            if (powerLeverEl) {
+                powerLeverEl.classList.add("is-dragging");
+            }
+        });
+        powerSliderEl.addEventListener("touchstart", () => {
+            isDraggingPower = true;
+            if (powerLeverEl) {
+                powerLeverEl.classList.add("is-dragging");
+            }
+        }, { passive: true });
         powerSliderEl.addEventListener("input", () => {
             renderPowerState(powerSliderEl.value);
             powerStatusEl.textContent = "";
         });
-        powerSliderEl.addEventListener("change", schedulePowerApply);
-        powerSliderEl.addEventListener("mouseup", schedulePowerApply);
-        powerSliderEl.addEventListener("touchend", schedulePowerApply, { passive: true });
-        powerSliderEl.addEventListener("pointerup", schedulePowerApply);
+        powerSliderEl.addEventListener("change", () => {
+            isDraggingPower = false;
+            if (powerLeverEl) {
+                powerLeverEl.classList.remove("is-dragging");
+            }
+            schedulePowerApply();
+        });
+        powerSliderEl.addEventListener("mouseup", () => {
+            isDraggingPower = false;
+            if (powerLeverEl) {
+                powerLeverEl.classList.remove("is-dragging");
+            }
+            schedulePowerApply();
+        });
+        powerSliderEl.addEventListener("touchend", () => {
+            isDraggingPower = false;
+            if (powerLeverEl) {
+                powerLeverEl.classList.remove("is-dragging");
+            }
+            schedulePowerApply();
+        }, { passive: true });
+        powerSliderEl.addEventListener("pointerup", () => {
+            isDraggingPower = false;
+            if (powerLeverEl) {
+                powerLeverEl.classList.remove("is-dragging");
+            }
+            schedulePowerApply();
+        });
+        powerSliderEl.addEventListener("pointercancel", () => {
+            isDraggingPower = false;
+            if (powerLeverEl) {
+                powerLeverEl.classList.remove("is-dragging");
+            }
+        });
+        powerSliderEl.addEventListener("touchcancel", () => {
+            isDraggingPower = false;
+            if (powerLeverEl) {
+                powerLeverEl.classList.remove("is-dragging");
+            }
+        });
         userIdModalCloseEl.addEventListener("click", closeUserIdModalFromAction);
         userIdModalCloseEl.addEventListener("pointerup", closeUserIdModalFromAction);
         userIdModalCloseEl.addEventListener("touchend", closeUserIdModalFromAction, { passive: false });

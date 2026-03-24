@@ -167,6 +167,19 @@ h1 {
     box-shadow: 0 14px 28px rgba(44, 62, 80, 0.07);
 }
 
+.power-lever.is-dragging {
+    border-color: rgba(63, 137, 234, 0.5);
+    box-shadow: 0 18px 34px rgba(63, 137, 234, 0.18);
+}
+
+.power-lever.is-dragging .power-slider::-webkit-slider-thumb {
+    box-shadow: 0 10px 24px rgba(63, 137, 234, 0.35);
+}
+
+.power-lever.is-dragging .power-slider::-moz-range-thumb {
+    box-shadow: 0 10px 24px rgba(63, 137, 234, 0.35);
+}
+
 .power-lever-head {
     display: flex;
     justify-content: space-between;
