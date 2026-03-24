@@ -32,7 +32,7 @@
             <div class="power-lever-head">
                 <div>
                     <div class="power-lever-kicker" id="power-kicker">Потужність виходу</div>
-                    <div class="power-lever-value"><span id="power-percent">100%</span> <span id="power-rate">1000 Мбіт/с</span></div>
+                    <div class="power-lever-value"><span id="power-percent">100%</span> <span id="power-rate">750 Мбіт/с</span></div>
                 </div>
                 <div class="power-lever-note" id="power-note">eth0 outgoing</div>
             </div>
@@ -40,8 +40,14 @@
             <div class="power-scale">
                 <span>25%</span>
                 <span>50%</span>
-                <span>75%</span>
+                <span>80%</span>
                 <span>100%</span>
+            </div>
+            <div class="power-rate-scale">
+                <span>20</span>
+                <span>147</span>
+                <span>300</span>
+                <span>750 Мбіт/с</span>
             </div>
             <div class="power-status" id="power-status"></div>
         </section>
@@ -215,7 +221,10 @@
 
     function percentToMbit(percent) {
         const clamped = Math.max(25, Math.min(100, Number(percent) || 100));
-        return Math.round(25 + ((clamped - 25) * (1000 - 25) / (100 - 25)));
+        if (clamped <= 80) {
+            return Math.round(20 + ((clamped - 25) * (300 - 20) / (80 - 25)));
+        }
+        return Math.round(300 + ((clamped - 80) * (750 - 300) / (100 - 80)));
     }
 
     function renderPowerState(percent) {

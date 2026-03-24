@@ -145,7 +145,14 @@ h1 {
     appearance: none;
     height: 14px;
     border-radius: 999px;
-    background: linear-gradient(90deg, #f2a36b 0%, #ea6f5a var(--power-fill), #dbe4ee var(--power-fill), #dbe4ee 100%);
+    background: linear-gradient(
+        90deg,
+        #f0b179 0%,
+        #ee8d67 52%,
+        #e45d57 73.33%,
+        #dbe4ee 73.33%,
+        #dbe4ee 100%
+    );
     outline: none;
 }
 
@@ -176,6 +183,15 @@ h1 {
     justify-content: space-between;
     color: #7d8ea0;
     font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.power-rate-scale {
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+    color: #9aa8b5;
+    font-size: 0.8rem;
     font-weight: 700;
 }
 

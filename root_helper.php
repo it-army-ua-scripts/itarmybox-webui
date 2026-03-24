@@ -41,7 +41,10 @@ function findTcBinary(): ?string
 function trafficLimitPercentToMbit(int $percent): int
 {
     $percent = max(25, min(100, $percent));
-    return (int)round(25 + (($percent - 25) * (1000 - 25) / (100 - 25)));
+    if ($percent <= 80) {
+        return (int)round(20 + (($percent - 25) * (300 - 20) / (80 - 25)));
+    }
+    return (int)round(300 + (($percent - 80) * (750 - 300) / (100 - 80)));
 }
 
 function trafficLimitStateDefault(): array
@@ -50,13 +53,60 @@ function trafficLimitStateDefault(): array
         'ok' => true,
         'iface' => 'eth0',
         'percent' => 100,
-        'mbit' => 1000,
+        'mbit' => 750,
+    ];
+}
+
+function trafficLimitMbitToPercent(int $mbit): int
+{
+    $mbit = max(20, min(750, $mbit));
+    if ($mbit <= 300) {
+        return (int)round(25 + (($mbit - 20) * (80 - 25) / (300 - 20)));
+    }
+    return (int)round(80 + (($mbit - 300) * (100 - 80) / (750 - 300)));
+}
+
+function readTrafficLimitFromTc(): ?array
+{
+    $tc = findTcBinary();
+    if ($tc === null) {
+        return null;
+    }
+    $iface = 'eth0';
+    $output = runCommand(escapeshellarg($tc) . ' qdisc show dev ' . escapeshellarg($iface), $code);
+    if ($code !== 0 || trim($output) === '') {
+        return null;
+    }
+
+    if (preg_match('/\brate\s+(\d+)([kmg])bit\b/i', $output, $matches) !== 1) {
+        return null;
+    }
+
+    $value = (int)$matches[1];
+    $unit = strtolower($matches[2]);
+    $mbit = match ($unit) {
+        'g' => $value * 1000,
+        'm' => $value,
+        'k' => max(1, (int)round($value / 1000)),
+        default => $value,
+    };
+
+    return [
+        'ok' => true,
+        'iface' => $iface,
+        'percent' => trafficLimitMbitToPercent($mbit),
+        'mbit' => max(20, min(750, $mbit)),
+        'source' => 'tc',
     ];
 }
 
 function getTrafficLimitState(): array
 {
     $default = trafficLimitStateDefault();
+    $tcState = readTrafficLimitFromTc();
+    if ($tcState !== null) {
+        return $tcState;
+    }
     $raw = @file_get_contents(TRAFFIC_LIMIT_STATE_FILE);
     if (!is_string($raw) || trim($raw) === '') {
         return $default;
@@ -75,6 +125,7 @@ function getTrafficLimitState(): array
         'iface' => 'eth0',
         'percent' => $percent,
         'mbit' => trafficLimitPercentToMbit($percent),
+        'source' => 'state',
     ];
 }
 
@@ -90,7 +141,7 @@ function setTrafficLimit(int $percent): array
     $iface = 'eth0';
     $mbit = trafficLimitPercentToMbit($percent);
     $rate = $mbit . 'mbit';
-    $burst = ($mbit >= 500) ? '2048kb' : (($mbit >= 200) ? '1024kb' : '512kb');
+    $burst = ($mbit >= 500) ? '1536kb' : (($mbit >= 200) ? '1024kb' : '384kb');
     runCommand(escapeshellarg($tc) . ' qdisc replace dev ' . escapeshellarg($iface) . ' root tbf rate ' . escapeshellarg($rate) . ' burst ' . escapeshellarg($burst) . ' latency 70ms', $code);
     if ($code !== 0) {
         return ['ok' => false, 'error' => 'traffic_limit_apply_failed'];
@@ -108,6 +159,7 @@ function setTrafficLimit(int $percent): array
         'iface' => $iface,
         'percent' => $percent,
         'mbit' => $mbit,
+        'source' => 'set',
     ];
 }
 
