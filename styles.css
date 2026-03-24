@@ -308,6 +308,26 @@ h1 {
     background: #1a252f;
 }
 
+.branch-switch-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.branch-switch-actions .submit-btn {
+    margin: 0;
+}
+
+.active-branch-btn {
+    background: #1f6fd1;
+    box-shadow: 0 0 0 2px rgba(31, 111, 209, 0.18);
+}
+
+.active-branch-btn:hover {
+    background: #195fb3;
+}
+
 .lang-switcher {
     display: flex;
     justify-content: flex-end;

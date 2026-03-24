@@ -5,8 +5,16 @@ set -euo pipefail
 
 REPO_DIR="/var/www/html/itarmybox-webui"
 GITHUB_REPO="https://github.com/it-army-ua-scripts/itarmybox-webui.git"
+BRANCH_STATE_FILE="/tmp/itarmybox-webui-update-branch.txt"
 GITHUB_BRANCH="main"
 ITARMY_DIR="/opt/itarmy"
+
+if [ -f "$BRANCH_STATE_FILE" ]; then
+  saved_branch="$(tr -d ' \t\r\n' < "$BRANCH_STATE_FILE" 2>/dev/null || true)"
+  if [ "$saved_branch" = "main" ] || [ "$saved_branch" = "dev" ]; then
+    GITHUB_BRANCH="$saved_branch"
+  fi
+fi
 
 cd "$REPO_DIR"
 
@@ -15,6 +23,7 @@ if [ -z "$current_version" ]; then
   current_version="unknown"
 fi
 echo "Current version: $current_version"
+echo "Selected branch: $GITHUB_BRANCH"
 
 /usr/bin/git fetch "$GITHUB_REPO" "$GITHUB_BRANCH"
 
@@ -25,15 +34,19 @@ if [ -z "$github_version" ]; then
 fi
 echo "GitHub version: $github_version"
 
-if [ "$github_version" = "$current_version" ]; then
-  echo "Version is the same, update skipped."
-  exit 0
-fi
+if [ "$GITHUB_BRANCH" != "dev" ]; then
+  if [ "$github_version" = "$current_version" ]; then
+    echo "Version is the same, update skipped."
+    exit 0
+  fi
 
-latest_version="$(printf '%s\n%s\n' "$current_version" "$github_version" | sort -V | tail -n 1)"
-if [ "$latest_version" != "$github_version" ]; then
-  echo "GitHub version is not newer, update skipped."
-  exit 0
+  latest_version="$(printf '%s\n%s\n' "$current_version" "$github_version" | sort -V | tail -n 1)"
+  if [ "$latest_version" != "$github_version" ]; then
+    echo "GitHub version is not newer, update skipped."
+    exit 0
+  fi
+else
+  echo "Dev branch selected: version comparison disabled, update will run."
 fi
 
 echo "Updating to version $github_version ..."

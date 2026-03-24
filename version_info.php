@@ -6,6 +6,7 @@ $versions = webui_versions();
 echo json_encode(
     [
         'ok' => true,
+        'branch' => (string)$versions['branch'],
         'current' => (string)$versions['current'],
         'github' => (string)$versions['github'],
     ],
