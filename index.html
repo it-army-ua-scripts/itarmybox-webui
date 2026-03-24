@@ -1,41 +1,47 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="uk">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="/image/ukraine.png" rel="icon">
     <title>ITUA</title>
-    <!-- Import Google Font -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
     <link href="/styles.css" rel="stylesheet" />
 </head>
 <body>
+<div class="app-header-bar">
+    <div class="header-stat-pill">
+        <span class="header-stat-label" id="today-tx-label">Відправлено за сьогодні:</span>
+        <span class="header-stat-value" id="today-tx-value">...</span>
+    </div>
+</div>
+
 <div class="container home-container">
     <div class="lang-switcher">
         <button type="button" class="lang-btn" id="lang-en">EN</button>
-        <button type="button" class="lang-btn" id="lang-uk">UA</button>
+        <button type="button" class="lang-btn active" id="lang-uk">UA</button>
     </div>
+
     <div class="header">
-        <div class="header-stat-pill">
-            <span class="header-stat-label" id="today-tx-label">Відправлено за сьогодні:</span>
-            <span class="header-stat-value" id="today-tx-value">...</span>
-        </div>
         <div class="logo-row">
             <img src="/image/logo.png" alt="logo" class="header-logo">
             <img src="/image/artline_logo.png" alt="artline-logo" class="header-logo header-logo-artline">
         </div>
         <h1 id="title">Головне меню</h1>
     </div>
+
     <div class="content">
         <ul class="menu">
             <li><a href="/status.php" id="link-status">Статус</a></li>
             <li><a href="/tools_list.php" id="link-tools">Інструменти</a></li>
             <li><a href="/settings.php" id="link-settings">Налаштування</a></li>
         </ul>
+
         <section class="power-lever" aria-label="Керування потужністю">
             <div class="power-lever-head">
-                <div>
-                    <div class="power-lever-value"><span id="power-percent">31%</span> <span id="power-rate">50 Мбіт/с</span></div>
+                <div class="power-lever-value">
+                    <span id="power-percent">31%</span>
+                    <span id="power-rate">50 Мбіт/с</span>
                 </div>
                 <div class="power-lever-note" id="power-note">eth0 outgoing</div>
             </div>
@@ -49,6 +55,7 @@
             <div class="power-help" id="power-help">Піднімайте потужність поступово. Важливо, щоб itarmybox не заважав комфортному доступу до інтернету.</div>
             <div class="power-status" id="power-status"></div>
         </section>
+
         <section class="home-monitor" aria-label="Моніторинг системи">
             <div class="home-monitor-grid">
                 <div class="monitor-card monitor-card-tx">
@@ -79,6 +86,7 @@
         </section>
     </div>
 </div>
+
 <div class="modal-backdrop" id="user-id-modal" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="user-id-modal-title" aria-describedby="user-id-modal-text">
         <div class="modal-badge" id="user-id-modal-badge">Підказка IT Army</div>
@@ -98,475 +106,90 @@
         </div>
     </div>
 </div>
-<script>
-    const translations = {
-        en: {
-            title: "Main Menu",
-            status: "Status",
-            tools: "Tools",
-            settings: "Settings",
-            userIdMissingBadge: "IT Army helper",
-            userIdMissingTitle: "User ID required",
-            userIdMissingNotice: "To receive personal statistics and participate in the user leaderboard, get your personal ID from the Telegram statistics bot and enter it in the corresponding field in Settings.",
-            openUserIdSettings: "Open settings",
-            closeModal: "OK",
-            copyBotHint: "Tap the bot name to copy",
-            copiedBotHint: "Copied",
-            skipUserIdModal: "Do not show next time",
-            versionLabel: "Version",
-            githubLabel: "GitHub",
-            updateAvailable: "Update available",
-            upToDate: "Up to date",
-            updateNow: "Update",
-            powerNote: "eth0 outgoing",
-            powerHelp: "Increase power gradually. Make sure itarmybox does not interfere with comfortable internet access.",
-            powerApplying: "Applying...",
-            powerApplied: "Applied",
-            powerApplyFailed: "Failed to apply",
-            todayTxLabel: "Sent today:",
-            monitorTemperature: "CPU TEMP",
-            monitorMemoryTemperature: "DDR temp",
-            monitorIp: "eth0 IP",
-            monitorUnavailable: "n/a",
-            footerSlogan: "Glory to Ukraine!"
-        },
-        uk: {
-            title: "Головне меню",
-            status: "Статус",
-            tools: "Інструменти",
-            settings: "Налаштування",
-            userIdMissingBadge: "Підказка IT Army",
-            userIdMissingTitle: "Потрібен User ID",
-            userIdMissingNotice: "Для отримання персональної статистики та участі в топі користувачів потрібно дізнатись свій персональний id у Telegram-бота статистики та вказати у відповідне поле в налаштуваннях.",
-            openUserIdSettings: "Відкрити налаштування",
-            closeModal: "OK",
-            copyBotHint: "Натисніть на назву бота, щоб скопіювати",
-            copiedBotHint: "Скопійовано",
-            skipUserIdModal: "Не показувати в наступний раз",
-            versionLabel: "Версія",
-            githubLabel: "GitHub",
-            updateAvailable: "Доступне оновлення",
-            upToDate: "Актуальна",
-            updateNow: "Оновити",
-            powerNote: "eth0 outgoing",
-            powerHelp: "Піднімайте потужність поступово. Важливо, щоб itarmybox не заважав комфортному доступу до інтернету.",
-            powerApplying: "Застосування...",
-            powerApplied: "Застосовано",
-            powerApplyFailed: "Не вдалося застосувати",
-            todayTxLabel: "Відправлено за сьогодні:",
-            monitorTemperature: "CPU TEMP",
-            monitorMemoryTemperature: "DDR temp",
-            monitorIp: "eth0 IP",
-            monitorUnavailable: "н/д",
-            footerSlogan: "Слава Україні!"
-        }    };
 
-    const langEnBtn = document.getElementById("lang-en");
-    const langUkBtn = document.getElementById("lang-uk");
-    const titleEl = document.getElementById("title");
-    const statusEl = document.getElementById("link-status");
-    const toolsEl = document.getElementById("link-tools");
-    const settingsEl = document.getElementById("link-settings");
-    const todayTxLabelEl = document.getElementById("today-tx-label");
-    const todayTxValueEl = document.getElementById("today-tx-value");
-    const powerPercentEl = document.getElementById("power-percent");
-    const powerRateEl = document.getElementById("power-rate");
-    const powerNoteEl = document.getElementById("power-note");
-    const powerHelpEl = document.getElementById("power-help");
-    const powerSliderEl = document.getElementById("power-slider");
-    const powerStatusEl = document.getElementById("power-status");
-    const monitorTxLabelEl = document.getElementById("monitor-tx-label");
-    const monitorTxValueEl = document.getElementById("monitor-tx-value");
-    const monitorRamValueEl = document.getElementById("monitor-ram-value");
-    const monitorCpuValueEl = document.getElementById("monitor-cpu-value");
-    const monitorTempLabelEl = document.getElementById("monitor-temp-label");
-    const monitorTempValueEl = document.getElementById("monitor-temp-value");
-    const monitorIpLabelEl = document.getElementById("monitor-ip-label");
-    const monitorIpValueEl = document.getElementById("monitor-ip-value");
-    const monitorMemoryTempCardEl = document.getElementById("monitor-memory-temp-card");
-    const monitorMemoryTempLabelEl = document.getElementById("monitor-memory-temp-label");
-    const monitorMemoryTempValueEl = document.getElementById("monitor-memory-temp-value");
-    const userIdModalEl = document.getElementById("user-id-modal");
-    const userIdModalBadgeEl = document.getElementById("user-id-modal-badge");
-    const userIdModalTitleEl = document.getElementById("user-id-modal-title");
-    const userIdModalTextEl = document.getElementById("user-id-modal-text");
-    const userIdModalCloseEl = document.getElementById("user-id-modal-close");
-    const userIdModalLinkEl = document.getElementById("user-id-modal-link");
-    const copyBotNameEl = document.getElementById("copy-bot-name");
-    const copyBotHintEl = document.getElementById("copy-bot-hint");
-    const userIdModalSkipEl = document.getElementById("user-id-modal-skip");
-    const userIdModalSkipLabelEl = document.getElementById("user-id-modal-skip-label");
-    let activeLang = "uk";
-    let versionInfo = { current: "...", github: "..." };
-    let copyBotHintTimer = null;
-    const userIdModalPreferenceKey = "itarmybox-hide-userid-modal";
-    const appLangStorageKey = "itarmybox-lang";
-    let powerApplyTimer = null;
-    let powerPendingPercent = null;
-
-    function getCookie(name) {
-        const parts = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
-        return parts ? decodeURIComponent(parts.split("=")[1]) : null;
-    }
-
-    function getStoredLang() {
-        try {
-            const stored = window.localStorage.getItem(appLangStorageKey);
-            return (stored === "uk" || stored === "en") ? stored : null;
-        } catch (e) {
-            return null;
-        }
-    }
-
-    function setStoredLang(lang) {
-        try {
-            window.localStorage.setItem(appLangStorageKey, lang);
-        } catch (e) {
-        }
-    }
-
-    function getUserIdModalHiddenPreference() {
-        try {
-            return window.localStorage.getItem(userIdModalPreferenceKey) === "1";
-        } catch (e) {
-            return false;
-        }
-    }
-
-    function setUserIdModalHiddenPreference(hidden) {
-        try {
-            if (hidden) {
-                window.localStorage.setItem(userIdModalPreferenceKey, "1");
-            } else {
-                window.localStorage.removeItem(userIdModalPreferenceKey);
-            }
-        } catch (e) {
-        }
-    }
-
-    function updateLinks(lang) {
-        statusEl.href = "/status.php?lang=" + encodeURIComponent(lang);
-        toolsEl.href = "/tools_list.php?lang=" + encodeURIComponent(lang);
-        settingsEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
-        const footerUpdateActionEl = document.getElementById("footer-update-action");
-        if (footerUpdateActionEl) {
-            footerUpdateActionEl.href = "/settings.php?lang=" + encodeURIComponent(lang);
-        }
-        userIdModalLinkEl.href = "/user_id.php?lang=" + encodeURIComponent(lang);
-    }
-
-    function percentToMbit(percent) {
-        const clamped = Math.max(25, Math.min(100, Number(percent) || 100));
-        if (clamped <= 80) {
-            return Math.round(20 + ((clamped - 25) * (300 - 20) / (80 - 25)));
-        }
-        return Math.round(300 + ((clamped - 80) * (750 - 300) / (100 - 80)));
-    }
-
-    function renderPowerState(percent) {
-        const normalized = Math.max(25, Math.min(100, Number(percent) || 100));
-        powerSliderEl.value = String(normalized);
-        powerPercentEl.textContent = String(normalized) + "%";
-        powerRateEl.textContent = String(percentToMbit(normalized)) + " Мбіт/с";
-        powerSliderEl.style.setProperty("--power-fill", ((normalized - 25) / 75 * 100).toFixed(2) + "%");
-    }
-
-    function schedulePowerApply() {
-        if (powerApplyTimer) {
-            window.clearTimeout(powerApplyTimer);
-        }
-        powerApplyTimer = window.setTimeout(() => applyTrafficLimit(powerSliderEl.value), 80);
-    }
-
-    function applyLang(lang) {
-        activeLang = (lang === "uk" || lang === "en") ? lang : "en";
-        document.documentElement.lang = activeLang;
-        const text = translations[activeLang];
-        titleEl.textContent = text.title;
-        statusEl.textContent = text.status;
-        toolsEl.textContent = text.tools;
-        settingsEl.textContent = text.settings;
-        todayTxLabelEl.textContent = text.todayTxLabel;
-        powerNoteEl.textContent = text.powerNote;
-        powerHelpEl.textContent = text.powerHelp;
-        monitorTempLabelEl.textContent = text.monitorTemperature;
-        monitorIpLabelEl.textContent = text.monitorIp;
-        monitorMemoryTempLabelEl.textContent = text.monitorMemoryTemperature;
-        const footerSloganEl = document.getElementById("footer-slogan");
-        if (footerSloganEl) {
-            footerSloganEl.textContent = text.footerSlogan;
-        }
-        const footerVersionCurrentLabelEl = document.getElementById("footer-version-current-label");
-        const footerVersionGithubLabelEl = document.getElementById("footer-version-github-label");
-        const footerVersionCurrentEl = document.getElementById("footer-version-current");
-        const footerVersionGithubEl = document.getElementById("footer-version-github");
-        const footerUpdateStateEl = document.getElementById("footer-update-state");
-        const footerUpdateActionEl = document.getElementById("footer-update-action");
-        if (footerVersionCurrentLabelEl) footerVersionCurrentLabelEl.textContent = text.versionLabel;
-        if (footerVersionGithubLabelEl) footerVersionGithubLabelEl.textContent = text.githubLabel;
-        if (footerVersionCurrentEl) footerVersionCurrentEl.textContent = versionInfo.current;
-        if (footerVersionGithubEl) footerVersionGithubEl.textContent = versionInfo.github;
-        const haveBoth = versionInfo.current !== "unknown" && versionInfo.github !== "unknown" && versionInfo.current !== "..." && versionInfo.github !== "...";
-        const updateNeeded = haveBoth && versionInfo.current !== versionInfo.github;
-        if (footerUpdateStateEl) {
-            footerUpdateStateEl.textContent = updateNeeded ? text.updateAvailable : text.upToDate;
-            footerUpdateStateEl.classList.toggle("update-needed", updateNeeded);
-            footerUpdateStateEl.classList.toggle("up-to-date", !updateNeeded);
-        }
-        if (footerUpdateActionEl) {
-            footerUpdateActionEl.textContent = text.updateNow;
-            footerUpdateActionEl.classList.toggle("visible", updateNeeded);
-        }
-        userIdModalTitleEl.textContent = text.userIdMissingTitle;
-        userIdModalBadgeEl.textContent = text.userIdMissingBadge;
-        userIdModalTextEl.textContent = text.userIdMissingNotice;
-        userIdModalCloseEl.textContent = text.closeModal;
-        userIdModalLinkEl.textContent = text.openUserIdSettings;
-        copyBotHintEl.textContent = text.copyBotHint;
-        userIdModalSkipLabelEl.textContent = text.skipUserIdModal;
-        langEnBtn.classList.toggle("active", activeLang === "en");
-        langUkBtn.classList.toggle("active", activeLang === "uk");
-        updateLinks(activeLang);
-    }
-
-    function syncLangUrl(lang) {
-        try {
-            const url = new URL(window.location.href);
-            url.searchParams.set("lang", lang);
-            window.history.replaceState({}, "", url.toString());
-        } catch (e) {
-        }
-    }
-
-    async function refreshTrafficLimit() {
-        try {
-            const response = await fetch("/traffic_limit.php", { cache: "no-store" });
-            const data = await response.json();
-            if (!data || data.ok !== true) {
-                return;
-            }
-            if (powerPendingPercent !== null) {
-                return;
-            }
-            renderPowerState(data.percent);
-        } catch (e) {
-        }
-    }
-
-    async function applyTrafficLimit(percent) {
-        const normalized = Math.max(25, Math.min(100, Number(percent) || 100));
-        powerPendingPercent = normalized;
-        renderPowerState(normalized);
-        powerStatusEl.textContent = translations[activeLang].powerApplying;
-        try {
-            const response = await fetch("/traffic_limit.php", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ percent: normalized })
-            });
-            const data = await response.json();
-            if (!data || data.ok !== true) {
-                powerStatusEl.textContent = translations[activeLang].powerApplyFailed;
-                powerPendingPercent = null;
-                refreshTrafficLimit();
-                return;
-            }
-            renderPowerState(data.percent);
-            powerStatusEl.textContent = translations[activeLang].powerApplied;
-            powerPendingPercent = null;
-        } catch (e) {
-            powerStatusEl.textContent = translations[activeLang].powerApplyFailed;
-            powerPendingPercent = null;
-            refreshTrafficLimit();
-        }
-    }
-
-    function formatPercent(value) {
-        return (typeof value === "number" && Number.isFinite(value)) ? value.toFixed(1) + "%" : translations[activeLang].monitorUnavailable;
-    }
-
-    function formatTemperature(value) {
-        return (typeof value === "number" && Number.isFinite(value)) ? value.toFixed(1) + "°C" : translations[activeLang].monitorUnavailable;
-    }
-
-    async function refreshSystemMonitor() {
-        try {
-            const response = await fetch("/system_monitor.php", { cache: "no-store" });
-            const data = await response.json();
-            if (!data || data.ok !== true) {
-                return;
-            }
-            const iface = (typeof data.iface === "string" && data.iface) ? data.iface : "eth0";
-            monitorTxLabelEl.textContent = "TX " + iface;
-            monitorTxValueEl.textContent = (typeof data.txRate === "string" && data.txRate) ? data.txRate : translations[activeLang].monitorUnavailable;
-            todayTxValueEl.textContent = (typeof data.todayTx === "string" && data.todayTx) ? data.todayTx : translations[activeLang].monitorUnavailable;
-            monitorRamValueEl.textContent = formatPercent(data.ramPercent);
-            monitorCpuValueEl.textContent = formatPercent(data.cpuPercent);
-            monitorTempValueEl.textContent = formatTemperature(data.temperatureC);
-            monitorIpValueEl.textContent = (typeof data.ipv4 === "string" && data.ipv4) ? data.ipv4 : translations[activeLang].monitorUnavailable;
-            if (typeof data.memoryTemperatureC === "number" && Number.isFinite(data.memoryTemperatureC)) {
-                monitorMemoryTempCardEl.hidden = false;
-                monitorMemoryTempValueEl.textContent = formatTemperature(data.memoryTemperatureC);
-            } else {
-                monitorMemoryTempCardEl.hidden = true;
-            }
-        } catch (e) {
-            const fallback = translations[activeLang].monitorUnavailable;
-            todayTxValueEl.textContent = fallback;
-            monitorTxValueEl.textContent = fallback;
-            monitorRamValueEl.textContent = fallback;
-            monitorCpuValueEl.textContent = fallback;
-            monitorTempValueEl.textContent = fallback;
-            monitorIpValueEl.textContent = fallback;
-            monitorMemoryTempCardEl.hidden = true;
-        }
-    }
-
-    async function copyBotName() {
-        const botName = copyBotNameEl.textContent.trim();
-        try {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                await navigator.clipboard.writeText(botName);
-            } else {
-                const textArea = document.createElement("textarea");
-                textArea.value = botName;
-                textArea.setAttribute("readonly", "");
-                textArea.style.position = "absolute";
-                textArea.style.left = "-9999px";
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand("copy");
-                document.body.removeChild(textArea);
-            }
-            copyBotHintEl.textContent = translations[activeLang].copiedBotHint;
-            copyBotNameEl.classList.add("copied");
-            if (copyBotHintTimer) {
-                window.clearTimeout(copyBotHintTimer);
-            }
-            copyBotHintTimer = window.setTimeout(() => {
-                copyBotHintEl.textContent = translations[activeLang].copyBotHint;
-                copyBotNameEl.classList.remove("copied");
-            }, 1800);
-        } catch (e) {
-            copyBotHintEl.textContent = botName;
-        }
-    }
-
-    function showUserIdModal() {
-        userIdModalSkipEl.checked = getUserIdModalHiddenPreference();
-        userIdModalEl.hidden = false;
-        document.body.classList.add("modal-open");
-        userIdModalCloseEl.focus();
-    }
-
-    function hideUserIdModal() {
-        setUserIdModalHiddenPreference(userIdModalSkipEl.checked);
-        userIdModalEl.hidden = true;
-        document.body.classList.remove("modal-open");
-    }
-
-    async function fetchVersionInfo() {
-        try {
-            const response = await fetch("/version_info.php", { cache: "no-store" });
-            const data = await response.json();
-            if (!data || data.ok !== true) {
-                return;
-            }
-            versionInfo = {
-                current: data.current || "unknown",
-                github: data.github || "unknown"
-            };
-            applyLang(activeLang);
-        } catch (e) {
-        }
-    }
-
-    async function refreshMainStatusIndicator() {
-        try {
-            const response = await fetch("/status.php?ajax=1&lang=" + encodeURIComponent(activeLang), { cache: "no-store" });
-            const data = await response.json();
-            const isActive = !!(data && data.ok === true && data.activeModule);
-            statusEl.classList.toggle("main-status-active", isActive);
-            statusEl.classList.toggle("main-status-inactive", !isActive);
-        } catch (e) {
-            statusEl.classList.remove("main-status-active");
-            statusEl.classList.add("main-status-inactive");
-        }
-    }
-
-    async function notifyIfUserIdMissing() {
-        try {
-            const response = await fetch("/user_id.php?ajax=status", { cache: "no-store" });
-            const data = await response.json();
-            if (data && data.ok === true && data.userIdConfigured === false && !getUserIdModalHiddenPreference()) {
-                showUserIdModal();
-            } else if (data && data.ok === true && data.userIdConfigured === true) {
-                setUserIdModalHiddenPreference(false);
-            }
-        } catch (e) {
-        }
-    }
-
-    function setLang(lang) {
-        document.cookie = "lang=" + encodeURIComponent(lang) + "; path=/; max-age=31536000";
-        setStoredLang(lang);
-        syncLangUrl(lang);
-        applyLang(lang);
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    const initialLang = params.get("lang") || getCookie("lang") || getStoredLang() || "uk";
-    setStoredLang(initialLang);
-    syncLangUrl(initialLang);
-    applyLang(initialLang);
-    fetchVersionInfo();
-    refreshMainStatusIndicator();
-    refreshTrafficLimit();
-    refreshSystemMonitor();
-    notifyIfUserIdMissing();
-    setInterval(refreshMainStatusIndicator, 5000);
-    setInterval(refreshSystemMonitor, 4000);
-    setInterval(refreshTrafficLimit, 15000);
-
-    function closeUserIdModalFromAction(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        hideUserIdModal();
-    }
-
-    langEnBtn.addEventListener("click", () => setLang("en"));
-    langUkBtn.addEventListener("click", () => setLang("uk"));
-    powerSliderEl.addEventListener("input", () => {
-        renderPowerState(powerSliderEl.value);
-        powerStatusEl.textContent = "";
-    });
-    powerSliderEl.addEventListener("change", schedulePowerApply);
-    powerSliderEl.addEventListener("mouseup", schedulePowerApply);
-    powerSliderEl.addEventListener("touchend", schedulePowerApply, { passive: true });
-    powerSliderEl.addEventListener("pointerup", schedulePowerApply);
-    userIdModalCloseEl.addEventListener("click", closeUserIdModalFromAction);
-    userIdModalCloseEl.addEventListener("pointerup", closeUserIdModalFromAction);
-    userIdModalCloseEl.addEventListener("touchend", closeUserIdModalFromAction, { passive: false });
-    copyBotNameEl.addEventListener("click", copyBotName);
-    userIdModalEl.addEventListener("click", (event) => {
-        if (event.target === userIdModalEl) {
-            hideUserIdModal();
-        }
-    });
-    document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && !userIdModalEl.hidden) {
-            hideUserIdModal();
-        }
-    });
-</script>
 <footer class="app-footer">
     <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Слава Україні!</span>.</div>
     <div class="footer-version"><span id="footer-version-current-label">Версія</span>: <span id="footer-version-current">...</span> | <span id="footer-version-github-label">GitHub</span>: <span id="footer-version-github">...</span></div>
     <div class="footer-update-row"><span id="footer-update-state" class="footer-update-state up-to-date">Актуальна</span> <a id="footer-update-action" class="footer-update-action" href="/settings.php">Оновити</a></div>
 </footer>
+
+<script id="home-translations" type="application/json">
+{
+  "en": {
+    "title": "Main Menu",
+    "status": "Status",
+    "tools": "Tools",
+    "settings": "Settings",
+    "userIdMissingBadge": "IT Army helper",
+    "userIdMissingTitle": "User ID required",
+    "userIdMissingNotice": "To receive personal statistics and participate in the user leaderboard, get your personal ID from the Telegram statistics bot and enter it in the corresponding field in Settings.",
+    "openUserIdSettings": "Open settings",
+    "closeModal": "OK",
+    "copyBotHint": "Tap the bot name to copy",
+    "copiedBotHint": "Copied",
+    "skipUserIdModal": "Do not show next time",
+    "versionLabel": "Version",
+    "githubLabel": "GitHub",
+    "updateAvailable": "Update available",
+    "upToDate": "Up to date",
+    "updateNow": "Update",
+    "powerNote": "eth0 outgoing",
+    "powerHelp": "Increase power gradually. Make sure itarmybox does not interfere with comfortable internet access.",
+    "powerApplying": "Applying...",
+    "powerApplied": "Applied",
+    "powerApplyFailed": "Failed to apply",
+    "todayTxLabel": "Sent today:",
+    "monitorTemperature": "CPU TEMP",
+    "monitorMemoryTemperature": "DDR temp",
+    "monitorIp": "eth0 IP",
+    "monitorUnavailable": "n/a",
+    "footerSlogan": "Glory to Ukraine!"
+  },
+  "uk": {
+    "title": "Головне меню",
+    "status": "Статус",
+    "tools": "Інструменти",
+    "settings": "Налаштування",
+    "userIdMissingBadge": "Підказка IT Army",
+    "userIdMissingTitle": "Потрібен User ID",
+    "userIdMissingNotice": "Для отримання персональної статистики та участі в топі користувачів потрібно дізнатись свій персональний id у Telegram-бота статистики та вказати у відповідне поле в налаштуваннях.",
+    "openUserIdSettings": "Відкрити налаштування",
+    "closeModal": "OK",
+    "copyBotHint": "Натисніть на назву бота, щоб скопіювати",
+    "copiedBotHint": "Скопійовано",
+    "skipUserIdModal": "Не показувати в наступний раз",
+    "versionLabel": "Версія",
+    "githubLabel": "GitHub",
+    "updateAvailable": "Доступне оновлення",
+    "upToDate": "Актуальна",
+    "updateNow": "Оновити",
+    "powerNote": "eth0 outgoing",
+    "powerHelp": "Піднімайте потужність поступово. Важливо, щоб itarmybox не заважав комфортному доступу до інтернету.",
+    "powerApplying": "Застосування...",
+    "powerApplied": "Застосовано",
+    "powerApplyFailed": "Не вдалося застосувати",
+    "todayTxLabel": "Відправлено за сьогодні:",
+    "monitorTemperature": "CPU TEMP",
+    "monitorMemoryTemperature": "DDR temp",
+    "monitorIp": "eth0 IP",
+    "monitorUnavailable": "н/д",
+    "footerSlogan": "Слава Україні!"
+  }
+}
+</script>
+<script id="home-config" type="application/json">
+{
+  "versionInfoUrl": "/version_info.php",
+  "trafficLimitUrl": "/traffic_limit.php",
+  "systemMonitorUrl": "/system_monitor.php",
+  "statusAjaxBaseUrl": "/status.php?ajax=1",
+  "userIdStatusUrl": "/user_id.php?ajax=status"
+}
+</script>
+<script src="/js/app_shared.js"></script>
+<script src="/js/home.js"></script>
 <script>
     document.getElementById("copyright-year").textContent = String(new Date().getFullYear());
 </script>
 </body>
 </html>
-

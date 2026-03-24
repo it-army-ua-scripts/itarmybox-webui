@@ -19,6 +19,7 @@ body.padded {
 }
 
 body {
+    padding-top: 58px;
     padding-bottom: 56px;
     overflow-x: hidden;
 }
@@ -38,6 +39,20 @@ body.modal-open {
 
 .home-container {
     width: 90%;
+}
+
+.app-header-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 55;
+    display: flex;
+    justify-content: center;
+    padding: 8px 10px;
+    background: rgba(245, 247, 250, 0.92);
+    border-bottom: 1px solid rgba(44, 62, 80, 0.15);
+    backdrop-filter: blur(4px);
 }
 
 .home-container .content {
@@ -72,7 +87,6 @@ body.status-page {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 10px;
     padding: 8px 14px;
     border-radius: 999px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(235, 243, 252, 0.96) 100%);
@@ -676,6 +690,10 @@ h1 {
         padding: 12px 12px 72px;
     }
 
+    body {
+        padding-top: 56px;
+    }
+
     .status-page .container {
         padding: 16px 14px;
         border-radius: 14px;
@@ -738,11 +756,11 @@ h1 {
     }
 
     .header-stat-pill {
-        margin-bottom: 8px;
         padding: 7px 11px;
         gap: 6px;
         flex-wrap: wrap;
         justify-content: center;
+        max-width: 100%;
     }
 
     .header-stat-label {
@@ -892,6 +910,10 @@ h1 {
 @media (max-width: 900px) and (orientation: landscape) {
     body.padded.status-page {
         padding: 10px 10px 68px;
+    }
+
+    body {
+        padding-top: 52px;
     }
 
     .status-page .container {
