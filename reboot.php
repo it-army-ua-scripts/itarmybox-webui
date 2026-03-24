@@ -13,6 +13,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ok = (($response['ok'] ?? false) === true);
     $message = $ok ? t('reboot_requested') : t('reboot_failed');
     $messageClass = $ok ? 'status active' : 'status inactive';
+    if (!$ok && isset($response['error'])) {
+        $message .= ' (' . $response['error'] . ')';
+    }
 }
 ?>
 <!DOCTYPE html>

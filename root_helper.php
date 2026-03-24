@@ -48,6 +48,12 @@ function findExecutable(array $paths): ?string
     return null;
 }
 
+function appendRebootLog(string $message): void
+{
+    $line = '[' . date('c') . '] ' . $message . "\n";
+    @file_put_contents('/tmp/itarmybox-reboot.log', $line, FILE_APPEND);
+}
+
 function trafficLimitPercentToMbit(int $percent): int
 {
     $percent = max(25, min(100, $percent));
@@ -472,36 +478,40 @@ function serviceRestart(string $module): array
 
 function systemReboot(): array
 {
-    $nohup = findExecutable(['/usr/bin/nohup', '/bin/nohup']);
-    $sh = findExecutable(['/bin/sh', '/usr/bin/sh']);
     $systemctl = findExecutable(['/usr/bin/systemctl', '/bin/systemctl']);
     $shutdown = findExecutable(['/usr/sbin/shutdown', '/sbin/shutdown', '/usr/bin/shutdown', '/bin/shutdown']);
+    $reboot = findExecutable(['/usr/sbin/reboot', '/sbin/reboot', '/usr/bin/reboot', '/bin/reboot']);
 
-    if ($nohup === null || $sh === null) {
-        return ['ok' => false, 'error' => 'reboot_launcher_not_found'];
+    $uid = function_exists('posix_geteuid') ? (string)posix_geteuid() : 'unknown';
+    appendRebootLog('request: uid=' . $uid);
+
+    $candidates = [];
+    if ($systemctl !== null) {
+        $candidates[] = ['name' => 'systemctl', 'cmd' => escapeshellarg($systemctl) . ' reboot'];
+    }
+    if ($shutdown !== null) {
+        $candidates[] = ['name' => 'shutdown', 'cmd' => escapeshellarg($shutdown) . ' -r now'];
+    }
+    if ($reboot !== null) {
+        $candidates[] = ['name' => 'reboot', 'cmd' => escapeshellarg($reboot)];
     }
 
-    $command = null;
-    if ($systemctl !== null) {
-        $command = escapeshellarg($systemctl) . ' reboot';
-    } elseif ($shutdown !== null) {
-        $command = escapeshellarg($shutdown) . ' -r now';
-    } else {
+    if ($candidates === []) {
+        appendRebootLog('error: reboot_command_not_found');
         return ['ok' => false, 'error' => 'reboot_command_not_found'];
     }
 
-    $backgroundCommand =
-        escapeshellarg($nohup) . ' ' .
-        escapeshellarg($sh) . ' -c ' .
-        escapeshellarg('sleep 1; ' . $command) .
-        ' >/dev/null 2>&1 &';
-
-    exec($backgroundCommand, $output, $exitCode);
-    if ($exitCode !== 0) {
-        return ['ok' => false, 'error' => 'reboot_launch_failed'];
+    foreach ($candidates as $candidate) {
+        $name = $candidate['name'];
+        $cmd = $candidate['cmd'];
+        $output = runCommand($cmd, $code);
+        appendRebootLog('try ' . $name . ' exit=' . $code . ' output=' . str_replace("\n", ' ', $output));
+        if ($code === 0) {
+            return ['ok' => true, 'method' => $name];
+        }
     }
 
-    return ['ok' => true];
+    return ['ok' => false, 'error' => 'reboot_failed'];
 }
 
 function statusSnapshot(array $modules, int $lines): array
