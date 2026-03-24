@@ -48,6 +48,118 @@ function findExecutable(array $paths): ?string
     return null;
 }
 
+function findAptGet(): ?string
+{
+    return findExecutable(['/usr/bin/apt-get', '/bin/apt-get', '/usr/bin/apt', '/bin/apt']);
+}
+
+function isVnstatInstalled(): bool
+{
+    return is_executable('/usr/bin/vnstat') || is_executable('/bin/vnstat');
+}
+
+function installVnstat(): array
+{
+    if (isVnstatInstalled()) {
+        return ['ok' => true, 'installed' => true, 'already' => true];
+    }
+
+    $apt = findAptGet();
+    if ($apt === null) {
+        return ['ok' => false, 'error' => 'apt_not_found'];
+    }
+
+    $cmd = 'DEBIAN_FRONTEND=noninteractive ' . escapeshellarg($apt) . ' install -y vnstat';
+    $output = runCommand($cmd, $code);
+    if ($code !== 0) {
+        return ['ok' => false, 'error' => 'vnstat_install_failed', 'output' => $output];
+    }
+
+    return ['ok' => true, 'installed' => isVnstatInstalled()];
+}
+
+function parseBoolString(string $value): ?bool
+{
+    $normalized = strtolower(trim($value));
+    return match ($normalized) {
+        'yes', 'true', '1' => true,
+        'no', 'false', '0' => false,
+        default => null,
+    };
+}
+
+function findTimedatectl(): ?string
+{
+    return findExecutable(['/usr/bin/timedatectl', '/bin/timedatectl']);
+}
+
+function getTimeSyncStatus(): array
+{
+    $timedatectl = findTimedatectl();
+    if ($timedatectl === null) {
+        return ['ok' => false, 'error' => 'timedatectl_not_found'];
+    }
+
+    $output = runCommand(escapeshellarg($timedatectl) . ' show --property=Timezone --property=NTP --property=NTPSynchronized --property=NTPService --value', $code);
+    if ($code !== 0) {
+        return ['ok' => false, 'error' => 'timedatectl_show_failed'];
+    }
+
+    $lines = preg_split('/\r\n|\r|\n/', trim($output));
+    $timezone = trim((string)($lines[0] ?? ''));
+    $ntpEnabled = parseBoolString((string)($lines[1] ?? ''));
+    $ntpSynced = parseBoolString((string)($lines[2] ?? ''));
+    $ntpService = trim((string)($lines[3] ?? ''));
+
+    return [
+        'ok' => true,
+        'timezone' => $timezone,
+        'ntpEnabled' => $ntpEnabled,
+        'ntpSynchronized' => $ntpSynced,
+        'ntpService' => $ntpService !== '' ? $ntpService : null,
+        'timezoneOk' => $timezone === 'Europe/Kyiv',
+        'ntpOk' => $ntpEnabled === true,
+    ];
+}
+
+function ensureTimeSync(): array
+{
+    return ensureTimeSyncForTimezone('Europe/Kyiv');
+}
+
+function ensureTimeSyncForTimezone(string $timezone): array
+{
+    if (preg_match('/^[A-Za-z0-9._+-]+(?:\/[A-Za-z0-9._+\-]+)+$/', $timezone) !== 1) {
+        return ['ok' => false, 'error' => 'invalid_timezone'];
+    }
+
+    $timedatectl = findTimedatectl();
+    if ($timedatectl === null) {
+        return ['ok' => false, 'error' => 'timedatectl_not_found'];
+    }
+
+    runCommand(escapeshellarg($timedatectl) . ' set-timezone ' . escapeshellarg($timezone), $timezoneCode);
+    if ($timezoneCode !== 0) {
+        return ['ok' => false, 'error' => 'set_timezone_failed'];
+    }
+
+    runCommand(escapeshellarg($timedatectl) . ' set-ntp true', $ntpCode);
+    if ($ntpCode !== 0) {
+        return ['ok' => false, 'error' => 'set_ntp_failed'];
+    }
+
+    $status = getTimeSyncStatus();
+    if (($status['ok'] ?? false) !== true) {
+        return $status;
+    }
+
+    if (($status['timezone'] ?? '') !== $timezone || ($status['ntpOk'] ?? false) !== true) {
+        return ['ok' => false, 'error' => 'time_sync_verification_failed'] + $status;
+    }
+
+    return $status;
+}
+
 function appendRebootLog(string $message): void
 {
     $line = '[' . date('c') . '] ' . $message . "\n";
@@ -881,6 +993,30 @@ if ($action === 'traffic_limit_get') {
 if ($action === 'traffic_limit_set') {
     $percent = (int)($request['percent'] ?? 0);
     respond(setTrafficLimit($percent));
+    exit(0);
+}
+
+if ($action === 'vnstat_status') {
+    respond(['ok' => true, 'installed' => isVnstatInstalled()]);
+    exit(0);
+}
+
+if ($action === 'vnstat_install') {
+    respond(installVnstat());
+    exit(0);
+}
+
+if ($action === 'time_sync_status') {
+    respond(getTimeSyncStatus());
+    exit(0);
+}
+
+if ($action === 'time_sync_ensure') {
+    $timezone = $request['timezone'] ?? 'Europe/Kyiv';
+    if (!is_string($timezone) || trim($timezone) === '') {
+        fail('invalid_timezone');
+    }
+    respond(ensureTimeSyncForTimezone(trim($timezone)));
     exit(0);
 }
 

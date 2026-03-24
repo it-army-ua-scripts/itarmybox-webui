@@ -48,6 +48,7 @@
     let powerApplyTimer = null;
     let powerPendingPercent = null;
     let headerHasData = false;
+    let vnstatInstallAttempted = false;
 
     function getText() {
         return translations[activeLang] || translations.uk || translations.en || {};
@@ -312,6 +313,22 @@
                 monitorMemoryTempValueEl.textContent = formatTemperature(data.memoryTemperatureC);
             } else {
                 monitorMemoryTempCardEl.hidden = true;
+            }
+
+            if (!vnstatInstallAttempted && config.vnstatAutoInstall === true) {
+                const hasTodayTx = typeof data.todayTx === "string" && data.todayTx.trim() !== "";
+                if (!hasTodayTx) {
+                    vnstatInstallAttempted = true;
+                    try {
+                        await shared.fetchJson(config.vnstatInstallUrl || "/vnstat.php", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ install: true })
+                        });
+                        window.setTimeout(refreshSystemMonitor, 4000);
+                    } catch (e) {
+                    }
+                }
             }
         } catch (e) {
             const fallback = getText().monitorUnavailable;
