@@ -15,35 +15,7 @@
         <button type="button" class="lang-btn" id="lang-en">EN</button>
         <button type="button" class="lang-btn" id="lang-uk">UA</button>
     </div>
-    <div class="header">
-        <div class="logo-row">
-            <img src="/image/logo.png" alt="logo" class="header-logo">
-            <img src="/image/artline_logo.png" alt="artline-logo" class="header-logo header-logo-artline">
-        </div>
-        <h1 id="title">Головне меню</h1>
-    </div>
     <div class="content">
-        <ul class="menu">
-            <li><a href="/status.php" id="link-status">Статус</a></li>
-            <li><a href="/tools_list.php" id="link-tools">Інструменти</a></li>
-            <li><a href="/settings.php" id="link-settings">Налаштування</a></li>
-        </ul>
-        <section class="power-lever" aria-label="Керування потужністю">
-            <div class="power-lever-head">
-                <div>
-                    <div class="power-lever-value"><span id="power-percent">100%</span> <span id="power-rate">750 Мбіт/с</span></div>
-                </div>
-                <div class="power-lever-note" id="power-note">eth0 outgoing</div>
-            </div>
-            <input type="range" min="25" max="100" step="1" value="100" id="power-slider" class="power-slider">
-            <div class="power-scale">
-                <span>25%</span>
-                <span>50%</span>
-                <span>80%</span>
-                <span>100%</span>
-            </div>
-            <div class="power-status" id="power-status"></div>
-        </section>
         <section class="home-monitor" aria-label="Моніторинг системи">
             <div class="home-monitor-grid">
                 <div class="monitor-card monitor-card-tx">
@@ -63,6 +35,37 @@
                     <div class="monitor-value" id="monitor-temp-value">...</div>
                 </div>
             </div>
+        </section>
+    </div>
+    <div class="header">
+        <div class="logo-row">
+            <img src="/image/logo.png" alt="logo" class="header-logo">
+            <img src="/image/artline_logo.png" alt="artline-logo" class="header-logo header-logo-artline">
+        </div>
+        <h1 id="title">Головне меню</h1>
+    </div>
+    <div class="content">
+        <ul class="menu">
+            <li><a href="/status.php" id="link-status">Статус</a></li>
+            <li><a href="/tools_list.php" id="link-tools">Інструменти</a></li>
+            <li><a href="/settings.php" id="link-settings">Налаштування</a></li>
+        </ul>
+        <section class="power-lever" aria-label="Керування потужністю">
+            <div class="power-lever-head">
+                <div>
+                    <div class="power-lever-value"><span id="power-percent">31%</span> <span id="power-rate">50 Мбіт/с</span></div>
+                </div>
+                <div class="power-lever-note" id="power-note">eth0 outgoing</div>
+            </div>
+            <input type="range" min="25" max="100" step="1" value="31" id="power-slider" class="power-slider">
+            <div class="power-scale">
+                <span>25%</span>
+                <span>50%</span>
+                <span>80%</span>
+                <span>100%</span>
+            </div>
+            <div class="power-help" id="power-help">Піднімайте потужність поступово, щоб itarmybox не заважав комфортному доступу до інтернету.</div>
+            <div class="power-status" id="power-status"></div>
         </section>
     </div>
 </div>
@@ -106,6 +109,7 @@
             upToDate: "Up to date",
             updateNow: "Update",
             powerNote: "eth0 outgoing",
+            powerHelp: "Increase power gradually so itarmybox does not interfere with comfortable internet access.",
             powerApplying: "Applying...",
             powerApplied: "Applied",
             powerApplyFailed: "Failed to apply",
@@ -132,6 +136,7 @@
             upToDate: "Актуальна",
             updateNow: "Оновити",
             powerNote: "eth0 outgoing",
+            powerHelp: "Піднімайте потужність поступово, щоб itarmybox не заважав комфортному доступу до інтернету.",
             powerApplying: "Застосування...",
             powerApplied: "Застосовано",
             powerApplyFailed: "Не вдалося застосувати",
@@ -149,6 +154,7 @@
     const powerPercentEl = document.getElementById("power-percent");
     const powerRateEl = document.getElementById("power-rate");
     const powerNoteEl = document.getElementById("power-note");
+    const powerHelpEl = document.getElementById("power-help");
     const powerSliderEl = document.getElementById("power-slider");
     const powerStatusEl = document.getElementById("power-status");
     const monitorTxLabelEl = document.getElementById("monitor-tx-label");
@@ -240,6 +246,7 @@
         toolsEl.textContent = text.tools;
         settingsEl.textContent = text.settings;
         powerNoteEl.textContent = text.powerNote;
+        powerHelpEl.textContent = text.powerHelp;
         monitorTempLabelEl.textContent = text.monitorTemperature;
         const footerSloganEl = document.getElementById("footer-slogan");
         if (footerSloganEl) {

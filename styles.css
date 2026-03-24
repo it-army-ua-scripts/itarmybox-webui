@@ -197,6 +197,13 @@ h1 {
     font-weight: 700;
 }
 
+.power-help {
+    margin-top: 10px;
+    color: #63788d;
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
 .power-status {
     min-height: 1.2em;
     margin-top: 10px;

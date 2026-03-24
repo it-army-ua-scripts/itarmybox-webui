@@ -52,8 +52,8 @@ function trafficLimitStateDefault(): array
     return [
         'ok' => true,
         'iface' => 'eth0',
-        'percent' => 100,
-        'mbit' => 750,
+        'percent' => trafficLimitMbitToPercent(50),
+        'mbit' => 50,
     ];
 }
 
