@@ -8,6 +8,7 @@
     const activeModuleNameEl = document.getElementById("active-module-name");
     const activeModuleStatusEl = document.getElementById("active-module-status");
     const autostartStatusEl = document.getElementById("autostart-status");
+    const controlStatusEl = document.getElementById("control-status");
 
     function appendOrReplace(el, newText, key) {
         const oldText = serviceState[key] || "";
@@ -55,10 +56,19 @@
         shared.setBooleanClass(el, "inactive", !isActive);
     }
 
+    function renderUnavailableState() {
+        activeModuleNameEl.textContent = config.text.activeModule;
+        setStatusBadge(activeModuleStatusEl, config.text.statusUnavailable, false);
+        setStatusBadge(autostartStatusEl, config.text.statusUnavailable, false);
+        setStatusBadge(controlStatusEl, config.text.statusUnavailable, false);
+        activeModuleActionsEl.innerHTML = "";
+    }
+
     async function updateStatus() {
         try {
             const data = await shared.fetchJson(config.ajaxUrl, { cache: "no-store" });
             if (!data || !data.ok) {
+                renderUnavailableState();
                 return;
             }
 
@@ -73,6 +83,17 @@
                 setStatusBadge(autostartStatusEl, config.text.autostartNone, false);
             }
 
+            if (data.scheduleLocked === true) {
+                const moduleName = typeof data.scheduleModule === "string" ? data.scheduleModule.toUpperCase() : "";
+                const power = Number.isFinite(Number(data.schedulePercent)) ? String(Math.round(Number(data.schedulePercent))) + "%" : "";
+                const text = moduleName && power
+                    ? config.text.controlSchedule.replace("{{module}}", moduleName).replace("{{power}}", power)
+                    : config.text.controlScheduleGeneric;
+                setStatusBadge(controlStatusEl, text, true);
+            } else {
+                setStatusBadge(controlStatusEl, config.text.controlManual, false);
+            }
+
             if (data.activeModule) {
                 activeModuleNameEl.textContent = config.text.activeModule;
                 setStatusBadge(activeModuleStatusEl, data.activeModule, true);
@@ -85,6 +106,7 @@
 
             appendOrReplace(commonLogEl, data.commonLogs || "", "common");
         } catch (e) {
+            renderUnavailableState();
         }
     }
 

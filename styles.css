@@ -534,6 +534,22 @@ h1 {
     margin-bottom: 14px;
 }
 
+.schedule-power-group {
+    margin-top: 4px;
+}
+
+.schedule-power-control {
+    padding-top: 4px;
+}
+
+.schedule-power-head {
+    margin-bottom: 8px;
+}
+
+.schedule-power-scale {
+    margin-top: 8px;
+}
+
 .schedule-interval-head {
     display: flex;
     align-items: center;

@@ -53,6 +53,9 @@
     let vnstatInstallAttempted = false;
     let lastAutoApplyAt = 0;
     let isDraggingPower = false;
+    let powerScheduleLocked = false;
+    let powerScheduleModule = "";
+    let powerSchedulePercent = null;
     const trafficDesiredKey = 'itarmybox-traffic-desired';
 
     function getText() {
@@ -137,6 +140,42 @@
         shared.setStorage(trafficDesiredKey, String(Math.round(value)));
     }
 
+    function clearDesiredTrafficPercent() {
+        shared.removeStorage(trafficDesiredKey);
+    }
+
+    function showPowerScheduleLockedMessage() {
+        const text = getText();
+        const moduleLabel = powerScheduleModule
+            ? String(powerScheduleModule).toUpperCase()
+            : "";
+        powerStatusEl.textContent = moduleLabel
+            ? text.powerControlledByScheduleHint.replace("{{module}}", moduleLabel)
+            : text.powerControlledByScheduleHintGeneric;
+    }
+
+    function setPowerScheduleLockState(locked, scheduleModule, schedulePercent = null) {
+        powerScheduleLocked = locked === true;
+        powerScheduleModule = powerScheduleLocked && typeof scheduleModule === "string" ? scheduleModule : "";
+        powerSchedulePercent = powerScheduleLocked && Number.isFinite(Number(schedulePercent))
+            ? Math.max(25, Math.min(100, Number(schedulePercent)))
+            : null;
+        powerSliderEl.setAttribute("aria-disabled", powerScheduleLocked ? "true" : "false");
+        powerSliderEl.classList.toggle("is-locked", powerScheduleLocked);
+        if (powerScheduleLocked) {
+            const text = getText();
+            const moduleLabel = powerScheduleModule
+                ? String(powerScheduleModule).toUpperCase()
+                : "";
+            powerStatusEl.textContent = moduleLabel
+                ? text.powerControlledBySchedule.replace("{{module}}", moduleLabel)
+                : text.powerControlledByScheduleGeneric;
+            clearDesiredTrafficPercent();
+            return;
+        }
+        powerStatusEl.textContent = getText().powerApplied;
+    }
+
     function schedulePowerApply() {
         if (powerApplyTimer) {
             window.clearTimeout(powerApplyTimer);
@@ -160,6 +199,9 @@
         monitorTempLabelEl.textContent = text.monitorTemperature;
         monitorIpLabelEl.textContent = text.monitorIp;
         monitorMemoryTempLabelEl.textContent = text.monitorMemoryTemperature;
+        if (powerScheduleLocked) {
+            setPowerScheduleLockState(true, powerScheduleModule);
+        }
 
         const footerSloganEl = document.getElementById("footer-slogan");
         if (footerSloganEl) {
@@ -217,10 +259,18 @@
         try {
             const data = await shared.fetchJson(config.trafficLimitUrl || "/traffic_limit.php", { cache: "no-store" });
             if (!data || data.ok !== true || powerPendingPercent !== null || isDraggingPower) {
+                if (data && data.scheduleLocked === true) {
+                    renderPowerState(data.schedulePercent || data.percent);
+                    setPowerScheduleLockState(true, data.scheduleModule, data.schedulePercent || data.percent);
+                }
                 return;
             }
             renderPowerState(data.percent);
+            setPowerScheduleLockState(data.scheduleLocked === true, data.scheduleModule, data.schedulePercent || data.percent);
             const desired = getDesiredTrafficPercent();
+            if (data.scheduleLocked === true) {
+                return;
+            }
             if (desired >= 25 && desired <= 100 && Math.abs(desired - data.percent) >= 2) {
                 powerStatusEl.textContent = getText().powerApplying;
             } else {
@@ -238,6 +288,9 @@
     }
 
     async function applyTrafficLimit(percent) {
+        if (powerScheduleLocked) {
+            return;
+        }
         const normalized = Math.max(25, Math.min(100, Number(percent) || 100));
         powerPendingPercent = normalized;
         renderPowerState(normalized);
@@ -250,12 +303,23 @@
                 body: JSON.stringify({ percent: normalized })
             });
             if (!data || data.ok !== true) {
+                if (data && data.scheduleLocked === true) {
+                    renderPowerState(data.currentPercent || data.schedulePercent || normalized);
+                    setPowerScheduleLockState(true, data.scheduleModule, data.currentPercent || data.schedulePercent || normalized);
+                    showPowerScheduleLockedMessage();
+                    powerPendingPercent = null;
+                    refreshTrafficLimit();
+                    return;
+                } else {
+                    setPowerScheduleLockState(false);
+                }
                 powerStatusEl.textContent = getText().powerApplyFailed;
                 powerPendingPercent = null;
                 refreshTrafficLimit();
                 return;
             }
             renderPowerState(data.percent);
+            setPowerScheduleLockState(data.scheduleLocked === true, data.scheduleModule, data.schedulePercent || data.percent);
             setDesiredTrafficPercent(data.percent);
             powerStatusEl.textContent = getText().powerApplied;
             powerPendingPercent = null;
@@ -294,38 +358,9 @@
         }
 
         const unit = match[2];
-        const binaryFactors = {
-            KiB: 1024,
-            MiB: 1024 ** 2,
-            GiB: 1024 ** 3,
-            TiB: 1024 ** 4,
-        };
-        const decimalUnits = {
-            KiB: "KB",
-            MiB: "MB",
-            GiB: "GB",
-            TiB: "TB",
-            KB: "KB",
-            MB: "MB",
-            GB: "GB",
-            TB: "TB",
-        };
-
-        if (!Object.prototype.hasOwnProperty.call(binaryFactors, unit)) {
-            return numeric.toFixed(numeric >= 100 ? 0 : (numeric >= 10 ? 1 : 2)) + " " + (decimalUnits[unit] || unit);
-        }
-
-        const bytes = numeric * binaryFactors[unit];
-        const decimalUnit = decimalUnits[unit] || unit.replace("i", "");
-        const divisor = {
-            KB: 1000,
-            MB: 1000 ** 2,
-            GB: 1000 ** 3,
-            TB: 1000 ** 4,
-        }[decimalUnit];
-        const converted = bytes / divisor;
-        const digits = converted >= 100 ? 0 : (converted >= 10 ? 1 : 2);
-        return converted.toFixed(digits) + " " + decimalUnit;
+        const normalizedUnit = unit.charAt(0).toUpperCase() + unit.slice(1);
+        const digits = numeric >= 100 ? 0 : (numeric >= 10 ? 1 : 2);
+        return numeric.toFixed(digits) + " " + normalizedUnit;
     }
 
     function setHeaderStat(rawValue) {
@@ -502,7 +537,6 @@
         setStoredLang(initialLang);
         syncLangUrl(initialLang);
         applyLang(initialLang);
-
         fetchVersionInfo();
         refreshMainStatusIndicator();
         refreshTrafficLimit();
@@ -516,22 +550,50 @@
         langEnBtn.addEventListener("click", () => setLang("en"));
         langUkBtn.addEventListener("click", () => setLang("uk"));
         powerSliderEl.addEventListener("pointerdown", () => {
+            if (powerScheduleLocked) {
+                if (powerSchedulePercent !== null) {
+                    renderPowerState(powerSchedulePercent);
+                }
+                showPowerScheduleLockedMessage();
+                return;
+            }
             isDraggingPower = true;
             if (powerLeverEl) {
                 powerLeverEl.classList.add("is-dragging");
             }
         });
         powerSliderEl.addEventListener("touchstart", () => {
+            if (powerScheduleLocked) {
+                if (powerSchedulePercent !== null) {
+                    renderPowerState(powerSchedulePercent);
+                }
+                showPowerScheduleLockedMessage();
+                return;
+            }
             isDraggingPower = true;
             if (powerLeverEl) {
                 powerLeverEl.classList.add("is-dragging");
             }
         }, { passive: true });
         powerSliderEl.addEventListener("input", () => {
+            if (powerScheduleLocked) {
+                if (powerSchedulePercent !== null) {
+                    renderPowerState(powerSchedulePercent);
+                }
+                showPowerScheduleLockedMessage();
+                return;
+            }
             renderPowerState(powerSliderEl.value);
             powerStatusEl.textContent = "";
         });
         powerSliderEl.addEventListener("change", () => {
+            if (powerScheduleLocked) {
+                if (powerSchedulePercent !== null) {
+                    renderPowerState(powerSchedulePercent);
+                }
+                showPowerScheduleLockedMessage();
+                return;
+            }
             isDraggingPower = false;
             if (powerLeverEl) {
                 powerLeverEl.classList.remove("is-dragging");
@@ -539,6 +601,13 @@
             schedulePowerApply();
         });
         powerSliderEl.addEventListener("mouseup", () => {
+            if (powerScheduleLocked) {
+                if (powerSchedulePercent !== null) {
+                    renderPowerState(powerSchedulePercent);
+                }
+                showPowerScheduleLockedMessage();
+                return;
+            }
             isDraggingPower = false;
             if (powerLeverEl) {
                 powerLeverEl.classList.remove("is-dragging");
@@ -546,6 +615,13 @@
             schedulePowerApply();
         });
         powerSliderEl.addEventListener("touchend", () => {
+            if (powerScheduleLocked) {
+                if (powerSchedulePercent !== null) {
+                    renderPowerState(powerSchedulePercent);
+                }
+                showPowerScheduleLockedMessage();
+                return;
+            }
             isDraggingPower = false;
             if (powerLeverEl) {
                 powerLeverEl.classList.remove("is-dragging");
@@ -553,6 +629,13 @@
             schedulePowerApply();
         }, { passive: true });
         powerSliderEl.addEventListener("pointerup", () => {
+            if (powerScheduleLocked) {
+                if (powerSchedulePercent !== null) {
+                    renderPowerState(powerSchedulePercent);
+                }
+                showPowerScheduleLockedMessage();
+                return;
+            }
             isDraggingPower = false;
             if (powerLeverEl) {
                 powerLeverEl.classList.remove("is-dragging");

@@ -23,6 +23,12 @@ $daemonName = $_GET['daemon'] ?? '';
     <div class="content">
         <?php
         if (in_array($daemonName, $config['daemonNames'], true)) {
+            $info = root_helper_request([
+                'action' => 'service_info',
+                'modules' => $config['daemonNames'],
+                'module' => $daemonName,
+            ]);
+            $wasActiveBeforeSave = (($info['ok'] ?? false) === true) ? (bool)($info['active'] ?? false) : false;
             if (!empty($_POST)) {
                 $saveOk = false;
                 $saveError = '';
@@ -64,7 +70,7 @@ $daemonName = $_GET['daemon'] ?? '';
                         ;
                     }
                 }
-                if ($saveOk) {
+                if ($saveOk && $wasActiveBeforeSave) {
                     $restartResponse = root_helper_request([
                         'action' => 'service_restart',
                         'modules' => $config['daemonNames'],
@@ -76,7 +82,11 @@ $daemonName = $_GET['daemon'] ?? '';
                 }
                 if ($saveOk) {
                     $feedbackClass = 'status active';
-                    $feedbackText = t('service_updated');
+                    if ($wasActiveBeforeSave && $restartError === '') {
+                        $feedbackText = t('settings_saved_and_restarted');
+                    } else {
+                        $feedbackText = t('settings_saved');
+                    }
                     if ($restartError !== '') {
                         $feedbackSecondary = t($restartError);
                     }
@@ -112,11 +122,6 @@ $daemonName = $_GET['daemon'] ?? '';
             <h1><?= htmlspecialchars(t('settings_for', ['module' => $daemonName]), ENT_QUOTES, 'UTF-8') ?></h1>
             <h2><?= htmlspecialchars(t('status_label'), ENT_QUOTES, 'UTF-8') ?></h2>
             <?php
-            $info = root_helper_request([
-                'action' => 'service_info',
-                'modules' => $config['daemonNames'],
-                'module' => $daemonName,
-            ]);
             $isActive = (($info['ok'] ?? false) === true) ? (bool)($info['active'] ?? false) : false;
             if ($isActive) {
                 echo htmlspecialchars(t('module_running', ['module' => $daemonName]), ENT_QUOTES, 'UTF-8');

@@ -5,6 +5,7 @@ require_once 'lib/footer.php';
 $config = require 'config/config.php';
 $daemonNames = $config['daemonNames'];
 const MAX_SCHEDULE_INTERVALS = 2;
+const DEFAULT_SCHEDULE_POWER_PERCENT = 31;
 
 function getCurrentAutostartDaemon(array $daemonNames): ?string
 {
@@ -45,6 +46,19 @@ function normalizeScheduleDays(array $rawDays): array
     return $days;
 }
 
+function normalizeSchedulePowerPercent($value): ?int
+{
+    $raw = trim((string)$value);
+    if ($raw === '' || preg_match('/^\d+$/', $raw) !== 1) {
+        return null;
+    }
+    $percent = (int)$raw;
+    if ($percent < 25 || $percent > 100) {
+        return null;
+    }
+    return $percent;
+}
+
 function getCurrentSchedules(array $daemonNames): array
 {
     $response = root_helper_request([
@@ -63,6 +77,7 @@ function getCurrentSchedules(array $daemonNames): array
         $module = $entry['module'] ?? '';
         $start = $entry['start'] ?? '';
         $stop = $entry['stop'] ?? '';
+        $powerPercent = normalizeSchedulePowerPercent($entry['powerPercent'] ?? null);
         $days = normalizeScheduleDays((array)($entry['days'] ?? []));
         if (
             is_string($module) &&
@@ -76,6 +91,7 @@ function getCurrentSchedules(array $daemonNames): array
                 'days' => $days,
                 'start' => (string)$start,
                 'stop' => (string)$stop,
+                'powerPercent' => $powerPercent ?? DEFAULT_SCHEDULE_POWER_PERCENT,
                 'day_mode' => (count($days) === 7) ? 'all' : 'specific',
             ];
         }
@@ -133,6 +149,7 @@ if ($scheduleEntriesForForm === []) {
         'days' => [0, 1, 2, 3, 4, 5, 6],
         'start' => '09:00',
         'stop' => '21:00',
+        'powerPercent' => DEFAULT_SCHEDULE_POWER_PERCENT,
     ];
 }
 
@@ -148,10 +165,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message = $ok ? t('autostart_updated') : t('autostart_update_failed');
         $messageClass = $ok ? 'status active' : 'status inactive';
         $currentAutostart = getCurrentAutostartDaemon($daemonNames);
+        $currentSchedules = getCurrentSchedules($daemonNames);
+        $scheduleEnabled = count($currentSchedules) > 0;
+        $scheduleEntriesForForm = ($currentSchedules === []) ? [[
+            'module' => $daemonNames[0] ?? '',
+            'day_mode' => 'all',
+            'days' => [0, 1, 2, 3, 4, 5, 6],
+            'start' => '09:00',
+            'stop' => '21:00',
+            'powerPercent' => DEFAULT_SCHEDULE_POWER_PERCENT,
+        ]] : $currentSchedules;
     } elseif ($action === 'schedule_save') {
         $scheduleEnabled = ($_POST['schedule_enabled'] ?? '0') === '1';
         $rawEntries = $_POST['schedule_entries'] ?? [];
         $normalizedEntries = [];
+        $scheduleError = '';
         if (is_array($rawEntries)) {
             foreach ($rawEntries as $entry) {
                 if (!is_array($entry)) {
@@ -162,9 +190,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $daysRaw = $entry['days'] ?? [];
                 $start = (string)($entry['start'] ?? '');
                 $stop = (string)($entry['stop'] ?? '');
+                $powerPercent = normalizeSchedulePowerPercent($entry['powerPercent'] ?? null);
                 $daysNorm = ($dayMode === 'specific' && is_array($daysRaw))
                     ? normalizeScheduleDays($daysRaw)
                     : [0, 1, 2, 3, 4, 5, 6];
+                if ($powerPercent === null) {
+                    $scheduleError = 'invalid_schedule_power_percent';
+                    break;
+                }
                 if (
                     in_array($module, $daemonNames, true) &&
                     $daysNorm !== [] &&
@@ -176,6 +209,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'days' => $daysNorm,
                         'start' => $start,
                         'stop' => $stop,
+                        'powerPercent' => $powerPercent,
                     ];
                 }
                 if (count($normalizedEntries) >= MAX_SCHEDULE_INTERVALS) {
@@ -186,14 +220,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$scheduleEnabled) {
             $ok = saveScheduleEntries($daemonNames, []);
+        } elseif ($scheduleError !== '') {
+            $ok = false;
         } elseif ($normalizedEntries === []) {
             $ok = false;
         } else {
             $ok = saveScheduleEntries($daemonNames, $normalizedEntries);
         }
 
-        $message = $ok ? t('schedule_updated') : t('schedule_update_failed');
+        $message = $ok ? t('schedule_updated') : ($scheduleError !== '' ? t($scheduleError) : t('schedule_update_failed'));
         $messageClass = $ok ? 'status active' : 'status inactive';
+        $currentAutostart = getCurrentAutostartDaemon($daemonNames);
         $currentSchedules = getCurrentSchedules($daemonNames);
         $scheduleEnabled = count($currentSchedules) > 0;
         $scheduleEntriesForForm = ($currentSchedules === []) ? [[
@@ -202,6 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'days' => [0, 1, 2, 3, 4, 5, 6],
             'start' => '09:00',
             'stop' => '21:00',
+            'powerPercent' => DEFAULT_SCHEDULE_POWER_PERCENT,
         ]] : $currentSchedules;
     }
 }
@@ -214,6 +252,7 @@ foreach ($currentSchedules as $idx => $entry) {
         'days' => buildDaySummary((array)$entry['days'], $days),
         'start' => (string)$entry['start'],
         'stop' => (string)$entry['stop'],
+        'power' => (string)((int)($entry['powerPercent'] ?? DEFAULT_SCHEDULE_POWER_PERCENT)) . '%',
     ]);
 }
 ?>
@@ -240,6 +279,7 @@ foreach ($currentSchedules as $idx => $entry) {
             <div class="status <?= $currentAutostart ? 'active' : 'inactive' ?>">
                 <?= htmlspecialchars($currentAutostart ? t('autostart_for', ['module' => strtoupper($currentAutostart)]) : t('autostart_none'), ENT_QUOTES, 'UTF-8') ?>
             </div>
+            <div class="schedule-limit-hint"><?= htmlspecialchars(t('autostart_help'), ENT_QUOTES, 'UTF-8') ?></div>
         </div>
 
         <div class="form-container">
@@ -271,6 +311,7 @@ foreach ($currentSchedules as $idx => $entry) {
                     <?= htmlspecialchars(t('schedule_disabled'), ENT_QUOTES, 'UTF-8') ?>
                 <?php endif; ?>
             </div>
+            <div class="schedule-limit-hint"><?= htmlspecialchars(t('schedule_help'), ENT_QUOTES, 'UTF-8') ?></div>
         </div>
 
         <div class="form-container">
@@ -292,6 +333,7 @@ foreach ($currentSchedules as $idx => $entry) {
                         $entryModule = (string)($entry['module'] ?? ($daemonNames[0] ?? ''));
                         $entryStart = (string)($entry['start'] ?? '09:00');
                         $entryStop = (string)($entry['stop'] ?? '21:00');
+                        $entryPowerPercent = (int)($entry['powerPercent'] ?? DEFAULT_SCHEDULE_POWER_PERCENT);
                         ?>
                         <div class="schedule-interval-card" data-idx="<?= $idx ?>">
                             <div class="schedule-interval-head">
@@ -343,6 +385,32 @@ foreach ($currentSchedules as $idx => $entry) {
                                     <input type="time" name="schedule_entries[<?= $idx ?>][stop]" value="<?= htmlspecialchars($entryStop, ENT_QUOTES, 'UTF-8') ?>" class="interval-stop">
                                 </div>
                             </div>
+                            <div class="form-group schedule-power-group">
+                                <label><?= htmlspecialchars(t('schedule_power_percent'), ENT_QUOTES, 'UTF-8') ?></label>
+                                <div class="schedule-power-control">
+                                    <div class="power-lever-head schedule-power-head">
+                                        <div class="power-lever-value schedule-power-value">
+                                            <span class="schedule-power-percent"><?= htmlspecialchars((string)$entryPowerPercent, ENT_QUOTES, 'UTF-8') ?>%</span>
+                                            <span class="schedule-power-rate"></span>
+                                        </div>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="25"
+                                        max="100"
+                                        step="1"
+                                        value="<?= htmlspecialchars((string)$entryPowerPercent, ENT_QUOTES, 'UTF-8') ?>"
+                                        name="schedule_entries[<?= $idx ?>][powerPercent]"
+                                        class="power-slider schedule-power-slider"
+                                    >
+                                    <div class="power-scale schedule-power-scale">
+                                        <span>25%</span>
+                                        <span>50%</span>
+                                        <span>80%</span>
+                                        <span>100%</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     <?php endforeach; ?>
                 </div>
@@ -376,6 +444,28 @@ foreach ($currentSchedules as $idx => $entry) {
         return;
     }
 
+    function percentToMbit(percent) {
+        const clamped = Math.max(25, Math.min(100, Number(percent) || 100));
+        if (clamped <= 80) {
+            return Math.round(20 + ((clamped - 25) * (300 - 20) / (80 - 25)));
+        }
+        return Math.round(300 + ((clamped - 80) * (750 - 300) / (100 - 80)));
+    }
+
+    function refreshPowerControl(card) {
+        const slider = card.querySelector('.schedule-power-slider');
+        const percentEl = card.querySelector('.schedule-power-percent');
+        const rateEl = card.querySelector('.schedule-power-rate');
+        if (!slider || !percentEl || !rateEl) {
+            return;
+        }
+        const value = Math.max(25, Math.min(100, Number(slider.value) || 100));
+        slider.value = String(value);
+        slider.style.setProperty('--power-fill', ((value - 25) / 75 * 100).toFixed(2) + '%');
+        percentEl.textContent = String(value) + '%';
+        rateEl.textContent = String(percentToMbit(value)) + ' Мбіт/с';
+    }
+
     function reindexIntervals() {
         const cards = Array.from(intervalsEl.querySelectorAll('.schedule-interval-card'));
         cards.forEach((card, idx) => {
@@ -384,6 +474,7 @@ foreach ($currentSchedules as $idx => $entry) {
             if (title) {
                 title.textContent = texts.interval.replace('{{num}}', String(idx + 1));
             }
+            refreshPowerControl(card);
             const elements = card.querySelectorAll('input, select, label');
             elements.forEach((el) => {
                 if (el.name) {
@@ -405,7 +496,7 @@ foreach ($currentSchedules as $idx => $entry) {
         const dayModeEl = card.querySelector('.interval-day-mode');
         const daysGrid = card.querySelector('.interval-days-grid');
         const dayChecks = card.querySelectorAll('.schedule-day-checkbox');
-        const controls = card.querySelectorAll('.interval-module, .interval-day-mode, .interval-start, .interval-stop');
+        const controls = card.querySelectorAll('.interval-module, .interval-day-mode, .interval-start, .interval-stop, .schedule-power-slider');
         controls.forEach((el) => {
             el.disabled = !enabledGlobal;
         });
@@ -421,6 +512,7 @@ foreach ($currentSchedules as $idx => $entry) {
     function bindCard(card) {
         const removeBtn = card.querySelector('.remove-interval-btn');
         const dayModeEl = card.querySelector('.interval-day-mode');
+        const powerSliderEl = card.querySelector('.schedule-power-slider');
         if (removeBtn) {
             removeBtn.addEventListener('click', () => {
                 const cards = intervalsEl.querySelectorAll('.schedule-interval-card');
@@ -434,6 +526,10 @@ foreach ($currentSchedules as $idx => $entry) {
         }
         if (dayModeEl) {
             dayModeEl.addEventListener('change', refreshState);
+        }
+        if (powerSliderEl) {
+            powerSliderEl.addEventListener('input', () => refreshPowerControl(card));
+            refreshPowerControl(card);
         }
     }
 
@@ -459,6 +555,8 @@ foreach ($currentSchedules as $idx => $entry) {
                 el.checked = false;
             } else if (el.type === 'time') {
                 el.value = (el.classList.contains('interval-start')) ? '09:00' : '21:00';
+            } else if (el.classList.contains('schedule-power-slider')) {
+                el.value = <?= json_encode((string)DEFAULT_SCHEDULE_POWER_PERCENT, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
             }
         });
         clone.querySelectorAll('select').forEach((el) => {
