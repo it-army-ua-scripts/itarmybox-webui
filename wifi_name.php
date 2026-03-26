@@ -38,6 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
         $ok = (($response['ok'] ?? false) === true);
         $message = $ok ? t('wifi_ap_name_saved') : t('wifi_ap_name_failed');
+        if (!$ok && isset($response['error']) && is_string($response['error']) && $response['error'] !== '') {
+            $message .= ' (' . $response['error'] . ')';
+        }
         $messageClass = $ok ? 'status active' : 'status inactive';
         $status = wifi_name_status($modules);
     }

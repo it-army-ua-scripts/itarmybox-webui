@@ -39,6 +39,15 @@ function runCommand(string $command, ?int &$exitCode = null): string
     return implode("\n", $output);
 }
 
+function runCommandVerbose(string $command, ?int &$exitCode = null): string
+{
+    $output = [];
+    $code = 1;
+    exec($command . ' 2>&1', $output, $code);
+    $exitCode = $code;
+    return implode("\n", $output);
+}
+
 function findTcBinary(): ?string
 {
     foreach (['/usr/sbin/tc', '/sbin/tc'] as $path) {
@@ -57,6 +66,11 @@ function findExecutable(array $paths): ?string
         }
     }
     return null;
+}
+
+function findServiceBinary(): ?string
+{
+    return findExecutable(['/usr/sbin/service', '/usr/bin/service', '/sbin/service', '/bin/service']);
 }
 
 function findAptGet(): ?string
@@ -374,14 +388,33 @@ function setWifiApName($value): array
         return ['ok' => false, 'error' => 'hostapd_config_write_failed'];
     }
 
+    $restartOutput = '';
     $systemctl = findSystemctl();
-    if ($systemctl === null) {
-        return ['ok' => false, 'error' => 'systemctl_not_found'];
+    if ($systemctl !== null) {
+        $restartOutput = runCommandVerbose(
+            escapeshellarg($systemctl) . ' restart ' . escapeshellarg(HOSTAPD_SERVICE_NAME),
+            $restartCode
+        );
+        if ($restartCode === 0) {
+            $restartOutput = '';
+        }
+    } else {
+        $restartCode = 1;
     }
 
-    runCommand(escapeshellarg($systemctl) . ' restart ' . escapeshellarg(HOSTAPD_SERVICE_NAME), $restartCode);
     if ($restartCode !== 0) {
-        return ['ok' => false, 'error' => 'hostapd_restart_failed'];
+        $service = findServiceBinary();
+        if ($service !== null) {
+            $restartOutput = runCommandVerbose(
+                escapeshellarg($service) . ' hostapd restart',
+                $serviceCode
+            );
+            $restartCode = $serviceCode;
+        }
+    }
+
+    if ($restartCode !== 0) {
+        return ['ok' => false, 'error' => 'hostapd_restart_failed', 'details' => $restartOutput];
     }
 
     $state = readWifiApName();
