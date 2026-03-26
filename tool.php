@@ -154,7 +154,7 @@ function render_module_action_form(string $path, string $daemonName, string $lab
         }
         ?>
         <div class="menu">
-            <a href="<?= htmlspecialchars(url_with_lang('/tools_list.php'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('back'), ENT_QUOTES, 'UTF-8') ?></a>
+            <?= render_back_link('/tools_list.php') ?>
         </div>
     </div>
 </div>

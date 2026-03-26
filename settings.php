@@ -23,7 +23,7 @@ require_once 'lib/footer.php';
             <li><a href="<?= htmlspecialchars(url_with_lang('/time_sync.php'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('time_sync'), ENT_QUOTES, 'UTF-8') ?></a></li>
             <li><a href="<?= htmlspecialchars(url_with_lang('/update.php'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('update'), ENT_QUOTES, 'UTF-8') ?></a></li>
             <li><a href="<?= htmlspecialchars(url_with_lang('/reboot.php'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('reboot_system'), ENT_QUOTES, 'UTF-8') ?></a></li>
-            <li><a href="<?= htmlspecialchars(url_with_lang('/'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('back'), ENT_QUOTES, 'UTF-8') ?></a></li>
+            <li><?= render_back_link('/') ?></li>
         </ul>
     </div>
 </div>

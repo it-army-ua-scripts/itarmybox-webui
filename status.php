@@ -107,7 +107,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     </div>
 
     <div class="menu">
-        <a href="<?= htmlspecialchars(url_with_lang('/'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('back'), ENT_QUOTES, 'UTF-8') ?></a>
+        <?= render_back_link('/') ?>
     </div>
 </div>
 <script id="status-config" type="application/json"><?= json_encode([

@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="log-box tool-log-box"><?= nl2br(htmlspecialchars($updateLog !== '' ? $updateLog : t('update_branch_select_hint'), ENT_QUOTES, 'UTF-8')) ?></div>
         </div>
         <div class="menu">
-            <a href="<?= htmlspecialchars(url_with_lang('/'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('back'), ENT_QUOTES, 'UTF-8') ?></a>
+            <?= render_back_link('/') ?>
         </div>
     </div>
 </div>

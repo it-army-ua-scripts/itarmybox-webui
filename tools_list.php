@@ -25,7 +25,7 @@ require_once 'lib/footer.php';
                 echo '<li><a href="' . htmlspecialchars(url_with_lang('/tool.php?daemon=' . rawurlencode($daemon)), ENT_QUOTES, 'UTF-8') . '">' . strtoupper($daemon) . '</a></li>';
             }
             ?>
-            <li><a href="<?= htmlspecialchars(url_with_lang('/'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('back'), ENT_QUOTES, 'UTF-8') ?></a></li>
+            <li><?= render_back_link('/') ?></li>
         </ul>
     </div>
 </div>
