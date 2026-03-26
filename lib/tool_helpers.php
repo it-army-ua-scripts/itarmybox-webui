@@ -342,11 +342,15 @@ function getDistressAutotuneSettings(): array
     return [
         'ok' => true,
         'enabled' => ($response['enabled'] ?? false) === true,
+        'serviceActive' => ($response['serviceActive'] ?? false) === true,
         'currentConcurrency' => (int)($response['currentConcurrency'] ?? DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY),
         'defaultConcurrency' => (int)($response['defaultConcurrency'] ?? DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY),
         'step' => (int)($response['step'] ?? 500),
         'cpuHigh' => (float)($response['cpuHigh'] ?? 95),
         'cpuLow' => (float)($response['cpuLow'] ?? 70),
+        'cooldownSeconds' => (int)($response['cooldownSeconds'] ?? 60),
+        'cooldownRemaining' => (int)($response['cooldownRemaining'] ?? 0),
+        'statusKey' => (string)($response['statusKey'] ?? 'distress_autotune_status_active'),
     ];
 }
 

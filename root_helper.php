@@ -467,15 +467,33 @@ function getDistressAutotuneStatus(): array
         writeDistressAutotuneState($state);
     }
 
+    $enabled = ($state['enabled'] ?? false) === true;
+    $serviceActive = serviceIsActive('distress');
+    $cooldownRemaining = 0;
+    $statusKey = 'distress_autotune_status_active';
+    if (!$enabled) {
+        $statusKey = 'distress_autotune_status_manual';
+    } elseif (!$serviceActive) {
+        $statusKey = 'distress_autotune_status_inactive';
+    } else {
+        $cooldownRemaining = max(0, DISTRESS_AUTOTUNE_COOLDOWN_SECONDS - (time() - (int)($state['lastAdjustedAt'] ?? 0)));
+        if ($cooldownRemaining > 0) {
+            $statusKey = 'distress_autotune_status_cooldown';
+        }
+    }
+
     return [
         'ok' => true,
-        'enabled' => ($state['enabled'] ?? false) === true,
+        'enabled' => $enabled,
+        'serviceActive' => $serviceActive,
         'currentConcurrency' => $currentConcurrency,
         'defaultConcurrency' => DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY,
         'step' => DISTRESS_AUTOTUNE_STEP,
         'cpuHigh' => DISTRESS_AUTOTUNE_HIGH_CPU,
         'cpuLow' => DISTRESS_AUTOTUNE_LOW_CPU,
         'cooldownSeconds' => DISTRESS_AUTOTUNE_COOLDOWN_SECONDS,
+        'cooldownRemaining' => $cooldownRemaining,
+        'statusKey' => $statusKey,
         'lastAdjustedAt' => (int)($state['lastAdjustedAt'] ?? 0),
         'lastCpuPercent' => $state['lastCpuPercent'] ?? null,
     ];

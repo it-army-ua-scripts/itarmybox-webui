@@ -3,6 +3,10 @@
     $distressAutotune = getDistressAutotuneSettings();
     $distressConcurrencyMode = (($distressAutotune['enabled'] ?? true) === true) ? 'auto' : 'manual';
     $distressConcurrencyValue = (string)($currentAdjustableParams['concurrency'] ?? ($distressAutotune['currentConcurrency'] ?? DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY));
+    $distressAutotuneStatusKey = (string)($distressAutotune['statusKey'] ?? 'distress_autotune_status_active');
+    $distressAutotuneStatusText = $distressAutotuneStatusKey === 'distress_autotune_status_cooldown'
+        ? t($distressAutotuneStatusKey, ['seconds' => (string)($distressAutotune['cooldownRemaining'] ?? 0)])
+        : t($distressAutotuneStatusKey);
     $distressUseMyIp = (int)($currentAdjustableParams['use-my-ip'] ?? 0);
     $distressFloodControlsEnabled = $distressUseMyIp > 0;
     $distressDisableUdpFlood = (string)($currentAdjustableParams['disable-udp-flood'] ?? '0');
@@ -22,6 +26,8 @@
             <option value="manual"<?= $distressConcurrencyMode === 'manual' ? ' selected' : '' ?>><?= htmlspecialchars(t('manual_mode'), ENT_QUOTES, 'UTF-8') ?></option>
         </select>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_concurrency_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_status_label'), ENT_QUOTES, 'UTF-8') ?> <?= htmlspecialchars($distressAutotuneStatusText, ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_current_value', ['value' => $distressConcurrencyValue]), ENT_QUOTES, 'UTF-8') ?></div>
     </div>
     <div class="form-group">
         <label for="concurrency"><?= htmlspecialchars(t('number_task_creators'), ENT_QUOTES, 'UTF-8') ?></label>
