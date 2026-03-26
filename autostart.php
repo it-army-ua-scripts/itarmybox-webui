@@ -282,6 +282,19 @@ foreach ($currentSchedules as $idx => $entry) {
             <div class="schedule-limit-hint"><?= htmlspecialchars(t('autostart_help'), ENT_QUOTES, 'UTF-8') ?></div>
         </div>
 
+        <div class="autostart-link-card" id="autostart-link-card">
+            <div class="autostart-link-title"><?= htmlspecialchars(t('autostart_schedule_link_title'), ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="autostart-link-body"><?= htmlspecialchars(t('autostart_schedule_link_body'), ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="autostart-link-pills">
+                <span class="autostart-link-pill" id="autostart-link-pill-autostart">
+                    <?= htmlspecialchars($currentAutostart ? t('autostart_schedule_link_autostart', ['module' => strtoupper($currentAutostart)]) : t('autostart_schedule_link_disabled'), ENT_QUOTES, 'UTF-8') ?>
+                </span>
+                <span class="autostart-link-pill" id="autostart-link-pill-schedule">
+                    <?= htmlspecialchars($scheduleEnabled ? t('autostart_schedule_link_schedule_on') : t('autostart_schedule_link_schedule_off'), ENT_QUOTES, 'UTF-8') ?>
+                </span>
+            </div>
+        </div>
+
         <div class="form-container">
             <form method="post" action="">
                 <input type="hidden" name="action" value="autostart_save">
@@ -337,7 +350,10 @@ foreach ($currentSchedules as $idx => $entry) {
                         ?>
                         <div class="schedule-interval-card" data-idx="<?= $idx ?>">
                             <div class="schedule-interval-head">
-                                <div class="service-title schedule-interval-title"><?= htmlspecialchars(t('schedule_interval', ['num' => (string)($idx + 1)]), ENT_QUOTES, 'UTF-8') ?></div>
+                                <div class="schedule-interval-head-main">
+                                    <div class="service-title schedule-interval-title"><?= htmlspecialchars(t('schedule_interval', ['num' => (string)($idx + 1)]), ENT_QUOTES, 'UTF-8') ?></div>
+                                    <span class="schedule-interval-live" hidden><?= htmlspecialchars(t('schedule_active_now'), ENT_QUOTES, 'UTF-8') ?></span>
+                                </div>
                                 <button type="button" class="lang-btn remove-interval-btn"><?= htmlspecialchars(t('remove_interval'), ENT_QUOTES, 'UTF-8') ?></button>
                             </div>
                             <div class="form-group">
@@ -542,6 +558,62 @@ foreach ($currentSchedules as $idx => $entry) {
         removeButtons.forEach((btn) => {
             btn.disabled = !enabled || cards.length <= 1;
         });
+        refreshActiveIntervals();
+    }
+
+    function normalizeDays(rawDays) {
+        const values = Array.from(rawDays)
+            .map((el) => Number(el.value))
+            .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6)
+            .sort((a, b) => a - b);
+        return Array.from(new Set(values));
+    }
+
+    function isIntervalActive(card) {
+        const dayModeEl = card.querySelector('.interval-day-mode');
+        const checkedDays = normalizeDays(card.querySelectorAll('.schedule-day-checkbox:checked'));
+        const startEl = card.querySelector('.interval-start');
+        const stopEl = card.querySelector('.interval-stop');
+        const start = startEl ? String(startEl.value || '') : '';
+        const stop = stopEl ? String(stopEl.value || '') : '';
+        if (!start || !stop) {
+            return false;
+        }
+
+        const days = dayModeEl && dayModeEl.value === 'specific'
+            ? checkedDays
+            : [0, 1, 2, 3, 4, 5, 6];
+        if (days.length === 0 || start === stop) {
+            return false;
+        }
+
+        const now = new Date();
+        const weekday = now.getDay();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        const currentTime = hh + ':' + mm;
+        if (start < stop) {
+            return days.includes(weekday) && currentTime >= start && currentTime < stop;
+        }
+
+        const previousWeekday = (weekday + 6) % 7;
+        return (
+            (days.includes(weekday) && currentTime >= start) ||
+            (days.includes(previousWeekday) && currentTime < stop)
+        );
+    }
+
+    function refreshActiveIntervals() {
+        const enabled = enabledEl.value === '1';
+        const cards = Array.from(intervalsEl.querySelectorAll('.schedule-interval-card'));
+        cards.forEach((card) => {
+            const active = enabled && isIntervalActive(card);
+            card.classList.toggle('is-active-now', active);
+            const badge = card.querySelector('.schedule-interval-live');
+            if (badge) {
+                badge.hidden = !active;
+            }
+        });
     }
 
     function addInterval() {
@@ -580,6 +652,68 @@ foreach ($currentSchedules as $idx => $entry) {
     addBtn.addEventListener('click', addInterval);
     reindexIntervals();
     refreshState();
+    window.setInterval(refreshActiveIntervals, 30000);
+})();
+</script>
+<script>
+(() => {
+    const autostartEl = document.getElementById('autostart_daemon');
+    const scheduleEnabledEl = document.getElementById('schedule_enabled');
+    const autostartPillEl = document.getElementById('autostart-link-pill-autostart');
+    const schedulePillEl = document.getElementById('autostart-link-pill-schedule');
+    const texts = {
+        autostart: <?= json_encode(t('autostart_schedule_link_autostart', ['module' => '{{module}}']), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
+        autostartDisabled: <?= json_encode(t('autostart_schedule_link_disabled'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
+        scheduleOn: <?= json_encode(t('autostart_schedule_link_schedule_on'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
+        scheduleOff: <?= json_encode(t('autostart_schedule_link_schedule_off'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>
+    };
+    if (!autostartEl || !scheduleEnabledEl || !autostartPillEl || !schedulePillEl) {
+        return;
+    }
+    let previousAutostartText = autostartPillEl.textContent;
+    let previousScheduleText = schedulePillEl.textContent;
+
+    function pulseIfChanged(el, nextText, previousText) {
+        if (nextText === previousText) {
+            return previousText;
+        }
+        el.classList.remove('is-pulsing');
+        void el.offsetWidth;
+        el.classList.add('is-pulsing');
+        return nextText;
+    }
+
+    function refreshLinkState() {
+        const autostartValue = autostartEl.value;
+        const scheduleEnabled = scheduleEnabledEl.value === '1';
+        const nextAutostartText = autostartValue !== 'none'
+            ? texts.autostart.replace('{{module}}', autostartValue.toUpperCase())
+            : texts.autostartDisabled;
+        const nextScheduleText = scheduleEnabled ? texts.scheduleOn : texts.scheduleOff;
+        autostartPillEl.textContent = nextAutostartText;
+        schedulePillEl.textContent = nextScheduleText;
+        previousAutostartText = pulseIfChanged(autostartPillEl, nextAutostartText, previousAutostartText);
+        previousScheduleText = pulseIfChanged(schedulePillEl, nextScheduleText, previousScheduleText);
+        autostartPillEl.classList.toggle('is-active', autostartValue !== 'none');
+        schedulePillEl.classList.toggle('is-active', scheduleEnabled);
+    }
+
+    autostartEl.addEventListener('change', () => {
+        if (autostartEl.value !== 'none' && scheduleEnabledEl.value === '1') {
+            scheduleEnabledEl.value = '0';
+            scheduleEnabledEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        refreshLinkState();
+    });
+
+    scheduleEnabledEl.addEventListener('change', () => {
+        if (scheduleEnabledEl.value === '1' && autostartEl.value !== 'none') {
+            autostartEl.value = 'none';
+        }
+        refreshLinkState();
+    });
+
+    refreshLinkState();
 })();
 </script>
 <script>
