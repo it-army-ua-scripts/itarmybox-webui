@@ -28,25 +28,34 @@
         }
     }
 
-    function actionUrl(path, module) {
-        return path + "?daemon=" + encodeURIComponent(module) + "&lang=" + encodeURIComponent(config.lang || "uk");
+    function createActionForm(path, module, label) {
+        const form = document.createElement("form");
+        form.method = "post";
+        form.action = path + "?lang=" + encodeURIComponent(config.lang || "uk");
+
+        const daemonInput = document.createElement("input");
+        daemonInput.type = "hidden";
+        daemonInput.name = "daemon";
+        daemonInput.value = module;
+        form.appendChild(daemonInput);
+
+        const submitButton = document.createElement("button");
+        submitButton.type = "submit";
+        submitButton.textContent = label;
+        form.appendChild(submitButton);
+
+        return form;
     }
 
     function renderActiveModuleActions(activeModuleName, selectedModuleName) {
         activeModuleActionsEl.innerHTML = "";
         if (activeModuleName) {
-            const stopLink = document.createElement("a");
-            stopLink.href = actionUrl("/stop.php", activeModuleName);
-            stopLink.textContent = config.text.stop;
-            activeModuleActionsEl.appendChild(stopLink);
+            activeModuleActionsEl.appendChild(createActionForm("/stop.php", activeModuleName, config.text.stop));
             return;
         }
 
         if (selectedModuleName) {
-            const startLink = document.createElement("a");
-            startLink.href = actionUrl("/start.php", selectedModuleName);
-            startLink.textContent = config.text.start;
-            activeModuleActionsEl.appendChild(startLink);
+            activeModuleActionsEl.appendChild(createActionForm("/start.php", selectedModuleName, config.text.start));
         }
     }
 

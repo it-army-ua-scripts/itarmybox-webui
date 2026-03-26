@@ -6,6 +6,14 @@ require_once 'lib/footer.php';
 $config = require 'config/config.php';
 
 $daemonName = $_GET['daemon'] ?? '';
+
+function render_module_action_form(string $path, string $daemonName, string $label): string
+{
+    return '<div class="menu"><form method="post" action="' . htmlspecialchars(url_with_lang($path), ENT_QUOTES, 'UTF-8') . '">'
+        . '<input type="hidden" name="daemon" value="' . htmlspecialchars($daemonName, ENT_QUOTES, 'UTF-8') . '">'
+        . '<button type="submit">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</button>'
+        . '</form></div>';
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?= htmlspecialchars(app_lang(), ENT_QUOTES, 'UTF-8') ?>">
@@ -125,10 +133,10 @@ $daemonName = $_GET['daemon'] ?? '';
             $isActive = (($info['ok'] ?? false) === true) ? (bool)($info['active'] ?? false) : false;
             if ($isActive) {
                 echo htmlspecialchars(t('module_running', ['module' => $daemonName]), ENT_QUOTES, 'UTF-8');
-                echo '<div class="menu"><a href="' . htmlspecialchars(url_with_lang('/stop.php?daemon=' . rawurlencode($daemonName)), ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars(t('stop'), ENT_QUOTES, 'UTF-8') . '</a></div>';
+                echo render_module_action_form('/stop.php', $daemonName, t('stop'));
             } else {
                 echo htmlspecialchars(t('module_not_running', ['module' => $daemonName]), ENT_QUOTES, 'UTF-8');
-                echo '<div class="menu"><a href="' . htmlspecialchars(url_with_lang('/start.php?daemon=' . rawurlencode($daemonName)), ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars(t('start'), ENT_QUOTES, 'UTF-8') . '</a></div>';
+                echo render_module_action_form('/start.php', $daemonName, t('start'));
             }
 
             $statusText = trim((string)($info['statusText'] ?? ''));

@@ -383,7 +383,30 @@ h1 {
     transition: background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
 }
 
+.menu form {
+    margin: 0;
+}
+
+.menu button {
+    display: inline-block;
+    padding: 12px 20px;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #2c3e50;
+    background: #ecf0f1;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+}
+
 .menu a:hover {
+    background: #bdc3c7;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.menu button:hover {
     background: #bdc3c7;
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
@@ -798,6 +821,12 @@ h1 {
     }
 
     .status-page .menu a {
+        min-height: 46px;
+        padding: 10px 12px;
+        font-size: 0.95rem;
+    }
+
+    .status-page .menu button {
         min-height: 46px;
         padding: 10px 12px;
         font-size: 0.95rem;

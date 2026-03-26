@@ -45,7 +45,7 @@
     const userIdModalSnoozeKey = "itarmybox-userid-snooze-until";
     const appLangStorageKey = "itarmybox-lang";
     let activeLang = "uk";
-    let versionInfo = { current: "...", github: "..." };
+    let versionInfo = { branch: "...", current: "...", github: "..." };
     let copyBotHintTimer = null;
     let powerApplyTimer = null;
     let powerPendingPercent = null;
@@ -56,7 +56,7 @@
     let powerScheduleLocked = false;
     let powerScheduleModule = "";
     let powerSchedulePercent = null;
-    const trafficDesiredKey = 'itarmybox-traffic-desired';
+    const trafficDesiredKey = "itarmybox-traffic-desired";
 
     function getText() {
         return translations[activeLang] || translations.uk || translations.en || {};
@@ -210,14 +210,18 @@
 
         const footerVersionCurrentLabelEl = document.getElementById("footer-version-current-label");
         const footerVersionGithubLabelEl = document.getElementById("footer-version-github-label");
+        const footerBranchLabelEl = document.getElementById("footer-branch-label");
         const footerVersionCurrentEl = document.getElementById("footer-version-current");
         const footerVersionGithubEl = document.getElementById("footer-version-github");
+        const footerVersionBranchEl = document.getElementById("footer-version-branch");
         const footerUpdateStateEl = document.getElementById("footer-update-state");
         const footerUpdateActionEl = document.getElementById("footer-update-action");
         if (footerVersionCurrentLabelEl) footerVersionCurrentLabelEl.textContent = text.versionLabel;
         if (footerVersionGithubLabelEl) footerVersionGithubLabelEl.textContent = text.githubLabel;
+        if (footerBranchLabelEl) footerBranchLabelEl.textContent = text.branchLabel;
         if (footerVersionCurrentEl) footerVersionCurrentEl.textContent = versionInfo.current;
         if (footerVersionGithubEl) footerVersionGithubEl.textContent = versionInfo.github;
+        if (footerVersionBranchEl) footerVersionBranchEl.textContent = versionInfo.branch;
 
         const haveBoth = versionInfo.current !== "unknown" &&
             versionInfo.github !== "unknown" &&
@@ -482,6 +486,7 @@
                 return;
             }
             versionInfo = {
+                branch: data.branch || "...",
                 current: data.current || "unknown",
                 github: data.github || "unknown"
             };

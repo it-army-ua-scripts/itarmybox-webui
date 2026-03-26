@@ -6,14 +6,17 @@ $config = require 'config/config.php';
 $messageKey = '';
 $messageOk = false;
 
-if (isset($_GET['daemon']) && in_array($_GET['daemon'], $config['daemonNames'], true)) {
-    $response = root_helper_request([
-        'action' => 'service_stop',
-        'modules' => $config['daemonNames'],
-        'module' => (string)$_GET['daemon'],
-    ]);
-    $messageOk = (($response['ok'] ?? false) === true);
-    $messageKey = $messageOk ? 'stop_requested' : 'stop_failed';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $daemon = (string)($_POST['daemon'] ?? '');
+    if (in_array($daemon, $config['daemonNames'], true)) {
+        $response = root_helper_request([
+            'action' => 'service_stop',
+            'modules' => $config['daemonNames'],
+            'module' => $daemon,
+        ]);
+        $messageOk = (($response['ok'] ?? false) === true);
+        $messageKey = $messageOk ? 'stop_requested' : 'stop_failed';
+    }
 }
 
 if ($messageKey !== '') {
