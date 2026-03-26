@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 const WIFI_TXPOWER_STATE_FILE = '/opt/itarmy/wifi-txpower.json';
 const WIFI_AP_INTERFACE = 'wlan0';
+const WIFI_TXPOWER_MIN_CENTIDBM = 50;
+const WIFI_TXPOWER_MAX_CENTIDBM = 3100;
 
 function findExecutable(array $paths): ?string
 {
@@ -32,7 +34,7 @@ function readDesiredTxPower(): ?array
     }
 
     $centiDbm = $data['centiDbm'] ?? null;
-    if (!is_int($centiDbm) || $centiDbm < 0 || $centiDbm > 3100) {
+    if (!is_int($centiDbm) || $centiDbm < WIFI_TXPOWER_MIN_CENTIDBM || $centiDbm > WIFI_TXPOWER_MAX_CENTIDBM) {
         return null;
     }
 

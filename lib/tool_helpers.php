@@ -329,7 +329,7 @@ function normalizeAndValidateMhddosPostParams(array $params): array
 
     $threadsRaw = (string)($params['threads'] ?? '');
     if ($threadsRaw === '') {
-        $normalized['threads'] = '8000';
+        $normalized['threads'] = '6500';
     } else {
         if ($threadsRaw !== trim($threadsRaw) || preg_match('/^\d+$/', $threadsRaw) !== 1) {
             return ['ok' => false, 'error' => 'invalid_threads'];

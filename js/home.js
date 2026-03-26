@@ -50,6 +50,7 @@
     let powerApplyTimer = null;
     let powerPendingPercent = null;
     let headerHasData = false;
+    let vnstatStatusChecked = false;
     let vnstatInstallAttempted = false;
     let lastAutoApplyAt = 0;
     let isDraggingPower = false;
@@ -259,6 +260,34 @@
         }
     }
 
+    async function ensureVnstatAvailable() {
+        if (vnstatInstallAttempted || config.vnstatAutoInstall !== true) {
+            return;
+        }
+
+        try {
+            const status = await shared.fetchJson(config.vnstatInstallUrl || "/vnstat.php", { cache: "no-store" });
+            vnstatStatusChecked = true;
+            if (status && status.ok === true && status.ready === true) {
+                vnstatInstallAttempted = true;
+                return;
+            }
+        } catch (e) {
+            vnstatStatusChecked = true;
+        }
+
+        vnstatInstallAttempted = true;
+        try {
+            await shared.fetchJson(config.vnstatInstallUrl || "/vnstat.php", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ install: true })
+            });
+            window.setTimeout(refreshSystemMonitor, 4000);
+        } catch (e) {
+        }
+    }
+
     async function refreshTrafficLimit() {
         try {
             const data = await shared.fetchJson(config.trafficLimitUrl || "/traffic_limit.php", { cache: "no-store" });
@@ -404,20 +433,8 @@
                 monitorMemoryTempCardEl.hidden = true;
             }
 
-            if (!vnstatInstallAttempted && config.vnstatAutoInstall === true) {
-                const hasTodayTx = typeof data.todayTx === "string" && data.todayTx.trim() !== "";
-                if (!hasTodayTx) {
-                    vnstatInstallAttempted = true;
-                    try {
-                        await shared.fetchJson(config.vnstatInstallUrl || "/vnstat.php", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ install: true })
-                        });
-                        window.setTimeout(refreshSystemMonitor, 4000);
-                    } catch (e) {
-                    }
-                }
+            if (!vnstatStatusChecked && config.vnstatAutoInstall === true) {
+                await ensureVnstatAvailable();
             }
         } catch (e) {
             const fallback = getText().monitorUnavailable;

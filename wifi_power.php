@@ -4,6 +4,8 @@ require_once 'lib/footer.php';
 require_once 'lib/root_helper_client.php';
 
 const WIFI_AP_INTERFACE = 'wlan0';
+const WIFI_TXPOWER_MIN_DBM = '0.50';
+const WIFI_TXPOWER_MAX_DBM = '31.00';
 
 $modules = (require 'config/config.php')['daemonNames'];
 $message = '';
@@ -21,14 +23,19 @@ function format_dbm_value($value): string
 {
     return is_string($value) && preg_match('/^\d+(?:\.\d+)?$/', $value) === 1
         ? number_format((float)$value, 2, '.', '')
-        : '31.00';
+        : WIFI_TXPOWER_MAX_DBM;
 }
 
 $status = wifi_power_status($modules);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dbmRaw = trim((string)($_POST['wifi_txpower_dbm'] ?? ''));
-    if ($dbmRaw === '' || preg_match('/^\d+(?:\.\d{1,2})?$/', $dbmRaw) !== 1 || (float)$dbmRaw < 0 || (float)$dbmRaw > 31.0) {
+    if (
+        $dbmRaw === '' ||
+        preg_match('/^\d+(?:\.\d{1,2})?$/', $dbmRaw) !== 1 ||
+        (float)$dbmRaw < (float)WIFI_TXPOWER_MIN_DBM ||
+        (float)$dbmRaw > (float)WIFI_TXPOWER_MAX_DBM
+    ) {
         $message = t('wifi_ap_power_invalid');
         $messageClass = 'status inactive';
     } else {
@@ -44,9 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$currentDbm = (($status['ok'] ?? false) === true) ? format_dbm_value((string)($status['currentDbm'] ?? '31.00')) : null;
-$defaultDbm = format_dbm_value((string)($status['defaultDbm'] ?? '31.00'));
-$maxDbm = format_dbm_value((string)($status['maxDbm'] ?? '31.00'));
+$currentDbm = (($status['ok'] ?? false) === true) ? format_dbm_value((string)($status['currentDbm'] ?? WIFI_TXPOWER_MAX_DBM)) : null;
+$defaultDbm = format_dbm_value((string)($status['defaultDbm'] ?? WIFI_TXPOWER_MAX_DBM));
+$maxDbm = format_dbm_value((string)($status['maxDbm'] ?? WIFI_TXPOWER_MAX_DBM));
 $iface = WIFI_AP_INTERFACE;
 $inputValue = $currentDbm ?? $defaultDbm;
 ?>
@@ -88,7 +95,7 @@ $inputValue = $currentDbm ?? $defaultDbm;
                     </div>
                     <input
                         type="range"
-                        min="0"
+                        min="<?= htmlspecialchars(WIFI_TXPOWER_MIN_DBM, ENT_QUOTES, 'UTF-8') ?>"
                         max="31"
                         step="0.01"
                         value="<?= htmlspecialchars($inputValue, ENT_QUOTES, 'UTF-8') ?>"
@@ -96,14 +103,14 @@ $inputValue = $currentDbm ?? $defaultDbm;
                         class="power-slider schedule-power-slider"
                     >
                     <div class="power-scale schedule-power-scale">
-                        <span>0.00</span>
+                        <span><?= htmlspecialchars(WIFI_TXPOWER_MIN_DBM, ENT_QUOTES, 'UTF-8') ?></span>
                         <span>10.00</span>
                         <span>20.00</span>
-                        <span>31.00</span>
+                        <span><?= htmlspecialchars(WIFI_TXPOWER_MAX_DBM, ENT_QUOTES, 'UTF-8') ?></span>
                     </div>
                     <input
                         type="number"
-                        min="0"
+                        min="<?= htmlspecialchars(WIFI_TXPOWER_MIN_DBM, ENT_QUOTES, 'UTF-8') ?>"
                         max="31"
                         step="0.01"
                         id="wifi_txpower_dbm"
@@ -116,7 +123,7 @@ $inputValue = $currentDbm ?? $defaultDbm;
         </div>
 
         <div class="menu centered">
-            <?= render_back_link('/settings.php') ?>
+            <?= render_back_link('/wifi_settings.php') ?>
         </div>
     </div>
 </div>
@@ -131,7 +138,7 @@ $inputValue = $currentDbm ?? $defaultDbm;
     }
 
     function normalize(value) {
-        const numeric = Math.max(0, Math.min(31, Number(value) || 0));
+        const numeric = Math.max(0.5, Math.min(31, Number(value) || 0.5));
         return numeric.toFixed(2);
     }
 

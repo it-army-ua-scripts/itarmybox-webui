@@ -8,11 +8,16 @@ const MAX_SCHEDULE_ENTRIES = 2;
 const SCHEDULE_MANUAL_OVERRIDE_FILE = '/tmp/itarmybox-schedule-manual-override';
 const TRAFFIC_LIMIT_STATE_FILE = '/tmp/itarmybox-traffic-limit.json';
 const ROOT_HELPER_SCRIPT_PATH = '/var/www/html/itarmybox-webui/root_helper.php';
+const WIFI_TXPOWER_MIN_CENTIDBM = 50;
 const WIFI_TXPOWER_MAX_CENTIDBM = 3100;
 const WIFI_TXPOWER_DEFAULT_CENTIDBM = 3100;
 const WIFI_TXPOWER_STATE_FILE = '/opt/itarmy/wifi-txpower.json';
 const WIFI_TXPOWER_SERVICE_PATH = '/var/www/html/itarmybox-webui/systemd/itarmybox-wifi-txpower.service';
 const WIFI_AP_INTERFACE = 'wlan0';
+const WIFI_AP_DEFAULT_NAME = 'Artline';
+const HOSTAPD_CONFIG_PATH = '/etc/hostapd/hostapd.conf';
+const HOSTAPD_SERVICE_NAME = 'hostapd.service';
+const VNSTAT_INTERFACE = 'eth0';
 
 function respond(array $data): void
 {
@@ -59,29 +64,118 @@ function findAptGet(): ?string
     return findExecutable(['/usr/bin/apt-get', '/bin/apt-get', '/usr/bin/apt', '/bin/apt']);
 }
 
+function findVnstatBinary(): ?string
+{
+    return findExecutable(['/usr/bin/vnstat', '/bin/vnstat']);
+}
+
 function isVnstatInstalled(): bool
 {
-    return is_executable('/usr/bin/vnstat') || is_executable('/bin/vnstat');
+    return findVnstatBinary() !== null;
+}
+
+function isVnstatInterfaceReady(string $iface = VNSTAT_INTERFACE): bool
+{
+    $vnstat = findVnstatBinary();
+    if ($vnstat === null) {
+        return false;
+    }
+
+    $output = runCommand(
+        escapeshellarg($vnstat) . ' --oneline -i ' . escapeshellarg($iface),
+        $code
+    );
+    return $code === 0 && trim($output) !== '';
+}
+
+function getVnstatStatus(): array
+{
+    $iface = VNSTAT_INTERFACE;
+    $installed = isVnstatInstalled();
+    $serviceEnabled = false;
+    $serviceActive = false;
+    $databaseReady = false;
+
+    if ($installed) {
+        $systemctl = findSystemctl();
+        if ($systemctl !== null) {
+            runCommand(escapeshellarg($systemctl) . ' is-enabled vnstat.service', $enabledCode);
+            runCommand(escapeshellarg($systemctl) . ' is-active vnstat.service', $activeCode);
+            $serviceEnabled = $enabledCode === 0;
+            $serviceActive = $activeCode === 0;
+        }
+        $databaseReady = isVnstatInterfaceReady($iface);
+    }
+
+    return [
+        'ok' => true,
+        'installed' => $installed,
+        'iface' => $iface,
+        'serviceEnabled' => $serviceEnabled,
+        'serviceActive' => $serviceActive,
+        'databaseReady' => $databaseReady,
+        'ready' => $installed && $databaseReady,
+    ];
+}
+
+function ensureVnstatInterfaceDatabase(string $iface = VNSTAT_INTERFACE): bool
+{
+    if (isVnstatInterfaceReady($iface)) {
+        return true;
+    }
+
+    $vnstat = findVnstatBinary();
+    if ($vnstat === null) {
+        return false;
+    }
+
+    $ifaceArg = escapeshellarg($iface);
+    $commands = [
+        escapeshellarg($vnstat) . ' --add -i ' . $ifaceArg,
+        escapeshellarg($vnstat) . ' --create -i ' . $ifaceArg,
+    ];
+    foreach ($commands as $command) {
+        runCommand($command, $commandCode);
+        if (isVnstatInterfaceReady($iface)) {
+            return true;
+        }
+    }
+
+    return isVnstatInterfaceReady($iface);
 }
 
 function installVnstat(): array
 {
-    if (isVnstatInstalled()) {
-        return ['ok' => true, 'installed' => true, 'already' => true];
+    $alreadyInstalled = isVnstatInstalled();
+    if (!$alreadyInstalled) {
+        $apt = findAptGet();
+        if ($apt === null) {
+            return ['ok' => false, 'error' => 'apt_not_found'];
+        }
+
+        $cmd = 'DEBIAN_FRONTEND=noninteractive ' . escapeshellarg($apt) . ' install -y vnstat';
+        $output = runCommand($cmd, $code);
+        if ($code !== 0) {
+            return ['ok' => false, 'error' => 'vnstat_install_failed', 'output' => $output];
+        }
     }
 
-    $apt = findAptGet();
-    if ($apt === null) {
-        return ['ok' => false, 'error' => 'apt_not_found'];
+    if (!isVnstatInstalled()) {
+        return ['ok' => false, 'error' => 'vnstat_not_found_after_install'];
     }
 
-    $cmd = 'DEBIAN_FRONTEND=noninteractive ' . escapeshellarg($apt) . ' install -y vnstat';
-    $output = runCommand($cmd, $code);
-    if ($code !== 0) {
-        return ['ok' => false, 'error' => 'vnstat_install_failed', 'output' => $output];
+    $systemctl = findSystemctl();
+    if ($systemctl !== null) {
+        runCommand(escapeshellarg($systemctl) . ' enable vnstat.service', $enableCode);
+        runCommand(escapeshellarg($systemctl) . ' restart vnstat.service', $restartCode);
     }
 
-    return ['ok' => true, 'installed' => isVnstatInstalled()];
+    if (!ensureVnstatInterfaceDatabase(VNSTAT_INTERFACE)) {
+        return getVnstatStatus() + ['ok' => false, 'error' => 'vnstat_interface_init_failed'];
+    }
+
+    $status = getVnstatStatus();
+    return $status + ['already' => $alreadyInstalled];
 }
 
 function parseBoolString(string $value): ?bool
@@ -204,6 +298,100 @@ function getWifiApInterface(): string
     return WIFI_AP_INTERFACE;
 }
 
+function normalizeWifiSsid($value): ?string
+{
+    if (!is_string($value)) {
+        return null;
+    }
+
+    $ssid = trim($value);
+    if ($ssid === '' || preg_match('/[\x00-\x1F\x7F]/', $ssid) === 1) {
+        return null;
+    }
+
+    if (strlen($ssid) > 32) {
+        return null;
+    }
+
+    return $ssid;
+}
+
+function readWifiApName(): array
+{
+    $config = @file_get_contents(HOSTAPD_CONFIG_PATH);
+    if (!is_string($config) || $config === '') {
+        return [
+            'ok' => true,
+            'iface' => WIFI_AP_INTERFACE,
+            'ssid' => WIFI_AP_DEFAULT_NAME,
+            'defaultSsid' => WIFI_AP_DEFAULT_NAME,
+        ];
+    }
+
+    if (preg_match('/^\s*ssid=(.*)$/m', $config, $matches) !== 1) {
+        return [
+            'ok' => true,
+            'iface' => WIFI_AP_INTERFACE,
+            'ssid' => WIFI_AP_DEFAULT_NAME,
+            'defaultSsid' => WIFI_AP_DEFAULT_NAME,
+        ];
+    }
+
+    $ssid = trim((string)$matches[1]);
+    if ($ssid === '') {
+        $ssid = WIFI_AP_DEFAULT_NAME;
+    }
+
+    return [
+        'ok' => true,
+        'iface' => WIFI_AP_INTERFACE,
+        'ssid' => $ssid,
+        'defaultSsid' => WIFI_AP_DEFAULT_NAME,
+    ];
+}
+
+function setWifiApName($value): array
+{
+    $ssid = normalizeWifiSsid($value);
+    if ($ssid === null) {
+        return ['ok' => false, 'error' => 'invalid_wifi_ap_name'];
+    }
+
+    $config = @file_get_contents(HOSTAPD_CONFIG_PATH);
+    if (!is_string($config) || $config === '') {
+        return ['ok' => false, 'error' => 'hostapd_config_unavailable'];
+    }
+
+    $line = 'ssid=' . $ssid;
+    if (preg_match('/^\s*ssid=.*$/m', $config) === 1) {
+        $updated = preg_replace('/^\s*ssid=.*$/m', $line, $config, 1);
+    } else {
+        $separator = str_ends_with($config, "\n") ? '' : "\n";
+        $updated = $config . $separator . $line . "\n";
+    }
+
+    if (!is_string($updated) || @file_put_contents(HOSTAPD_CONFIG_PATH, $updated) === false) {
+        return ['ok' => false, 'error' => 'hostapd_config_write_failed'];
+    }
+
+    $systemctl = findSystemctl();
+    if ($systemctl === null) {
+        return ['ok' => false, 'error' => 'systemctl_not_found'];
+    }
+
+    runCommand(escapeshellarg($systemctl) . ' restart ' . escapeshellarg(HOSTAPD_SERVICE_NAME), $restartCode);
+    if ($restartCode !== 0) {
+        return ['ok' => false, 'error' => 'hostapd_restart_failed'];
+    }
+
+    $state = readWifiApName();
+    if (($state['ok'] ?? false) !== true) {
+        return ['ok' => false, 'error' => 'wifi_ap_name_verify_failed'];
+    }
+
+    return $state;
+}
+
 function centiDbmToDbmString(int $centiDbm): string
 {
     return number_format($centiDbm / 100, 2, '.', '');
@@ -269,7 +457,7 @@ function normalizeWifiTxPowerCentiDbm($value): ?int
         return null;
     }
 
-    if ($centiDbm < 0 || $centiDbm > WIFI_TXPOWER_MAX_CENTIDBM) {
+    if ($centiDbm < WIFI_TXPOWER_MIN_CENTIDBM || $centiDbm > WIFI_TXPOWER_MAX_CENTIDBM) {
         return null;
     }
     return $centiDbm;
@@ -1713,7 +1901,7 @@ if ($action === 'traffic_limit_set') {
 }
 
 if ($action === 'vnstat_status') {
-    respond(['ok' => true, 'installed' => isVnstatInstalled()]);
+    respond(getVnstatStatus());
     exit(0);
 }
 
@@ -1743,6 +1931,16 @@ if ($action === 'wifi_txpower_get') {
 
 if ($action === 'wifi_txpower_set') {
     respond(setWifiTxPower($request['dbm'] ?? null));
+    exit(0);
+}
+
+if ($action === 'wifi_ap_name_get') {
+    respond(readWifiApName());
+    exit(0);
+}
+
+if ($action === 'wifi_ap_name_set') {
+    respond(setWifiApName($request['ssid'] ?? null));
     exit(0);
 }
 
