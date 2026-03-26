@@ -1,0 +1,8 @@
+[Unit]
+Description=IT Army Box Distress autotune tick
+After=itarmybox-root-helper.socket
+Wants=itarmybox-root-helper.socket
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env php /var/www/html/itarmybox-webui/distress_autotune_tick.php

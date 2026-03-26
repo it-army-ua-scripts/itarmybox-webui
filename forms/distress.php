@@ -1,5 +1,8 @@
 <form method="post" action="">
     <?php
+    $distressAutotune = getDistressAutotuneSettings();
+    $distressConcurrencyMode = (($distressAutotune['enabled'] ?? true) === true) ? 'auto' : 'manual';
+    $distressConcurrencyValue = (string)($currentAdjustableParams['concurrency'] ?? ($distressAutotune['currentConcurrency'] ?? DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY));
     $distressUseMyIp = (int)($currentAdjustableParams['use-my-ip'] ?? 0);
     $distressFloodControlsEnabled = $distressUseMyIp > 0;
     $distressDisableUdpFlood = (string)($currentAdjustableParams['disable-udp-flood'] ?? '0');
@@ -13,8 +16,16 @@
         <input type="number" id="use-tor" name="use-tor" min="0" max="100" value="<?= $currentAdjustableParams['use-tor']??"" ?>" placeholder="<?= htmlspecialchars(t('placeholder_percent_default_0'), ENT_QUOTES, 'UTF-8') ?>">
     </div>
     <div class="form-group">
+        <label for="distress-concurrency-mode"><?= htmlspecialchars(t('distress_concurrency_mode'), ENT_QUOTES, 'UTF-8') ?></label>
+        <select id="distress-concurrency-mode" name="distress-concurrency-mode">
+            <option value="auto"<?= $distressConcurrencyMode === 'auto' ? ' selected' : '' ?>><?= htmlspecialchars(t('auto_mode'), ENT_QUOTES, 'UTF-8') ?></option>
+            <option value="manual"<?= $distressConcurrencyMode === 'manual' ? ' selected' : '' ?>><?= htmlspecialchars(t('manual_mode'), ENT_QUOTES, 'UTF-8') ?></option>
+        </select>
+        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_concurrency_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
+    </div>
+    <div class="form-group">
         <label for="concurrency"><?= htmlspecialchars(t('number_task_creators'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="text" id="concurrency" name="concurrency" value="<?= $currentAdjustableParams['concurrency']??"" ?>" placeholder="<?= htmlspecialchars(t('placeholder_digits_default_4096'), ENT_QUOTES, 'UTF-8') ?>">
+        <input type="text" id="concurrency" name="concurrency" value="<?= htmlspecialchars($distressConcurrencyValue, ENT_QUOTES, 'UTF-8') ?>" placeholder="<?= htmlspecialchars(t('placeholder_digits_default_4096'), ENT_QUOTES, 'UTF-8') ?>" pattern="\d+" inputmode="numeric">
     </div>
     <div class="form-group">
         <label for="use-my-ip"><?= htmlspecialchars(t('percentage_personal_ip'), ENT_QUOTES, 'UTF-8') ?></label>

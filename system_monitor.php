@@ -1,4 +1,5 @@
 <?php
+require_once 'lib/root_helper_client.php';
 header('Content-Type: application/json; charset=UTF-8');
 
 function read_meminfo(): array
@@ -271,6 +272,8 @@ if ($txRate === null) {
     $txSource = 'sysfs';
 }
 
+$cpuPercent = read_cpu_usage_percent();
+
 echo json_encode([
     'ok' => true,
     'iface' => $iface,
@@ -278,7 +281,7 @@ echo json_encode([
     'todayTx' => read_today_tx_vnstat($iface),
     'txSource' => $txSource,
     'ramPercent' => $ramPercent,
-    'cpuPercent' => read_cpu_usage_percent(),
+    'cpuPercent' => $cpuPercent,
     'temperatureC' => read_temperature_celsius(),
     'memoryTemperatureC' => read_memory_temperature_celsius(),
     'ipv4' => read_interface_ipv4($iface),

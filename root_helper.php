@@ -19,6 +19,13 @@ const HOSTAPD_CONFIG_PATH = '/etc/hostapd/hostapd.conf';
 const HOSTAPD_SERVICE_NAME = 'hostapd.service';
 const ROOT_HELPER_INSTALL_SCRIPT = '/var/www/html/itarmybox-webui/systemd/install-root-helper.sh';
 const VNSTAT_INTERFACE = 'eth0';
+const DISTRESS_AUTOTUNE_STATE_FILE = '/opt/itarmy/distress-autotune.json';
+const DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY = 4000;
+const DISTRESS_AUTOTUNE_STEP = 500;
+const DISTRESS_AUTOTUNE_MIN_CONCURRENCY = 500;
+const DISTRESS_AUTOTUNE_HIGH_CPU = 95.0;
+const DISTRESS_AUTOTUNE_LOW_CPU = 70.0;
+const DISTRESS_AUTOTUNE_COOLDOWN_SECONDS = 60;
 
 function respond(array $data): void
 {
@@ -321,6 +328,241 @@ function findIwBinary(): ?string
 function getWifiApInterface(): string
 {
     return WIFI_AP_INTERFACE;
+}
+
+function normalizeDistressConcurrency($value): ?int
+{
+    if (is_int($value)) {
+        $concurrency = $value;
+    } elseif (is_string($value) && preg_match('/^\d+$/', trim($value)) === 1) {
+        $concurrency = (int)trim($value);
+    } else {
+        return null;
+    }
+
+    if ($concurrency < DISTRESS_AUTOTUNE_MIN_CONCURRENCY) {
+        return null;
+    }
+
+    return $concurrency;
+}
+
+function parseExecStartOptions(string $execStartLine): array
+{
+    $tokens = str_getcsv($execStartLine, ' ');
+    $baseTokens = [];
+    $options = [];
+
+    foreach ($tokens as $idx => $token) {
+        if ($idx === 0) {
+            $baseTokens[] = $token;
+            continue;
+        }
+        if (!str_starts_with($token, '--')) {
+            continue;
+        }
+        $key = substr($token, 2);
+        $next = $tokens[$idx + 1] ?? null;
+        if ($next !== null && !str_starts_with($next, '--')) {
+            $options[$key] = $next;
+        } else {
+            $options[$key] = true;
+        }
+    }
+
+    return ['baseTokens' => $baseTokens, 'options' => $options];
+}
+
+function buildExecStartLine(array $baseTokens, array $options): string
+{
+    $out = $baseTokens;
+    foreach ($options as $key => $value) {
+        $out[] = '--' . $key;
+        if ($value !== true) {
+            $out[] = (string)$value;
+        }
+    }
+    return implode(' ', $out);
+}
+
+function getDistressCurrentConcurrency(): int
+{
+    $execStart = readServiceExecStart('distress');
+    if (!is_string($execStart) || $execStart === '') {
+        return DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY;
+    }
+
+    $parsed = parseExecStartOptions($execStart);
+    $value = $parsed['options']['concurrency'] ?? null;
+    $concurrency = normalizeDistressConcurrency($value);
+    return $concurrency ?? DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY;
+}
+
+function setDistressCurrentConcurrency(int $concurrency): bool
+{
+    $execStart = readServiceExecStart('distress');
+    if (!is_string($execStart) || $execStart === '') {
+        return false;
+    }
+
+    $parsed = parseExecStartOptions($execStart);
+    $parsed['options']['concurrency'] = (string)$concurrency;
+    return updateServiceExecStart('distress', buildExecStartLine($parsed['baseTokens'], $parsed['options']));
+}
+
+function readDistressAutotuneState(): array
+{
+    $defaults = [
+        'enabled' => true,
+        'currentConcurrency' => DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY,
+        'lastAdjustedAt' => 0,
+        'lastCpuPercent' => null,
+    ];
+
+    $raw = @file_get_contents(DISTRESS_AUTOTUNE_STATE_FILE);
+    if (!is_string($raw) || trim($raw) === '') {
+        return $defaults;
+    }
+
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        return $defaults;
+    }
+
+    $currentConcurrency = normalizeDistressConcurrency($data['currentConcurrency'] ?? null)
+        ?? getDistressCurrentConcurrency();
+    $lastAdjustedAt = isset($data['lastAdjustedAt']) && is_int($data['lastAdjustedAt']) ? $data['lastAdjustedAt'] : 0;
+    $lastCpuPercent = isset($data['lastCpuPercent']) && is_numeric($data['lastCpuPercent'])
+        ? (float)$data['lastCpuPercent']
+        : null;
+
+    return [
+        'enabled' => ($data['enabled'] ?? true) === true,
+        'currentConcurrency' => $currentConcurrency,
+        'lastAdjustedAt' => $lastAdjustedAt,
+        'lastCpuPercent' => $lastCpuPercent,
+    ];
+}
+
+function writeDistressAutotuneState(array $state): bool
+{
+    $payload = json_encode([
+        'enabled' => ($state['enabled'] ?? false) === true,
+        'currentConcurrency' => (int)($state['currentConcurrency'] ?? DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY),
+        'lastAdjustedAt' => (int)($state['lastAdjustedAt'] ?? 0),
+        'lastCpuPercent' => isset($state['lastCpuPercent']) && is_numeric($state['lastCpuPercent'])
+            ? (float)$state['lastCpuPercent']
+            : null,
+    ], JSON_UNESCAPED_SLASHES);
+
+    return is_string($payload) && @file_put_contents(DISTRESS_AUTOTUNE_STATE_FILE, $payload) !== false;
+}
+
+function getDistressAutotuneStatus(): array
+{
+    $state = readDistressAutotuneState();
+    $currentConcurrency = getDistressCurrentConcurrency();
+    if ($currentConcurrency !== (int)$state['currentConcurrency']) {
+        $state['currentConcurrency'] = $currentConcurrency;
+        writeDistressAutotuneState($state);
+    }
+
+    return [
+        'ok' => true,
+        'enabled' => ($state['enabled'] ?? false) === true,
+        'currentConcurrency' => $currentConcurrency,
+        'defaultConcurrency' => DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY,
+        'step' => DISTRESS_AUTOTUNE_STEP,
+        'cpuHigh' => DISTRESS_AUTOTUNE_HIGH_CPU,
+        'cpuLow' => DISTRESS_AUTOTUNE_LOW_CPU,
+        'cooldownSeconds' => DISTRESS_AUTOTUNE_COOLDOWN_SECONDS,
+        'lastAdjustedAt' => (int)($state['lastAdjustedAt'] ?? 0),
+        'lastCpuPercent' => $state['lastCpuPercent'] ?? null,
+    ];
+}
+
+function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
+{
+    $enabled = ($enabledValue === true || $enabledValue === '1' || $enabledValue === 1 || $enabledValue === 'true');
+    $concurrency = normalizeDistressConcurrency($concurrencyValue);
+    if ($concurrency === null) {
+        return ['ok' => false, 'error' => 'invalid_concurrency'];
+    }
+
+    if (!setDistressCurrentConcurrency($concurrency)) {
+        return ['ok' => false, 'error' => 'distress_concurrency_write_failed'];
+    }
+
+    $state = readDistressAutotuneState();
+    $state['enabled'] = $enabled;
+    $state['currentConcurrency'] = $concurrency;
+    $state['lastAdjustedAt'] = 0;
+    $state['lastCpuPercent'] = null;
+    if (!writeDistressAutotuneState($state)) {
+        return ['ok' => false, 'error' => 'distress_autotune_state_write_failed'];
+    }
+
+    return getDistressAutotuneStatus();
+}
+
+function distressAutotuneTick($cpuPercent): array
+{
+    if (!is_numeric($cpuPercent)) {
+        return ['ok' => false, 'error' => 'invalid_cpu_percent'];
+    }
+
+    $cpu = max(0.0, min(100.0, (float)$cpuPercent));
+    $state = readDistressAutotuneState();
+    if (($state['enabled'] ?? false) !== true) {
+        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'manual_mode'];
+    }
+
+    if (!serviceIsActive('distress')) {
+        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'distress_inactive'];
+    }
+
+    $currentConcurrency = getDistressCurrentConcurrency();
+    $state['currentConcurrency'] = $currentConcurrency;
+    $state['lastCpuPercent'] = $cpu;
+    $now = time();
+    if (($now - (int)($state['lastAdjustedAt'] ?? 0)) < DISTRESS_AUTOTUNE_COOLDOWN_SECONDS) {
+        writeDistressAutotuneState($state);
+        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'cooldown'];
+    }
+
+    $targetConcurrency = $currentConcurrency;
+    if ($cpu > DISTRESS_AUTOTUNE_HIGH_CPU) {
+        $targetConcurrency = max(DISTRESS_AUTOTUNE_MIN_CONCURRENCY, $currentConcurrency - DISTRESS_AUTOTUNE_STEP);
+    } elseif ($cpu < DISTRESS_AUTOTUNE_LOW_CPU) {
+        $targetConcurrency = $currentConcurrency + DISTRESS_AUTOTUNE_STEP;
+    }
+
+    if ($targetConcurrency === $currentConcurrency) {
+        writeDistressAutotuneState($state);
+        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'within_range'];
+    }
+
+    if (!setDistressCurrentConcurrency($targetConcurrency)) {
+        return ['ok' => false, 'error' => 'distress_concurrency_write_failed'];
+    }
+
+    $restart = serviceRestart('distress');
+    if (($restart['ok'] ?? false) !== true) {
+        return ['ok' => false, 'error' => 'service_restart_failed'];
+    }
+
+    $state['currentConcurrency'] = $targetConcurrency;
+    $state['lastAdjustedAt'] = $now;
+    $state['lastCpuPercent'] = $cpu;
+    if (!writeDistressAutotuneState($state)) {
+        return ['ok' => false, 'error' => 'distress_autotune_state_write_failed'];
+    }
+
+    return getDistressAutotuneStatus() + [
+        'changed' => true,
+        'previousConcurrency' => $currentConcurrency,
+        'cpuPercent' => $cpu,
+    ];
 }
 
 function normalizeWifiSsid($value): ?string
@@ -1992,6 +2234,21 @@ if ($action === 'wifi_ap_name_get') {
 
 if ($action === 'wifi_ap_name_set') {
     respond(setWifiApName($request['ssid'] ?? null));
+    exit(0);
+}
+
+if ($action === 'distress_autotune_get') {
+    respond(getDistressAutotuneStatus());
+    exit(0);
+}
+
+if ($action === 'distress_autotune_set') {
+    respond(setDistressAutotuneMode($request['enabled'] ?? null, $request['concurrency'] ?? null));
+    exit(0);
+}
+
+if ($action === 'distress_autotune_tick') {
+    respond(distressAutotuneTick($request['cpuPercent'] ?? null));
     exit(0);
 }
 

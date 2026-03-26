@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/root_helper_client.php';
 
+const DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY = 4000;
+
 function getServiceLogs(string $serviceName): string
 {
     $config = require __DIR__ . '/../config/config.php';
@@ -243,6 +245,11 @@ function normalizeAndValidateDistressPostParams(array $params): array
 {
     $normalized = $params;
 
+    $concurrencyModeRaw = strtolower(trim((string)($params['distress-concurrency-mode'] ?? 'auto')));
+    if (!in_array($concurrencyModeRaw, ['auto', 'manual'], true)) {
+        return ['ok' => false, 'error' => 'invalid_concurrency_mode'];
+    }
+
     $useMyIpRaw = (string)($params['use-my-ip'] ?? '');
     if ($useMyIpRaw === '') {
         $normalized['use-my-ip'] = '';
@@ -273,12 +280,16 @@ function normalizeAndValidateDistressPostParams(array $params): array
 
     $concurrencyRaw = (string)($params['concurrency'] ?? '');
     if ($concurrencyRaw === '') {
-        $normalized['concurrency'] = '4096';
+        $normalized['concurrency'] = (string)DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY;
     } else {
         if ($concurrencyRaw !== trim($concurrencyRaw) || preg_match('/^\d+$/', $concurrencyRaw) !== 1) {
             return ['ok' => false, 'error' => 'invalid_concurrency'];
         }
-        $normalized['concurrency'] = $concurrencyRaw;
+        $concurrency = (int)$concurrencyRaw;
+        if ($concurrency < 500) {
+            return ['ok' => false, 'error' => 'invalid_concurrency'];
+        }
+        $normalized['concurrency'] = (string)$concurrency;
     }
 
     foreach ([
@@ -296,7 +307,53 @@ function normalizeAndValidateDistressPostParams(array $params): array
     }
 
     $normalized = normalizeDistressPostParams($normalized);
-    return ['ok' => true, 'params' => $normalized];
+    return [
+        'ok' => true,
+        'params' => $normalized,
+        'autotuneEnabled' => ($concurrencyModeRaw === 'auto'),
+        'concurrencyValue' => (int)$normalized['concurrency'],
+    ];
+}
+
+function getDistressAutotuneSettings(): array
+{
+    $config = require __DIR__ . '/../config/config.php';
+    $response = root_helper_request([
+        'action' => 'distress_autotune_get',
+        'modules' => $config['daemonNames'],
+    ]);
+
+    if (($response['ok'] ?? false) !== true) {
+        return [
+            'ok' => false,
+            'enabled' => true,
+            'currentConcurrency' => DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY,
+            'defaultConcurrency' => DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY,
+        ];
+    }
+
+    return [
+        'ok' => true,
+        'enabled' => ($response['enabled'] ?? false) === true,
+        'currentConcurrency' => (int)($response['currentConcurrency'] ?? DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY),
+        'defaultConcurrency' => (int)($response['defaultConcurrency'] ?? DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY),
+        'step' => (int)($response['step'] ?? 500),
+        'cpuHigh' => (float)($response['cpuHigh'] ?? 95),
+        'cpuLow' => (float)($response['cpuLow'] ?? 70),
+    ];
+}
+
+function saveDistressAutotuneSettings(bool $enabled, int $concurrency): bool
+{
+    $config = require __DIR__ . '/../config/config.php';
+    $response = root_helper_request([
+        'action' => 'distress_autotune_set',
+        'modules' => $config['daemonNames'],
+        'enabled' => $enabled,
+        'concurrency' => $concurrency,
+    ]);
+
+    return ($response['ok'] ?? false) === true;
 }
 
 function normalizeAndValidateMhddosPostParams(array $params): array

@@ -49,6 +49,7 @@ function build_tool_url(string $daemonName, array $params = []): string
                 'invalid_use_tor_digits',
                 'invalid_use_tor_range',
                 'invalid_concurrency',
+                'invalid_concurrency_mode',
                 'invalid_copies',
                 'invalid_threads',
             ];
@@ -68,6 +69,7 @@ function build_tool_url(string $daemonName, array $params = []): string
                     $allowedParamKeys = array_flip($config['adjustableParams'][$daemonName] ?? []);
                     $paramsToSave = array_intersect_key($_POST, $allowedParamKeys);
                     if ($daemonName === 'distress') {
+                        $paramsToSave['distress-concurrency-mode'] = $_POST['distress-concurrency-mode'] ?? 'auto';
                         $distressValidation = normalizeAndValidateDistressPostParams($paramsToSave);
                         if (($distressValidation['ok'] ?? false) !== true) {
                             $saveError = (string)($distressValidation['error'] ?? 'invalid_distress_settings');
@@ -94,6 +96,15 @@ function build_tool_url(string $daemonName, array $params = []): string
                             )
                         )
                         ;
+                        if ($saveOk && $daemonName === 'distress') {
+                            $saveOk = saveDistressAutotuneSettings(
+                                (($distressValidation['autotuneEnabled'] ?? false) === true),
+                                (int)($distressValidation['concurrencyValue'] ?? 0)
+                            );
+                            if (!$saveOk && $saveError === '') {
+                                $saveError = 'settings_not_saved';
+                            }
+                        }
                     }
                 }
                 if ($saveOk && $wasActiveBeforeSave) {

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run IT Army Box Distress autotune periodically
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=60s
+Unit=itarmybox-distress-autotune.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target
