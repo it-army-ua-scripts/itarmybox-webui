@@ -2,6 +2,39 @@
 require_once 'lib/root_helper_client.php';
 header('Content-Type: application/json; charset=UTF-8');
 
+function detect_primary_network_interface(): string
+{
+    $ipPath = null;
+    foreach (['/usr/sbin/ip', '/usr/bin/ip', '/sbin/ip', '/bin/ip'] as $candidate) {
+        if (is_executable($candidate)) {
+            $ipPath = $candidate;
+            break;
+        }
+    }
+
+    if ($ipPath !== null) {
+        $output = @shell_exec($ipPath . ' route show default 2>/dev/null');
+        if (is_string($output) && preg_match('/\bdev\s+([a-zA-Z0-9._:-]+)/', $output, $matches) === 1) {
+            $iface = trim((string)($matches[1] ?? ''));
+            if ($iface !== '' && $iface !== 'lo') {
+                return $iface;
+            }
+        }
+    }
+
+    $paths = glob('/sys/class/net/*');
+    if (is_array($paths)) {
+        foreach ($paths as $path) {
+            $iface = basename($path);
+            if ($iface !== '' && $iface !== 'lo') {
+                return $iface;
+            }
+        }
+    }
+
+    return 'eth0';
+}
+
 function read_meminfo(): array
 {
     $raw = @file('/proc/meminfo', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
@@ -192,6 +225,24 @@ function format_rate_from_bytes(float $bytesPerSecond): string
     return number_format($value, $value >= 100 ? 0 : ($value >= 10 ? 1 : 2), '.', '') . ' ' . $units[$unitIdx];
 }
 
+function format_bytes_binary(float $bytes): string
+{
+    if ($bytes < 0) {
+        $bytes = 0;
+    }
+
+    $units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+    $value = $bytes;
+    $unitIdx = 0;
+    while ($value >= 1024 && $unitIdx < count($units) - 1) {
+        $value /= 1024;
+        $unitIdx++;
+    }
+
+    $digits = $value >= 100 ? 0 : ($value >= 10 ? 1 : 2);
+    return number_format($value, $digits, '.', '') . ' ' . $units[$unitIdx];
+}
+
 function read_tx_rate_from_sysfs(string $iface): ?string
 {
     $path = '/sys/class/net/' . $iface . '/statistics/tx_bytes';
@@ -243,6 +294,17 @@ function read_today_tx_vnstat(string $iface): ?string
     if ($vnstatPath === null) {
         return null;
     }
+
+    $ifaceArg = escapeshellarg($iface);
+    $jsonOutput = @shell_exec($vnstatPath . ' --json d 1 -i ' . $ifaceArg . ' 2>/dev/null');
+    if (is_string($jsonOutput) && trim($jsonOutput) !== '') {
+        $data = json_decode($jsonOutput, true);
+        $day = $data['interfaces'][0]['traffic']['day'][0] ?? null;
+        if (is_array($day) && isset($day['tx']) && is_numeric($day['tx'])) {
+            return format_bytes_binary((float)$day['tx']);
+        }
+    }
+
     $ifaceArg = escapeshellarg($iface);
     $output = @shell_exec($vnstatPath . ' -i ' . $ifaceArg . ' --oneline 2>/dev/null');
     if (!is_string($output) || trim($output) === '') {
@@ -256,7 +318,7 @@ function read_today_tx_vnstat(string $iface): ?string
     return $value !== '' ? $value : null;
 }
 
-$iface = 'eth0';
+$iface = detect_primary_network_interface();
 $meminfo = read_meminfo();
 $memTotal = (int)($meminfo['MemTotal'] ?? 0);
 $memAvailable = (int)($meminfo['MemAvailable'] ?? 0);

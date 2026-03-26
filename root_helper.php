@@ -26,7 +26,7 @@ const DISTRESS_AUTOTUNE_STEP = 500;
 const DISTRESS_AUTOTUNE_MIN_CONCURRENCY = 500;
 const DISTRESS_AUTOTUNE_HIGH_CPU = 95.0;
 const DISTRESS_AUTOTUNE_LOW_CPU = 70.0;
-const DISTRESS_AUTOTUNE_COOLDOWN_SECONDS = 60;
+const DISTRESS_AUTOTUNE_COOLDOWN_SECONDS = 300;
 
 function respond(array $data): void
 {
@@ -126,6 +126,32 @@ function findVnstatBinary(): ?string
     return findExecutable(['/usr/bin/vnstat', '/bin/vnstat']);
 }
 
+function detectPrimaryNetworkInterface(): string
+{
+    $ip = findExecutable(['/usr/sbin/ip', '/usr/bin/ip', '/sbin/ip', '/bin/ip']);
+    if ($ip !== null) {
+        $output = runCommand(escapeshellarg($ip) . ' route show default', $code);
+        if ($code === 0 && preg_match('/\bdev\s+([a-zA-Z0-9._:-]+)/', $output, $matches) === 1) {
+            $iface = trim((string)($matches[1] ?? ''));
+            if ($iface !== '' && $iface !== 'lo') {
+                return $iface;
+            }
+        }
+    }
+
+    $netPaths = glob('/sys/class/net/*');
+    if (is_array($netPaths)) {
+        foreach ($netPaths as $path) {
+            $iface = basename($path);
+            if ($iface !== '' && $iface !== 'lo') {
+                return $iface;
+            }
+        }
+    }
+
+    return VNSTAT_INTERFACE;
+}
+
 function isVnstatInstalled(): bool
 {
     return findVnstatBinary() !== null;
@@ -147,7 +173,7 @@ function isVnstatInterfaceReady(string $iface = VNSTAT_INTERFACE): bool
 
 function getVnstatStatus(): array
 {
-    $iface = VNSTAT_INTERFACE;
+    $iface = detectPrimaryNetworkInterface();
     $installed = isVnstatInstalled();
     $serviceEnabled = false;
     $serviceActive = false;
@@ -203,6 +229,7 @@ function ensureVnstatInterfaceDatabase(string $iface = VNSTAT_INTERFACE): bool
 
 function installVnstat(): array
 {
+    $iface = detectPrimaryNetworkInterface();
     $alreadyInstalled = isVnstatInstalled();
     if (!$alreadyInstalled) {
         $apt = findAptGet();
@@ -227,7 +254,7 @@ function installVnstat(): array
         runCommand(escapeshellarg($systemctl) . ' restart vnstat.service', $restartCode);
     }
 
-    if (!ensureVnstatInterfaceDatabase(VNSTAT_INTERFACE)) {
+    if (!ensureVnstatInterfaceDatabase($iface)) {
         return getVnstatStatus() + ['ok' => false, 'error' => 'vnstat_interface_init_failed'];
     }
 
