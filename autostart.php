@@ -59,6 +59,67 @@ function normalizeSchedulePowerPercent($value): ?int
     return $percent;
 }
 
+function scheduleTimeToMinutes(string $hhmm): int
+{
+    [$hours, $minutes] = explode(':', $hhmm, 2);
+    return ((int)$hours * 60) + (int)$minutes;
+}
+
+function expandScheduleEntrySegments(array $entry): array
+{
+    $days = normalizeScheduleDays((array)($entry['days'] ?? []));
+    $start = (string)($entry['start'] ?? '');
+    $stop = (string)($entry['stop'] ?? '');
+    if (
+        $days === [] ||
+        preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $start) !== 1 ||
+        preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $stop) !== 1 ||
+        $start === $stop
+    ) {
+        return [];
+    }
+
+    $startMinutes = scheduleTimeToMinutes($start);
+    $stopMinutes = scheduleTimeToMinutes($stop);
+    $segments = [];
+    foreach ($days as $day) {
+        if ($startMinutes < $stopMinutes) {
+            $segments[] = ['day' => $day, 'start' => $startMinutes, 'stop' => $stopMinutes];
+            continue;
+        }
+
+        $segments[] = ['day' => $day, 'start' => $startMinutes, 'stop' => 1440];
+        $segments[] = ['day' => (($day + 1) % 7), 'start' => 0, 'stop' => $stopMinutes];
+    }
+    return $segments;
+}
+
+function scheduleEntriesOverlap(array $entries): bool
+{
+    $segmentsByDay = [];
+    foreach ($entries as $entry) {
+        foreach (expandScheduleEntrySegments($entry) as $segment) {
+            $segmentsByDay[(int)$segment['day']][] = $segment;
+        }
+    }
+
+    foreach ($segmentsByDay as $segments) {
+        usort($segments, static function (array $a, array $b): int {
+            return ($a['start'] <=> $b['start']) ?: ($a['stop'] <=> $b['stop']);
+        });
+
+        $previousStop = null;
+        foreach ($segments as $segment) {
+            if ($previousStop !== null && (int)$segment['start'] < $previousStop) {
+                return true;
+            }
+            $previousStop = max($previousStop ?? 0, (int)$segment['stop']);
+        }
+    }
+
+    return false;
+}
+
 function getCurrentSchedules(array $daemonNames): array
 {
     $response = root_helper_request([
@@ -221,6 +282,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$scheduleEnabled) {
             $ok = saveScheduleEntries($daemonNames, []);
         } elseif ($scheduleError !== '') {
+            $ok = false;
+        } elseif (scheduleEntriesOverlap($normalizedEntries)) {
+            $scheduleError = 'invalid_schedule_overlap';
             $ok = false;
         } elseif ($normalizedEntries === []) {
             $ok = false;

@@ -8,6 +8,11 @@ const MAX_SCHEDULE_ENTRIES = 2;
 const SCHEDULE_MANUAL_OVERRIDE_FILE = '/tmp/itarmybox-schedule-manual-override';
 const TRAFFIC_LIMIT_STATE_FILE = '/tmp/itarmybox-traffic-limit.json';
 const ROOT_HELPER_SCRIPT_PATH = '/var/www/html/itarmybox-webui/root_helper.php';
+const WIFI_TXPOWER_MAX_CENTIDBM = 3100;
+const WIFI_TXPOWER_DEFAULT_CENTIDBM = 3100;
+const WIFI_TXPOWER_STATE_FILE = '/opt/itarmy/wifi-txpower.json';
+const WIFI_TXPOWER_SERVICE_PATH = '/var/www/html/itarmybox-webui/systemd/itarmybox-wifi-txpower.service';
+const WIFI_AP_INTERFACE = 'wlan0';
 
 function respond(array $data): void
 {
@@ -187,6 +192,154 @@ function ensureTimeSyncForTimezone(string $timezone): array
     }
 
     return $status;
+}
+
+function findIwBinary(): ?string
+{
+    return findExecutable(['/usr/sbin/iw', '/usr/bin/iw', '/sbin/iw', '/bin/iw']);
+}
+
+function getWifiApInterface(): string
+{
+    return WIFI_AP_INTERFACE;
+}
+
+function centiDbmToDbmString(int $centiDbm): string
+{
+    return number_format($centiDbm / 100, 2, '.', '');
+}
+
+function persistWifiTxPowerState(int $centiDbm): bool
+{
+    $payload = json_encode([
+        'centiDbm' => $centiDbm,
+        'dbm' => centiDbmToDbmString($centiDbm),
+        'updatedAt' => time(),
+    ], JSON_UNESCAPED_SLASHES);
+    return is_string($payload) && @file_put_contents(WIFI_TXPOWER_STATE_FILE, $payload) !== false;
+}
+
+function ensureWifiTxPowerServiceInstalled(): bool
+{
+    if (!is_file(WIFI_TXPOWER_SERVICE_PATH)) {
+        return false;
+    }
+
+    $target = '/etc/systemd/system/itarmybox-wifi-txpower.service';
+    if (is_link($target)) {
+        $current = readlink($target);
+        if ($current !== WIFI_TXPOWER_SERVICE_PATH) {
+            @unlink($target);
+        }
+    } elseif (file_exists($target)) {
+        @unlink($target);
+    }
+
+    if (!is_link($target) && !@symlink(WIFI_TXPOWER_SERVICE_PATH, $target)) {
+        return false;
+    }
+
+    $systemctl = findSystemctl();
+    if ($systemctl === null) {
+        return false;
+    }
+
+    runCommand(escapeshellarg($systemctl) . ' daemon-reload', $reloadCode);
+    if ($reloadCode !== 0) {
+        return false;
+    }
+
+    runCommand(escapeshellarg($systemctl) . ' enable itarmybox-wifi-txpower.service', $enableCode);
+    return $enableCode === 0;
+}
+
+function normalizeWifiTxPowerCentiDbm($value): ?int
+{
+    if (is_int($value)) {
+        $centiDbm = $value;
+    } elseif (is_float($value)) {
+        $centiDbm = (int)round($value * 100);
+    } elseif (is_string($value)) {
+        $raw = trim($value);
+        if ($raw === '' || preg_match('/^\d+(?:\.\d{1,2})?$/', $raw) !== 1) {
+            return null;
+        }
+        $centiDbm = (int)round(((float)$raw) * 100);
+    } else {
+        return null;
+    }
+
+    if ($centiDbm < 0 || $centiDbm > WIFI_TXPOWER_MAX_CENTIDBM) {
+        return null;
+    }
+    return $centiDbm;
+}
+
+function readWifiTxPower(): array
+{
+    $iface = getWifiApInterface();
+    $iw = findIwBinary();
+    if ($iw === null) {
+        return ['ok' => false, 'error' => 'iw_not_found', 'iface' => $iface];
+    }
+
+    $output = runCommand(escapeshellarg($iw) . ' dev ' . escapeshellarg($iface) . ' info', $code);
+    if ($code !== 0 || trim($output) === '') {
+        return ['ok' => false, 'error' => 'wifi_txpower_read_failed', 'iface' => $iface];
+    }
+
+    if (preg_match('/\btxpower\s+(\d+(?:\.\d+)?)\s+dBm\b/i', $output, $matches) !== 1) {
+        return ['ok' => false, 'error' => 'wifi_txpower_parse_failed', 'iface' => $iface];
+    }
+
+    $centiDbm = normalizeWifiTxPowerCentiDbm($matches[1]);
+    if ($centiDbm === null) {
+        return ['ok' => false, 'error' => 'wifi_txpower_parse_failed', 'iface' => $iface];
+    }
+
+    return [
+        'ok' => true,
+        'iface' => $iface,
+        'currentCentiDbm' => $centiDbm,
+        'currentDbm' => centiDbmToDbmString($centiDbm),
+        'defaultDbm' => centiDbmToDbmString(WIFI_TXPOWER_DEFAULT_CENTIDBM),
+        'maxDbm' => centiDbmToDbmString(WIFI_TXPOWER_MAX_CENTIDBM),
+    ];
+}
+
+function setWifiTxPower($value): array
+{
+    $iface = getWifiApInterface();
+    $centiDbm = normalizeWifiTxPowerCentiDbm($value);
+    if ($centiDbm === null) {
+        return ['ok' => false, 'error' => 'invalid_wifi_txpower', 'iface' => $iface];
+    }
+
+    $iw = findIwBinary();
+    if ($iw === null) {
+        return ['ok' => false, 'error' => 'iw_not_found', 'iface' => $iface];
+    }
+
+    runCommand(
+        escapeshellarg($iw) . ' dev ' . escapeshellarg($iface) . ' set txpower fixed ' . escapeshellarg((string)$centiDbm),
+        $code
+    );
+    if ($code !== 0) {
+        return ['ok' => false, 'error' => 'wifi_txpower_apply_failed', 'iface' => $iface];
+    }
+    if (!persistWifiTxPowerState($centiDbm)) {
+        return ['ok' => false, 'error' => 'wifi_txpower_state_write_failed', 'iface' => $iface];
+    }
+    if (!ensureWifiTxPowerServiceInstalled()) {
+        return ['ok' => false, 'error' => 'wifi_txpower_service_install_failed', 'iface' => $iface];
+    }
+
+    $state = readWifiTxPower();
+    if (($state['ok'] ?? false) !== true) {
+        return ['ok' => false, 'error' => 'wifi_txpower_verify_failed', 'iface' => $iface];
+    }
+
+    return $state + ['requestedDbm' => centiDbmToDbmString($centiDbm)];
 }
 
 function appendRebootLog(string $message): void
@@ -396,6 +549,12 @@ function parseTimeParts(string $hhmm): array
     return [(int)$h, (int)$m];
 }
 
+function timeToMinutes(string $hhmm): int
+{
+    [$h, $m] = parseTimeParts($hhmm);
+    return ($h * 60) + $m;
+}
+
 function stripScheduleBlock(string $crontab): string
 {
     $lines = preg_split('/\r\n|\r|\n/', $crontab);
@@ -428,6 +587,61 @@ function normalizeDays(array $days): array
     $values = array_keys($set);
     sort($values);
     return $values;
+}
+
+function expandScheduleEntrySegments(array $entry): array
+{
+    $days = normalizeDays((array)($entry['days'] ?? []));
+    $start = (string)($entry['start'] ?? '');
+    $stop = (string)($entry['stop'] ?? '');
+    if (
+        $days === [] ||
+        preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $start) !== 1 ||
+        preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $stop) !== 1 ||
+        $start === $stop
+    ) {
+        return [];
+    }
+
+    $startMinutes = timeToMinutes($start);
+    $stopMinutes = timeToMinutes($stop);
+    $segments = [];
+    foreach ($days as $day) {
+        if ($startMinutes < $stopMinutes) {
+            $segments[] = ['day' => $day, 'start' => $startMinutes, 'stop' => $stopMinutes];
+            continue;
+        }
+
+        $segments[] = ['day' => $day, 'start' => $startMinutes, 'stop' => 1440];
+        $segments[] = ['day' => (($day + 1) % 7), 'start' => 0, 'stop' => $stopMinutes];
+    }
+    return $segments;
+}
+
+function scheduleEntriesOverlap(array $entries): bool
+{
+    $segmentsByDay = [];
+    foreach ($entries as $entry) {
+        foreach (expandScheduleEntrySegments($entry) as $segment) {
+            $segmentsByDay[(int)$segment['day']][] = $segment;
+        }
+    }
+
+    foreach ($segmentsByDay as $segments) {
+        usort($segments, static function (array $a, array $b): int {
+            return ($a['start'] <=> $b['start']) ?: ($a['stop'] <=> $b['stop']);
+        });
+
+        $previousStop = null;
+        foreach ($segments as $segment) {
+            if ($previousStop !== null && (int)$segment['start'] < $previousStop) {
+                return true;
+            }
+            $previousStop = max($previousStop ?? 0, (int)$segment['stop']);
+        }
+    }
+
+    return false;
 }
 
 function parseDowField(string $dow): ?array
@@ -1128,6 +1342,9 @@ function setScheduleEntries(array $modules, array $entries): array
         if (count($entries) > MAX_SCHEDULE_ENTRIES) {
             return ['ok' => false, 'error' => 'too_many_entries'];
         }
+        if (scheduleEntriesOverlap($entries)) {
+            return ['ok' => false, 'error' => 'invalid_schedule_overlap'];
+        }
 
         $block = [SCHEDULE_BEGIN_MARKER];
         $bootCommand = buildRootHelperCliCommand([
@@ -1516,6 +1733,16 @@ if ($action === 'time_sync_ensure') {
         fail('invalid_timezone');
     }
     respond(ensureTimeSyncForTimezone(trim($timezone)));
+    exit(0);
+}
+
+if ($action === 'wifi_txpower_get') {
+    respond(readWifiTxPower());
+    exit(0);
+}
+
+if ($action === 'wifi_txpower_set') {
+    respond(setWifiTxPower($request['dbm'] ?? null));
     exit(0);
 }
 

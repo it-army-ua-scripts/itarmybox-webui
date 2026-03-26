@@ -1,0 +1,11 @@
+[Unit]
+Description=Restore IT Army Box Wi-Fi TX power
+After=network-online.target hostapd.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env php /var/www/html/itarmybox-webui/wifi_txpower_restore.php
+
+[Install]
+WantedBy=multi-user.target
