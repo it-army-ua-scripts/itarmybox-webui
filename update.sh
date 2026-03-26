@@ -68,3 +68,12 @@ if [ -d "$ITARMY_DIR/.git" ]; then
 else
   echo "Skip $ITARMY_DIR: not found or not a git repository."
 fi
+
+INSTALL_ROOT_HELPER_SCRIPT="$REPO_DIR/systemd/install-root-helper.sh"
+if [ -x "$INSTALL_ROOT_HELPER_SCRIPT" ] || [ -f "$INSTALL_ROOT_HELPER_SCRIPT" ]; then
+  echo "Refreshing WebUI systemd units ..."
+  /usr/bin/env bash "$INSTALL_ROOT_HELPER_SCRIPT"
+  echo "DONE! WebUI systemd units refreshed."
+else
+  echo "Skip WebUI systemd refresh: $INSTALL_ROOT_HELPER_SCRIPT not found."
+fi
