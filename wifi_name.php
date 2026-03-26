@@ -9,6 +9,10 @@ const WIFI_AP_DEFAULT_NAME = 'Artline';
 $modules = (require 'config/config.php')['daemonNames'];
 $message = '';
 $messageClass = '';
+if (isset($_GET['flash']) && is_string($_GET['flash']) && $_GET['flash'] !== '') {
+    $message = (string)$_GET['flash'];
+    $messageClass = ((string)($_GET['flashClass'] ?? '') === 'active') ? 'status active' : 'status inactive';
+}
 
 function wifi_name_status(array $modules): array
 {
@@ -33,8 +37,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         strlen($ssid) > 32 ||
         preg_match('/^[\x20-\x7E]+$/', $ssid) !== 1
     ) {
-        $message = t('wifi_ap_name_invalid');
-        $messageClass = 'status inactive';
+        header('Location: ' . build_page_url('/wifi_name.php', [
+            'flash' => t('wifi_ap_name_invalid'),
+            'flashClass' => 'inactive',
+        ]));
+        exit;
     } else {
         $response = root_helper_request([
             'action' => 'wifi_ap_name_set',
@@ -53,8 +60,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$ok && isset($response['error']) && is_string($response['error']) && $response['error'] !== '') {
             $message .= ' (' . $response['error'] . ')';
         }
-        $messageClass = $ok ? 'status active' : 'status inactive';
-        $status = wifi_name_status($modules);
+        header('Location: ' . build_page_url('/wifi_name.php', [
+            'flash' => $message,
+            'flashClass' => $ok ? 'active' : 'inactive',
+        ]));
+        exit;
     }
 }
 

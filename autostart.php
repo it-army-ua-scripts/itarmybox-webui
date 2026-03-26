@@ -199,6 +199,10 @@ $days = [
 
 $message = '';
 $messageClass = '';
+if (isset($_GET['flash']) && is_string($_GET['flash']) && $_GET['flash'] !== '') {
+    $message = (string)$_GET['flash'];
+    $messageClass = ((string)($_GET['flashClass'] ?? '') === 'active') ? 'status active' : 'status inactive';
+}
 $currentAutostart = getCurrentAutostartDaemon($daemonNames);
 $currentSchedules = getCurrentSchedules($daemonNames);
 $scheduleEnabled = count($currentSchedules) > 0;
@@ -223,19 +227,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $selectedDaemon = $requested;
         }
         $ok = setAutostartDaemon($daemonNames, $selectedDaemon);
-        $message = $ok ? t('autostart_updated') : t('autostart_update_failed');
-        $messageClass = $ok ? 'status active' : 'status inactive';
-        $currentAutostart = getCurrentAutostartDaemon($daemonNames);
-        $currentSchedules = getCurrentSchedules($daemonNames);
-        $scheduleEnabled = count($currentSchedules) > 0;
-        $scheduleEntriesForForm = ($currentSchedules === []) ? [[
-            'module' => $daemonNames[0] ?? '',
-            'day_mode' => 'all',
-            'days' => [0, 1, 2, 3, 4, 5, 6],
-            'start' => '09:00',
-            'stop' => '21:00',
-            'powerPercent' => DEFAULT_SCHEDULE_POWER_PERCENT,
-        ]] : $currentSchedules;
+        header('Location: ' . build_page_url('/autostart.php', [
+            'flash' => $ok ? t('autostart_updated') : t('autostart_update_failed'),
+            'flashClass' => $ok ? 'active' : 'inactive',
+        ]));
+        exit;
     } elseif ($action === 'schedule_save') {
         $scheduleEnabled = ($_POST['schedule_enabled'] ?? '0') === '1';
         $rawEntries = $_POST['schedule_entries'] ?? [];
@@ -292,19 +288,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ok = saveScheduleEntries($daemonNames, $normalizedEntries);
         }
 
-        $message = $ok ? t('schedule_updated') : ($scheduleError !== '' ? t($scheduleError) : t('schedule_update_failed'));
-        $messageClass = $ok ? 'status active' : 'status inactive';
-        $currentAutostart = getCurrentAutostartDaemon($daemonNames);
-        $currentSchedules = getCurrentSchedules($daemonNames);
-        $scheduleEnabled = count($currentSchedules) > 0;
-        $scheduleEntriesForForm = ($currentSchedules === []) ? [[
-            'module' => $daemonNames[0] ?? '',
-            'day_mode' => 'all',
-            'days' => [0, 1, 2, 3, 4, 5, 6],
-            'start' => '09:00',
-            'stop' => '21:00',
-            'powerPercent' => DEFAULT_SCHEDULE_POWER_PERCENT,
-        ]] : $currentSchedules;
+        header('Location: ' . build_page_url('/autostart.php', [
+            'flash' => $ok ? t('schedule_updated') : ($scheduleError !== '' ? t($scheduleError) : t('schedule_update_failed')),
+            'flashClass' => $ok ? 'active' : 'inactive',
+        ]));
+        exit;
     }
 }
 

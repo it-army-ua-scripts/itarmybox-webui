@@ -100,20 +100,37 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'status') {
 
 $message = '';
 $messageClass = '';
+if (isset($_GET['flash']) && is_string($_GET['flash'])) {
+    $flash = $_GET['flash'];
+    $messageClass = ((string)($_GET['flashClass'] ?? '') === 'active') ? 'status active' : 'status inactive';
+    if ($flash === 'user_id_saved') {
+        $message = t('user_id_saved');
+    } elseif ($flash === 'invalid_user_id') {
+        $message = t('error') . ': ' . t('invalid_user_id');
+    } elseif ($flash === 'settings_not_saved') {
+        $message = t('error') . ': ' . t('settings_not_saved');
+    }
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $userIdRaw = (string)($_POST['global_user_id'] ?? '');
     $userIdSubmitted = trim($userIdRaw);
 
     if ($userIdRaw !== $userIdSubmitted || ($userIdSubmitted !== '' && preg_match('/^\d+$/', $userIdSubmitted) !== 1)) {
-        $message = t('error') . ': ' . t('invalid_user_id');
-        $messageClass = 'status inactive';
+        header('Location: ' . build_page_url('/user_id.php', [
+            'flash' => 'invalid_user_id',
+            'flashClass' => 'inactive',
+        ]));
+        exit;
     } else {
         $ok = saveGlobalUserId($userIdSubmitted, $config);
-        $message = $ok ? t('user_id_saved') : (t('error') . ': ' . t('settings_not_saved'));
-        $messageClass = $ok ? 'status active' : 'status inactive';
         if ($ok) {
             $userId = $userIdSubmitted;
         }
+        header('Location: ' . build_page_url('/user_id.php', [
+            'flash' => $ok ? 'user_id_saved' : 'settings_not_saved',
+            'flashClass' => $ok ? 'active' : 'inactive',
+        ]));
+        exit;
     }
 }
 ?>

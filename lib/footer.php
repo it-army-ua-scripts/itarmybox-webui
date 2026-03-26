@@ -13,6 +13,15 @@ function render_back_link(string $fallbackPath, string $className = ''): string
     return '<a href="' . $href . '"' . $classAttr . ' onclick="return appGoBack(this);">' . $label . '</a>';
 }
 
+function build_page_url(string $path, array $params = []): string
+{
+    $url = $path;
+    if ($params !== []) {
+        $url .= '?' . http_build_query($params);
+    }
+    return url_with_lang($url);
+}
+
 function render_app_footer(string $extraHtml = ''): string
 {
     $year = date('Y');

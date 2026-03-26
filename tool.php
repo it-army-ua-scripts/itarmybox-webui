@@ -14,6 +14,12 @@ function render_module_action_form(string $path, string $daemonName, string $lab
         . '<button type="submit">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</button>'
         . '</form></div>';
 }
+
+function build_tool_url(string $daemonName, array $params = []): string
+{
+    $query = array_merge(['daemon' => $daemonName], $params);
+    return url_with_lang('/tool.php?' . http_build_query($query));
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?= htmlspecialchars(app_lang(), ENT_QUOTES, 'UTF-8') ?>">
@@ -31,6 +37,21 @@ function render_module_action_form(string $path, string $daemonName, string $lab
     <div class="content">
         <?php
         if (in_array($daemonName, $config['daemonNames'], true)) {
+            $allowedFlashKeys = [
+                'settings_saved',
+                'settings_saved_and_restarted',
+                'settings_saved_restart_failed',
+                'settings_not_saved',
+                'invalid_distress_settings',
+                'invalid_mhddos_settings',
+                'invalid_use_my_ip_digits',
+                'invalid_use_my_ip_range',
+                'invalid_use_tor_digits',
+                'invalid_use_tor_range',
+                'invalid_concurrency',
+                'invalid_copies',
+                'invalid_threads',
+            ];
             $info = root_helper_request([
                 'action' => 'service_info',
                 'modules' => $config['daemonNames'],
@@ -41,9 +62,6 @@ function render_module_action_form(string $path, string $daemonName, string $lab
                 $saveOk = false;
                 $saveError = '';
                 $restartError = '';
-                $feedbackClass = '';
-                $feedbackText = '';
-                $feedbackSecondary = '';
                 if ($daemonName === 'x100') {
                     $saveOk = setX100ConfigValues($_POST);
                 } else {
@@ -89,32 +107,36 @@ function render_module_action_form(string $path, string $daemonName, string $lab
                     }
                 }
                 if ($saveOk) {
-                    $feedbackClass = 'status active';
-                    if ($wasActiveBeforeSave && $restartError === '') {
-                        $feedbackText = t('settings_saved_and_restarted');
-                    } else {
-                        $feedbackText = t('settings_saved');
-                    }
+                    $flashKey = ($wasActiveBeforeSave && $restartError === '')
+                        ? 'settings_saved_and_restarted'
+                        : 'settings_saved';
+                    $redirectParams = [
+                        'flash' => $flashKey,
+                        'flashClass' => 'active',
+                    ];
                     if ($restartError !== '') {
-                        $feedbackSecondary = t($restartError);
+                        $redirectParams['flashSecondary'] = $restartError;
                     }
                 } else {
-                    if ($saveError !== '') {
-                        $feedbackClass = 'status inactive';
-                        $feedbackText = t($saveError);
-                    } else {
-                        $feedbackClass = 'status inactive';
-                        $feedbackText = t('error') . ': ' . t('settings_not_saved');
-                    }
+                    $redirectParams = [
+                        'flash' => ($saveError !== '') ? $saveError : 'settings_not_saved',
+                        'flashClass' => 'inactive',
+                    ];
                 }
-                if ($feedbackText !== '') {
-                    echo '<div class="form-message ' . htmlspecialchars($feedbackClass, ENT_QUOTES, 'UTF-8') . '">'
-                        . htmlspecialchars($feedbackText, ENT_QUOTES, 'UTF-8')
-                        . '</div>';
-                }
-                if ($feedbackSecondary !== '') {
-                    echo '<div class="form-message status inactive">' . htmlspecialchars($feedbackSecondary, ENT_QUOTES, 'UTF-8') . '</div>';
-                }
+                header('Location: ' . build_tool_url($daemonName, $redirectParams));
+                exit;
+            }
+
+            $flashKey = (string)($_GET['flash'] ?? '');
+            $flashClass = ((string)($_GET['flashClass'] ?? '') === 'active') ? 'status active' : 'status inactive';
+            $flashSecondaryKey = (string)($_GET['flashSecondary'] ?? '');
+            if (in_array($flashKey, $allowedFlashKeys, true)) {
+                echo '<div class="form-message ' . htmlspecialchars($flashClass, ENT_QUOTES, 'UTF-8') . '">'
+                    . htmlspecialchars(t($flashKey), ENT_QUOTES, 'UTF-8')
+                    . '</div>';
+            }
+            if (in_array($flashSecondaryKey, $allowedFlashKeys, true)) {
+                echo '<div class="form-message status inactive">' . htmlspecialchars(t($flashSecondaryKey), ENT_QUOTES, 'UTF-8') . '</div>';
             }
 
             if ($daemonName === 'x100') {

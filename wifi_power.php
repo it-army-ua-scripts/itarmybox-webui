@@ -11,6 +11,10 @@ const WIFI_TXPOWER_MAX_DBM = '31.00';
 $modules = (require 'config/config.php')['daemonNames'];
 $message = '';
 $messageClass = '';
+if (isset($_GET['flash']) && is_string($_GET['flash']) && $_GET['flash'] !== '') {
+    $message = (string)$_GET['flash'];
+    $messageClass = ((string)($_GET['flashClass'] ?? '') === 'active') ? 'status active' : 'status inactive';
+}
 
 function wifi_power_status(array $modules): array
 {
@@ -37,8 +41,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         (float)$dbmRaw < (float)WIFI_TXPOWER_MIN_DBM ||
         (float)$dbmRaw > (float)WIFI_TXPOWER_MAX_DBM
     ) {
-        $message = t('wifi_ap_power_invalid');
-        $messageClass = 'status inactive';
+        header('Location: ' . build_page_url('/wifi_power.php', [
+            'flash' => t('wifi_ap_power_invalid'),
+            'flashClass' => 'inactive',
+        ]));
+        exit;
     } else {
         $response = root_helper_request([
             'action' => 'wifi_txpower_set',
@@ -46,9 +53,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'dbm' => $dbmRaw,
         ]);
         $ok = (($response['ok'] ?? false) === true);
-        $message = $ok ? t('wifi_ap_power_saved') : t('wifi_ap_power_failed');
-        $messageClass = $ok ? 'status active' : 'status inactive';
-        $status = wifi_power_status($modules);
+        header('Location: ' . build_page_url('/wifi_power.php', [
+            'flash' => $ok ? t('wifi_ap_power_saved') : t('wifi_ap_power_failed'),
+            'flashClass' => $ok ? 'active' : 'inactive',
+        ]));
+        exit;
     }
 }
 

@@ -4,6 +4,10 @@ require_once 'lib/footer.php';
 require_once 'lib/root_helper_client.php';
 $message = '';
 $messageClass = '';
+if (isset($_GET['flash']) && is_string($_GET['flash']) && $_GET['flash'] !== '') {
+    $message = (string)$_GET['flash'];
+    $messageClass = ((string)($_GET['flashClass'] ?? '') === 'active') ? 'status active' : 'status inactive';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $response = root_helper_request([
@@ -12,10 +16,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ]);
     $ok = (($response['ok'] ?? false) === true);
     $message = $ok ? t('reboot_requested') : t('reboot_failed');
-    $messageClass = $ok ? 'status active' : 'status inactive';
     if (!$ok && isset($response['error'])) {
         $message .= ' (' . $response['error'] . ')';
     }
+    header('Location: ' . build_page_url('/reboot.php', [
+        'flash' => $message,
+        'flashClass' => $ok ? 'active' : 'inactive',
+    ]));
+    exit;
 }
 ?>
 <!DOCTYPE html>
