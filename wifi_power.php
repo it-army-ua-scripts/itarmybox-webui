@@ -4,7 +4,8 @@ require_once 'lib/footer.php';
 require_once 'lib/root_helper_client.php';
 
 const WIFI_AP_INTERFACE = 'wlan0';
-const WIFI_TXPOWER_MIN_DBM = '0.50';
+const WIFI_TXPOWER_MIN_DBM = '1.00';
+const WIFI_TXPOWER_DEFAULT_DBM = '1.00';
 const WIFI_TXPOWER_MAX_DBM = '31.00';
 
 $modules = (require 'config/config.php')['daemonNames'];
@@ -52,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $currentDbm = (($status['ok'] ?? false) === true) ? format_dbm_value((string)($status['currentDbm'] ?? WIFI_TXPOWER_MAX_DBM)) : null;
-$defaultDbm = format_dbm_value((string)($status['defaultDbm'] ?? WIFI_TXPOWER_MAX_DBM));
+$defaultDbm = format_dbm_value((string)($status['defaultDbm'] ?? WIFI_TXPOWER_DEFAULT_DBM));
 $maxDbm = format_dbm_value((string)($status['maxDbm'] ?? WIFI_TXPOWER_MAX_DBM));
 $iface = WIFI_AP_INTERFACE;
 $inputValue = $currentDbm ?? $defaultDbm;
@@ -138,7 +139,7 @@ $inputValue = $currentDbm ?? $defaultDbm;
     }
 
     function normalize(value) {
-        const numeric = Math.max(0.5, Math.min(31, Number(value) || 0.5));
+        const numeric = Math.max(1, Math.min(31, Number(value) || 1));
         return numeric.toFixed(2);
     }
 
