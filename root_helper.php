@@ -17,6 +17,7 @@ const WIFI_AP_INTERFACE = 'wlan0';
 const WIFI_AP_DEFAULT_NAME = 'Artline';
 const HOSTAPD_CONFIG_PATH = '/etc/hostapd/hostapd.conf';
 const HOSTAPD_SERVICE_NAME = 'hostapd.service';
+const ROOT_HELPER_INSTALL_SCRIPT = '/var/www/html/itarmybox-webui/systemd/install-root-helper.sh';
 const VNSTAT_INTERFACE = 'eth0';
 
 function respond(array $data): void
@@ -71,6 +72,16 @@ function findExecutable(array $paths): ?string
 function findServiceBinary(): ?string
 {
     return findExecutable(['/usr/sbin/service', '/usr/bin/service', '/sbin/service', '/bin/service']);
+}
+
+function repairRootHelperAccess(): bool
+{
+    if (!is_file(ROOT_HELPER_INSTALL_SCRIPT)) {
+        return false;
+    }
+
+    $output = runCommandVerbose('/usr/bin/env bash ' . escapeshellarg(ROOT_HELPER_INSTALL_SCRIPT), $code);
+    return $code === 0;
 }
 
 function findAptGet(): ?string
@@ -385,6 +396,9 @@ function setWifiApName($value): array
     }
 
     if (!is_string($updated) || @file_put_contents(HOSTAPD_CONFIG_PATH, $updated) === false) {
+        if (repairRootHelperAccess()) {
+            return ['ok' => false, 'error' => 'root_helper_reloaded_retry'];
+        }
         return ['ok' => false, 'error' => 'hostapd_config_write_failed'];
     }
 

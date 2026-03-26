@@ -36,6 +36,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'modules' => $modules,
             'ssid' => $ssid,
         ]);
+        if (($response['ok'] ?? false) !== true && (($response['error'] ?? '') === 'root_helper_reloaded_retry')) {
+            $response = root_helper_request([
+                'action' => 'wifi_ap_name_set',
+                'modules' => $modules,
+                'ssid' => $ssid,
+            ]);
+        }
         $ok = (($response['ok'] ?? false) === true);
         $message = $ok ? t('wifi_ap_name_saved') : t('wifi_ap_name_failed');
         if (!$ok && isset($response['error']) && is_string($response['error']) && $response['error'] !== '') {
