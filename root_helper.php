@@ -330,11 +330,15 @@ function normalizeWifiSsid($value): ?string
     }
 
     $ssid = trim($value);
-    if ($ssid === '' || preg_match('/[\x00-\x1F\x7F]/', $ssid) === 1) {
+    if ($ssid === '' || $ssid !== $value) {
         return null;
     }
 
     if (strlen($ssid) > 32) {
+        return null;
+    }
+
+    if (preg_match('/^[\x20-\x7E]+$/', $ssid) !== 1) {
         return null;
     }
 

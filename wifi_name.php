@@ -20,14 +20,19 @@ function wifi_name_status(array $modules): array
 
 function normalize_ssid_input($value): string
 {
-    return trim((string)$value);
+    return (string)$value;
 }
 
 $status = wifi_name_status($modules);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ssid = normalize_ssid_input($_POST['wifi_ap_name'] ?? '');
-    if ($ssid === '' || strlen($ssid) > 32 || preg_match('/[\x00-\x1F\x7F]/', $ssid) === 1) {
+    if (
+        $ssid === '' ||
+        $ssid !== trim($ssid) ||
+        strlen($ssid) > 32 ||
+        preg_match('/^[\x20-\x7E]+$/', $ssid) !== 1
+    ) {
         $message = t('wifi_ap_name_invalid');
         $messageClass = 'status inactive';
     } else {
@@ -79,6 +84,7 @@ $inputValue = $currentSsid !== '' ? $currentSsid : WIFI_AP_DEFAULT_NAME;
             <div class="service-title"><?= htmlspecialchars(strtoupper($iface), ENT_QUOTES, 'UTF-8') ?></div>
             <div><strong><?= htmlspecialchars(t('wifi_ap_name_current'), ENT_QUOTES, 'UTF-8') ?>:</strong> <?= htmlspecialchars($currentSsid, ENT_QUOTES, 'UTF-8') ?></div>
             <div class="schedule-limit-hint" style="margin-top: 10px;"><?= htmlspecialchars(t('wifi_ap_name_help'), ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="schedule-limit-hint"><?= htmlspecialchars(t('wifi_ap_name_rules'), ENT_QUOTES, 'UTF-8') ?></div>
         </div>
 
         <div class="form-container">
@@ -90,6 +96,7 @@ $inputValue = $currentSsid !== '' ? $currentSsid : WIFI_AP_DEFAULT_NAME;
                         id="wifi_ap_name"
                         name="wifi_ap_name"
                         maxlength="32"
+                        pattern="[\x20-\x7E]{1,32}"
                         value="<?= htmlspecialchars($inputValue, ENT_QUOTES, 'UTF-8') ?>"
                         placeholder="<?= htmlspecialchars(t('wifi_ap_name_placeholder'), ENT_QUOTES, 'UTF-8') ?>"
                     >
