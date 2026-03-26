@@ -19,6 +19,7 @@ const HOSTAPD_CONFIG_PATH = '/etc/hostapd/hostapd.conf';
 const HOSTAPD_SERVICE_NAME = 'hostapd.service';
 const ROOT_HELPER_INSTALL_SCRIPT = '/var/www/html/itarmybox-webui/systemd/install-root-helper.sh';
 const VNSTAT_INTERFACE = 'eth0';
+const DISTRESS_AUTOTUNE_TIMER_NAME = 'itarmybox-distress-autotune.timer';
 const DISTRESS_AUTOTUNE_STATE_FILE = '/opt/itarmy/distress-autotune.json';
 const DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY = 4000;
 const DISTRESS_AUTOTUNE_STEP = 500;
@@ -89,6 +90,30 @@ function repairRootHelperAccess(): bool
 
     $output = runCommandVerbose('/usr/bin/env bash ' . escapeshellarg(ROOT_HELPER_INSTALL_SCRIPT), $code);
     return $code === 0;
+}
+
+function isSystemdUnitKnown(string $unitName): bool
+{
+    $systemctl = findSystemctl();
+    if ($systemctl === null || trim($unitName) === '') {
+        return false;
+    }
+
+    runCommand(
+        escapeshellarg($systemctl) . ' status ' . escapeshellarg($unitName) . ' --no-pager',
+        $code
+    );
+
+    return $code === 0 || $code === 3;
+}
+
+function ensureDistressAutotuneTimerInstalled(): bool
+{
+    if (isSystemdUnitKnown(DISTRESS_AUTOTUNE_TIMER_NAME)) {
+        return true;
+    }
+
+    return repairRootHelperAccess() && isSystemdUnitKnown(DISTRESS_AUTOTUNE_TIMER_NAME);
 }
 
 function findAptGet(): ?string
@@ -347,42 +372,43 @@ function normalizeDistressConcurrency($value): ?int
     return $concurrency;
 }
 
-function parseExecStartOptions(string $execStartLine): array
+function getExecStartOptionValue(string $execStartLine, string $option): ?string
 {
-    $tokens = str_getcsv($execStartLine, ' ');
-    $baseTokens = [];
-    $options = [];
+    $pattern = '/(?:^|\s)--' . preg_quote($option, '/') . '\s+((?:"(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\'|[^\s]+))/';
+    if (preg_match($pattern, $execStartLine, $matches) !== 1) {
+        return null;
+    }
 
-    foreach ($tokens as $idx => $token) {
-        if ($idx === 0) {
-            $baseTokens[] = $token;
-            continue;
-        }
-        if (!str_starts_with($token, '--')) {
-            continue;
-        }
-        $key = substr($token, 2);
-        $next = $tokens[$idx + 1] ?? null;
-        if ($next !== null && !str_starts_with($next, '--')) {
-            $options[$key] = $next;
-        } else {
-            $options[$key] = true;
+    $value = trim((string)($matches[1] ?? ''));
+    $length = strlen($value);
+    if ($length >= 2) {
+        $first = $value[0];
+        $last = $value[$length - 1];
+        if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
+            $value = substr($value, 1, -1);
         }
     }
 
-    return ['baseTokens' => $baseTokens, 'options' => $options];
+    return $value;
 }
 
-function buildExecStartLine(array $baseTokens, array $options): string
+function appendExecStartOption(string $execStartLine, string $option, string $value): string
 {
-    $out = $baseTokens;
-    foreach ($options as $key => $value) {
-        $out[] = '--' . $key;
-        if ($value !== true) {
-            $out[] = (string)$value;
-        }
+    $trimmed = rtrim($execStartLine);
+    if ($trimmed === '') {
+        return $execStartLine;
     }
-    return implode(' ', $out);
+    return $trimmed . ' --' . $option . ' ' . $value;
+}
+
+function replaceExecStartOptionValue(string $execStartLine, string $option, string $value): string
+{
+    $pattern = '/(^|\s)--' . preg_quote($option, '/') . '\s+((?:"(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\'|[^\s]+))/';
+    if (preg_match($pattern, $execStartLine) !== 1) {
+        return appendExecStartOption($execStartLine, $option, $value);
+    }
+
+    return (string)preg_replace($pattern, '$1--' . $option . ' ' . $value, $execStartLine, 1);
 }
 
 function getDistressCurrentConcurrency(): int
@@ -392,8 +418,7 @@ function getDistressCurrentConcurrency(): int
         return DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY;
     }
 
-    $parsed = parseExecStartOptions($execStart);
-    $value = $parsed['options']['concurrency'] ?? null;
+    $value = getExecStartOptionValue($execStart, 'concurrency');
     $concurrency = normalizeDistressConcurrency($value);
     return $concurrency ?? DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY;
 }
@@ -405,9 +430,12 @@ function setDistressCurrentConcurrency(int $concurrency): bool
         return false;
     }
 
-    $parsed = parseExecStartOptions($execStart);
-    $parsed['options']['concurrency'] = (string)$concurrency;
-    return updateServiceExecStart('distress', buildExecStartLine($parsed['baseTokens'], $parsed['options']));
+    $updatedExecStart = replaceExecStartOptionValue($execStart, 'concurrency', (string)$concurrency);
+    if ($updatedExecStart === '') {
+        return false;
+    }
+
+    return updateServiceExecStart('distress', $updatedExecStart);
 }
 
 function readDistressAutotuneState(): array
@@ -460,6 +488,8 @@ function writeDistressAutotuneState(array $state): bool
 
 function getDistressAutotuneStatus(): array
 {
+    ensureDistressAutotuneTimerInstalled();
+
     $state = readDistressAutotuneState();
     $currentConcurrency = getDistressCurrentConcurrency();
     if ($currentConcurrency !== (int)$state['currentConcurrency']) {
@@ -501,6 +531,8 @@ function getDistressAutotuneStatus(): array
 
 function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
 {
+    ensureDistressAutotuneTimerInstalled();
+
     $enabled = ($enabledValue === true || $enabledValue === '1' || $enabledValue === 1 || $enabledValue === 'true');
     $concurrency = normalizeDistressConcurrency($concurrencyValue);
     if ($concurrency === null) {
