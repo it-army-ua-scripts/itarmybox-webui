@@ -73,6 +73,8 @@
 <script>
     (function () {
         const useMyIpEl = document.getElementById("use-my-ip");
+        const concurrencyModeEl = document.getElementById("distress-concurrency-mode");
+        const concurrencyEl = document.getElementById("concurrency");
         const gatedFields = [
             document.getElementById("enable-icmp-flood"),
             document.getElementById("enable-packet-flood"),
@@ -101,6 +103,13 @@
             }
         }
 
+        function refreshConcurrencyModeState() {
+            if (!concurrencyModeEl || !concurrencyEl) {
+                return;
+            }
+            concurrencyEl.disabled = concurrencyModeEl.value === "auto";
+        }
+
         if (useMyIpEl) {
             useMyIpEl.addEventListener("input", refreshFloodControlsState);
             useMyIpEl.addEventListener("change", refreshFloodControlsState);
@@ -108,6 +117,10 @@
                 disableUdpFloodEl.addEventListener("change", refreshFloodControlsState);
             }
             refreshFloodControlsState();
+        }
+        if (concurrencyModeEl) {
+            concurrencyModeEl.addEventListener("change", refreshConcurrencyModeState);
+            refreshConcurrencyModeState();
         }
     })();
 </script>

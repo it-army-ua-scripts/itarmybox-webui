@@ -113,7 +113,14 @@ function updateServiceConfigParams(string $configString, array $updatedParams, s
         }
     }
 
+    if ($daemonName === 'distress') {
+        unset($options['distress-concurrency-mode']);
+    }
+
     foreach ($updatedParams as $updatedParamKey => $updatedParam) {
+        if ($updatedParamKey === 'distress-concurrency-mode') {
+            continue;
+        }
         $updatedParam = trim((string)$updatedParam);
         $allKeys = array_merge([$updatedParamKey], $aliases[$updatedParamKey] ?? []);
         foreach ($allKeys as $optionKey) {
