@@ -224,6 +224,7 @@ Check these first:
 - The home page power slider now guards against race conditions: scheduled applies block background refresh repainting, duplicate release events are deduplicated, schedule lock physically disables the slider, and stale POST responses should not overwrite newer slider state.
 - The home page power slider should stay encapsulated in `js/home_power.js`; `js/home_init.js` should only wire high-level startup and call `initPowerControls()`.
 - `render_back_link()` should be a plain fallback link to the logical parent page. Using `history.back()` created navigation loops after `POST -> redirect -> flash`, especially between `tool.php` and `tools_list.php`.
+- The shared status log on `status.php` now supports fullscreen viewing by double-clicking the log box; it should keep live updates while open and close via second double-click, `Esc`, close button, or backdrop click.
 
 ## Refactor roadmap snapshot
 

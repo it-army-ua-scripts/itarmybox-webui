@@ -102,6 +102,22 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         <div class="menu" id="active-module-actions"></div>
     </div>
 
+    <div class="status-log-modal" id="status-log-modal" hidden>
+        <div class="status-log-modal-card" role="dialog" aria-modal="true" aria-labelledby="status-log-modal-title">
+            <div class="status-log-modal-head">
+                <div class="status-log-modal-title" id="status-log-modal-title"><?= htmlspecialchars(t('common_logs'), ENT_QUOTES, 'UTF-8') ?></div>
+                <button
+                    type="button"
+                    class="status-log-modal-close"
+                    id="status-log-modal-close"
+                    aria-label="Close"
+                    title="Close"
+                >&times;</button>
+            </div>
+            <div class="log-box status-log-box-fullscreen" id="common-log-modal"></div>
+        </div>
+    </div>
+
     <div class="menu">
         <?= render_back_link('/') ?>
     </div>

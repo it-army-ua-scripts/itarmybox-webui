@@ -4,6 +4,9 @@
     const serviceState = {};
 
     const commonLogEl = document.getElementById("common-log");
+    const commonLogModalEl = document.getElementById("status-log-modal");
+    const commonLogModalContentEl = document.getElementById("common-log-modal");
+    const commonLogModalCloseEl = document.getElementById("status-log-modal-close");
     const activeModuleActionsEl = document.getElementById("active-module-actions");
     const activeModuleNameEl = document.getElementById("active-module-name");
     const activeModuleStatusEl = document.getElementById("active-module-status");
@@ -11,6 +14,9 @@
     const controlStatusEl = document.getElementById("control-status");
 
     function appendOrReplace(el, newText, key) {
+        if (!el) {
+            return;
+        }
         const oldText = serviceState[key] || "";
         const shouldStickToBottom =
             oldText === "" ||
@@ -26,6 +32,37 @@
         if (shouldStickToBottom) {
             el.scrollTop = el.scrollHeight;
         }
+    }
+
+    function isLogModalOpen() {
+        return Boolean(commonLogModalEl) && commonLogModalEl.hidden === false;
+    }
+
+    function syncModalLog() {
+        if (!isLogModalOpen()) {
+            return;
+        }
+        appendOrReplace(commonLogModalContentEl, commonLogEl ? (commonLogEl.textContent || "") : "", "commonModal");
+    }
+
+    function openLogModal() {
+        if (!commonLogModalEl || !commonLogModalContentEl || !commonLogEl) {
+            return;
+        }
+        commonLogModalEl.hidden = false;
+        document.body.classList.add("modal-open");
+        commonLogModalContentEl.textContent = commonLogEl.textContent || "";
+        serviceState.commonModal = commonLogModalContentEl.textContent;
+        commonLogModalContentEl.scrollTop = commonLogModalContentEl.scrollHeight;
+        commonLogModalCloseEl.focus();
+    }
+
+    function closeLogModal() {
+        if (!commonLogModalEl) {
+            return;
+        }
+        commonLogModalEl.hidden = true;
+        document.body.classList.remove("modal-open");
     }
 
     function createActionForm(path, module, label) {
@@ -114,9 +151,27 @@
             }
 
             appendOrReplace(commonLogEl, data.commonLogs || "", "common");
+            syncModalLog();
         } catch (e) {
             renderUnavailableState();
         }
+    }
+
+    if (commonLogEl && commonLogModalEl && commonLogModalContentEl && commonLogModalCloseEl) {
+        commonLogEl.classList.add("status-log-launchable");
+        commonLogEl.addEventListener("dblclick", openLogModal);
+        commonLogModalContentEl.addEventListener("dblclick", closeLogModal);
+        commonLogModalCloseEl.addEventListener("click", closeLogModal);
+        commonLogModalEl.addEventListener("click", function (event) {
+            if (event.target === commonLogModalEl) {
+                closeLogModal();
+            }
+        });
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && isLogModalOpen()) {
+                closeLogModal();
+            }
+        });
     }
 
     updateStatus();

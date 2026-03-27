@@ -1025,6 +1025,81 @@ h1 {
     line-height: 1.4;
 }
 
+.status-log-launchable {
+    cursor: zoom-in;
+}
+
+.status-log-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 130;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(15, 23, 42, 0.72);
+    backdrop-filter: blur(4px);
+}
+
+.status-log-modal[hidden] {
+    display: none !important;
+}
+
+.status-log-modal-card {
+    display: flex;
+    flex-direction: column;
+    width: min(100%, 1120px);
+    height: min(100%, calc(100vh - 36px));
+    min-height: 320px;
+    padding: 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(151, 175, 204, 0.32);
+    background: linear-gradient(180deg, #ffffff 0%, #f4f8fc 100%);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.status-log-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.status-log-modal-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #20364a;
+}
+
+.status-log-modal-close {
+    flex: 0 0 auto;
+    width: 42px;
+    height: 42px;
+    border: 1px solid rgba(151, 175, 204, 0.42);
+    border-radius: 999px;
+    background: linear-gradient(180deg, #f8fbff 0%, #eaf1f7 100%);
+    color: #20364a;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 10px 22px rgba(44, 62, 80, 0.08);
+}
+
+.status-log-modal-close:hover {
+    background: linear-gradient(180deg, #ffffff 0%, #eef4fb 100%);
+}
+
+.status-log-box-fullscreen {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
 .tool-log-box {
     text-align: left !important;
     white-space: pre-line;
@@ -1091,6 +1166,35 @@ h1 {
         max-height: 320px;
         font-size: 12px;
         line-height: 1.35;
+    }
+
+    .status-log-modal {
+        padding: 12px;
+    }
+
+    .status-log-modal-card {
+        height: min(100%, calc(100vh - 24px));
+        padding: 12px;
+        border-radius: 16px;
+    }
+
+    .status-log-modal-head {
+        margin-bottom: 10px;
+    }
+
+    .status-log-modal-title {
+        font-size: 0.96rem;
+    }
+
+    .status-log-modal-close {
+        width: 38px;
+        height: 38px;
+        font-size: 1.35rem;
+    }
+
+    .status-log-box-fullscreen {
+        font-size: 12px;
+        line-height: 1.4;
     }
 
     .menu {
@@ -1592,6 +1696,27 @@ html[data-theme="dark"] .log-box {
     background: #020617;
     color: #dbe6f4;
     border: 1px solid rgba(100, 122, 148, 0.28);
+}
+
+html[data-theme="dark"] .status-log-modal-card {
+    border-color: rgba(100, 122, 148, 0.3);
+    background: linear-gradient(180deg, #162231 0%, #0f1824 100%);
+    box-shadow: 0 24px 60px rgba(2, 8, 23, 0.48);
+}
+
+html[data-theme="dark"] .status-log-modal-title {
+    color: #e5edf7;
+}
+
+html[data-theme="dark"] .status-log-modal-close {
+    background: linear-gradient(180deg, #1d2b3c 0%, #15202e 100%);
+    border-color: rgba(100, 122, 148, 0.32);
+    color: #e5edf7;
+    box-shadow: 0 10px 22px rgba(2, 8, 23, 0.28);
+}
+
+html[data-theme="dark"] .status-log-modal-close:hover {
+    background: linear-gradient(180deg, #243549 0%, #192534 100%);
 }
 
 html[data-theme="dark"] .copy-bot-btn {
