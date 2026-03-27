@@ -7,6 +7,28 @@ const SCHEDULE_END_MARKER = '# ITARMYBOX-SCHEDULE-END';
 const MAX_SCHEDULE_ENTRIES = 2;
 const SCHEDULE_MANUAL_OVERRIDE_FILE = '/tmp/itarmybox-schedule-manual-override';
 const TRAFFIC_LIMIT_STATE_FILE = '/tmp/itarmybox-traffic-limit.json';
+const ROOT_HELPER_SCRIPT_PATH = '/var/www/html/itarmybox-webui/root_helper.php';
+const WIFI_TXPOWER_MIN_CENTIDBM = 100;
+const WIFI_TXPOWER_MAX_CENTIDBM = 3100;
+const WIFI_TXPOWER_DEFAULT_CENTIDBM = 100;
+const WIFI_TXPOWER_STATE_FILE = '/opt/itarmy/wifi-txpower.json';
+const WIFI_TXPOWER_SERVICE_PATH = '/var/www/html/itarmybox-webui/systemd/itarmybox-wifi-txpower.service';
+const WIFI_AP_INTERFACE = 'wlan0';
+const WIFI_AP_DEFAULT_NAME = 'Artline';
+const HOSTAPD_CONFIG_PATH = '/etc/hostapd/hostapd.conf';
+const HOSTAPD_SERVICE_NAME = 'hostapd.service';
+const ROOT_HELPER_INSTALL_SCRIPT = '/var/www/html/itarmybox-webui/systemd/install-root-helper.sh';
+const VNSTAT_INTERFACE = 'eth0';
+const UPDATE_SCRIPT_PATH = '/var/www/html/itarmybox-webui/update.sh';
+
+require_once __DIR__ . '/root_helper/vnstat.php';
+require_once __DIR__ . '/root_helper/time_sync.php';
+require_once __DIR__ . '/root_helper/wifi.php';
+require_once __DIR__ . '/root_helper/traffic_limit.php';
+require_once __DIR__ . '/root_helper/distress_autotune.php';
+require_once __DIR__ . '/root_helper/system.php';
+require_once __DIR__ . '/root_helper/webui.php';
+require_once __DIR__ . '/root_helper/dispatch.php';
 
 function respond(array $data): void
 {
@@ -24,6 +46,15 @@ function runCommand(string $command, ?int &$exitCode = null): string
     $output = [];
     $code = 1;
     exec($command . ' 2>/dev/null', $output, $code);
+    $exitCode = $code;
+    return implode("\n", $output);
+}
+
+function runCommandVerbose(string $command, ?int &$exitCode = null): string
+{
+    $output = [];
+    $code = 1;
+    exec($command . ' 2>&1', $output, $code);
     $exitCode = $code;
     return implode("\n", $output);
 }
@@ -48,275 +79,73 @@ function findExecutable(array $paths): ?string
     return null;
 }
 
-function findAptGet(): ?string
+function findServiceBinary(): ?string
 {
-    return findExecutable(['/usr/bin/apt-get', '/bin/apt-get', '/usr/bin/apt', '/bin/apt']);
+    return findExecutable(['/usr/sbin/service', '/usr/bin/service', '/sbin/service', '/bin/service']);
 }
 
-function isVnstatInstalled(): bool
+function repairRootHelperAccess(): bool
 {
-    return is_executable('/usr/bin/vnstat') || is_executable('/bin/vnstat');
-}
-
-function installVnstat(): array
-{
-    if (isVnstatInstalled()) {
-        return ['ok' => true, 'installed' => true, 'already' => true];
+    if (!is_file(ROOT_HELPER_INSTALL_SCRIPT)) {
+        return false;
     }
 
-    $apt = findAptGet();
-    if ($apt === null) {
-        return ['ok' => false, 'error' => 'apt_not_found'];
-    }
-
-    $cmd = 'DEBIAN_FRONTEND=noninteractive ' . escapeshellarg($apt) . ' install -y vnstat';
-    $output = runCommand($cmd, $code);
-    if ($code !== 0) {
-        return ['ok' => false, 'error' => 'vnstat_install_failed', 'output' => $output];
-    }
-
-    return ['ok' => true, 'installed' => isVnstatInstalled()];
+    $output = runCommandVerbose('/usr/bin/env bash ' . escapeshellarg(ROOT_HELPER_INSTALL_SCRIPT), $code);
+    return $code === 0;
 }
 
-function parseBoolString(string $value): ?bool
+function isSystemdUnitKnown(string $unitName): bool
 {
-    $normalized = strtolower(trim($value));
-    return match ($normalized) {
-        'yes', 'true', '1' => true,
-        'no', 'false', '0' => false,
-        default => null,
-    };
-}
-
-function findTimedatectl(): ?string
-{
-    return findExecutable(['/usr/bin/timedatectl', '/bin/timedatectl']);
-}
-
-function findSystemctl(): ?string
-{
-    return findExecutable(['/usr/bin/systemctl', '/bin/systemctl']);
-}
-
-function getTimeSyncStatus(): array
-{
-    $timedatectl = findTimedatectl();
     $systemctl = findSystemctl();
-    if ($timedatectl === null) {
-        return ['ok' => false, 'error' => 'timedatectl_not_found'];
+    if ($systemctl === null || trim($unitName) === '') {
+        return false;
     }
 
-    $output = runCommand(escapeshellarg($timedatectl) . ' show --property=Timezone --property=NTP --property=NTPSynchronized --property=NTPService --value', $code);
-    if ($code !== 0) {
-        return ['ok' => false, 'error' => 'timedatectl_show_failed'];
+    runCommand(
+        escapeshellarg($systemctl) . ' status ' . escapeshellarg($unitName) . ' --no-pager',
+        $code
+    );
+
+    return $code === 0 || $code === 3;
+}
+
+function getExecStartOptionValue(string $execStartLine, string $option): ?string
+{
+    $pattern = '/(?:^|\s)--' . preg_quote($option, '/') . '\s+((?:"(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\'|[^\s]+))/';
+    if (preg_match($pattern, $execStartLine, $matches) !== 1) {
+        return null;
     }
 
-    $lines = preg_split('/\r\n|\r|\n/', trim($output));
-    $timezone = trim((string)($lines[0] ?? ''));
-    $ntpEnabled = parseBoolString((string)($lines[1] ?? ''));
-    $ntpSynced = parseBoolString((string)($lines[2] ?? ''));
-    $ntpService = trim((string)($lines[3] ?? ''));
-    if ($ntpService === '' && $systemctl !== null) {
-        $services = ['systemd-timesyncd', 'chronyd', 'ntp', 'ntpd'];
-        foreach ($services as $service) {
-            $serviceSafe = escapeshellarg($service . '.service');
-            $state = trim(runCommand(escapeshellarg($systemctl) . " is-active $serviceSafe", $svcCode));
-            if ($svcCode === 0 && $state !== '') {
-                $ntpService = $service;
-                break;
-            }
+    $value = trim((string)($matches[1] ?? ''));
+    $length = strlen($value);
+    if ($length >= 2) {
+        $first = $value[0];
+        $last = $value[$length - 1];
+        if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
+            $value = substr($value, 1, -1);
         }
     }
 
-    return [
-        'ok' => true,
-        'timezone' => $timezone,
-        'ntpEnabled' => $ntpEnabled,
-        'ntpSynchronized' => $ntpSynced,
-        'ntpService' => $ntpService !== '' ? $ntpService : null,
-        'timezoneOk' => $timezone === 'Europe/Kyiv',
-        'ntpOk' => $ntpEnabled === true,
-    ];
+    return $value;
 }
 
-function ensureTimeSync(): array
+function appendExecStartOption(string $execStartLine, string $option, string $value): string
 {
-    return ensureTimeSyncForTimezone('Europe/Kyiv');
+    $trimmed = rtrim($execStartLine);
+    if ($trimmed === '') {
+        return $execStartLine;
+    }
+    return $trimmed . ' --' . $option . ' ' . $value;
 }
 
-function ensureTimeSyncForTimezone(string $timezone): array
+function replaceExecStartOptionValue(string $execStartLine, string $option, string $value): string
 {
-    if (preg_match('/^[A-Za-z0-9._+-]+(?:\/[A-Za-z0-9._+\-]+)+$/', $timezone) !== 1) {
-        return ['ok' => false, 'error' => 'invalid_timezone'];
+    $pattern = '/(^|\s)--' . preg_quote($option, '/') . '\s+((?:"(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\'|[^\s]+))/';
+    if (preg_match($pattern, $execStartLine) !== 1) {
+        return appendExecStartOption($execStartLine, $option, $value);
     }
 
-    $timedatectl = findTimedatectl();
-    $systemctl = findSystemctl();
-    if ($timedatectl === null) {
-        return ['ok' => false, 'error' => 'timedatectl_not_found'];
-    }
-
-    $timesyncd = findExecutable(['/lib/systemd/systemd-timesyncd', '/usr/lib/systemd/systemd-timesyncd']);
-    if ($timesyncd !== null && $systemctl !== null) {
-        runCommand(escapeshellarg($systemctl) . ' enable systemd-timesyncd.service', $enableCode);
-        runCommand(escapeshellarg($systemctl) . ' start systemd-timesyncd.service', $startCode);
-    }
-
-    runCommand(escapeshellarg($timedatectl) . ' set-timezone ' . escapeshellarg($timezone), $timezoneCode);
-    if ($timezoneCode !== 0) {
-        return ['ok' => false, 'error' => 'set_timezone_failed'];
-    }
-
-    runCommand(escapeshellarg($timedatectl) . ' set-ntp true', $ntpCode);
-    if ($ntpCode !== 0) {
-        return ['ok' => false, 'error' => 'set_ntp_failed'];
-    }
-
-    if ($timesyncd !== null && $systemctl !== null) {
-        runCommand(escapeshellarg($systemctl) . ' restart systemd-timesyncd.service', $restartCode);
-    }
-
-    $status = getTimeSyncStatus();
-    if (($status['ok'] ?? false) !== true) {
-        return $status;
-    }
-
-    if (($status['timezone'] ?? '') !== $timezone || ($status['ntpOk'] ?? false) !== true) {
-        return ['ok' => false, 'error' => 'time_sync_verification_failed'] + $status;
-    }
-
-    return $status;
-}
-
-function appendRebootLog(string $message): void
-{
-    $line = '[' . date('c') . '] ' . $message . "\n";
-    @file_put_contents('/tmp/itarmybox-reboot.log', $line, FILE_APPEND);
-}
-
-function trafficLimitPercentToMbit(int $percent): int
-{
-    $percent = max(25, min(100, $percent));
-    if ($percent <= 80) {
-        return (int)round(20 + (($percent - 25) * (300 - 20) / (80 - 25)));
-    }
-    return (int)round(300 + (($percent - 80) * (750 - 300) / (100 - 80)));
-}
-
-function trafficLimitStateDefault(): array
-{
-    return [
-        'ok' => true,
-        'iface' => 'eth0',
-        'percent' => trafficLimitMbitToPercent(50),
-        'mbit' => 50,
-    ];
-}
-
-function trafficLimitMbitToPercent(int $mbit): int
-{
-    $mbit = max(20, min(750, $mbit));
-    if ($mbit <= 300) {
-        return (int)round(25 + (($mbit - 20) * (80 - 25) / (300 - 20)));
-    }
-    return (int)round(80 + (($mbit - 300) * (100 - 80) / (750 - 300)));
-}
-
-function readTrafficLimitFromTc(): ?array
-{
-    $tc = findTcBinary();
-    if ($tc === null) {
-        return null;
-    }
-    $iface = 'eth0';
-    $output = runCommand(escapeshellarg($tc) . ' qdisc show dev ' . escapeshellarg($iface), $code);
-    if ($code !== 0 || trim($output) === '') {
-        return null;
-    }
-
-    if (preg_match('/\brate\s+(\d+)([kmg])bit\b/i', $output, $matches) !== 1) {
-        return null;
-    }
-
-    $value = (int)$matches[1];
-    $unit = strtolower($matches[2]);
-    $mbit = match ($unit) {
-        'g' => $value * 1000,
-        'm' => $value,
-        'k' => max(1, (int)round($value / 1000)),
-        default => $value,
-    };
-
-    return [
-        'ok' => true,
-        'iface' => $iface,
-        'percent' => trafficLimitMbitToPercent($mbit),
-        'mbit' => max(20, min(750, $mbit)),
-        'source' => 'tc',
-    ];
-}
-
-function getTrafficLimitState(): array
-{
-    $default = trafficLimitStateDefault();
-    $tcState = readTrafficLimitFromTc();
-    if ($tcState !== null) {
-        return $tcState;
-    }
-    $raw = @file_get_contents(TRAFFIC_LIMIT_STATE_FILE);
-    if (!is_string($raw) || trim($raw) === '') {
-        return $default;
-    }
-    $data = json_decode($raw, true);
-    if (!is_array($data)) {
-        return $default;
-    }
-    $percent = (int)($data['percent'] ?? $default['percent']);
-    $iface = (string)($data['iface'] ?? $default['iface']);
-    if ($iface !== 'eth0' || $percent < 25 || $percent > 100) {
-        return $default;
-    }
-    return [
-        'ok' => true,
-        'iface' => 'eth0',
-        'percent' => $percent,
-        'mbit' => trafficLimitPercentToMbit($percent),
-        'source' => 'state',
-    ];
-}
-
-function setTrafficLimit(int $percent): array
-{
-    if ($percent < 25 || $percent > 100) {
-        return ['ok' => false, 'error' => 'invalid_traffic_limit_percent'];
-    }
-    $tc = findTcBinary();
-    if ($tc === null) {
-        return ['ok' => false, 'error' => 'tc_not_found'];
-    }
-    $iface = 'eth0';
-    $mbit = trafficLimitPercentToMbit($percent);
-    $rate = $mbit . 'mbit';
-    $burst = ($mbit >= 500) ? '1536kb' : (($mbit >= 200) ? '1024kb' : '384kb');
-    runCommand(escapeshellarg($tc) . ' qdisc replace dev ' . escapeshellarg($iface) . ' root tbf rate ' . escapeshellarg($rate) . ' burst ' . escapeshellarg($burst) . ' latency 70ms', $code);
-    if ($code !== 0) {
-        return ['ok' => false, 'error' => 'traffic_limit_apply_failed'];
-    }
-    @file_put_contents(
-        TRAFFIC_LIMIT_STATE_FILE,
-        json_encode([
-            'iface' => $iface,
-            'percent' => $percent,
-            'updated_at' => time(),
-        ], JSON_UNESCAPED_SLASHES)
-    );
-    return [
-        'ok' => true,
-        'iface' => $iface,
-        'percent' => $percent,
-        'mbit' => $mbit,
-        'source' => 'set',
-    ];
+    return (string)preg_replace($pattern, '$1--' . $option . ' ' . $value, $execStartLine, 1);
 }
 
 function isValidModule(string $module): bool
@@ -328,6 +157,12 @@ function parseTimeParts(string $hhmm): array
 {
     [$h, $m] = explode(':', $hhmm, 2);
     return [(int)$h, (int)$m];
+}
+
+function timeToMinutes(string $hhmm): int
+{
+    [$h, $m] = parseTimeParts($hhmm);
+    return ($h * 60) + $m;
 }
 
 function stripScheduleBlock(string $crontab): string
@@ -364,6 +199,61 @@ function normalizeDays(array $days): array
     return $values;
 }
 
+function expandScheduleEntrySegments(array $entry): array
+{
+    $days = normalizeDays((array)($entry['days'] ?? []));
+    $start = (string)($entry['start'] ?? '');
+    $stop = (string)($entry['stop'] ?? '');
+    if (
+        $days === [] ||
+        preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $start) !== 1 ||
+        preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $stop) !== 1 ||
+        $start === $stop
+    ) {
+        return [];
+    }
+
+    $startMinutes = timeToMinutes($start);
+    $stopMinutes = timeToMinutes($stop);
+    $segments = [];
+    foreach ($days as $day) {
+        if ($startMinutes < $stopMinutes) {
+            $segments[] = ['day' => $day, 'start' => $startMinutes, 'stop' => $stopMinutes];
+            continue;
+        }
+
+        $segments[] = ['day' => $day, 'start' => $startMinutes, 'stop' => 1440];
+        $segments[] = ['day' => (($day + 1) % 7), 'start' => 0, 'stop' => $stopMinutes];
+    }
+    return $segments;
+}
+
+function scheduleEntriesOverlap(array $entries): bool
+{
+    $segmentsByDay = [];
+    foreach ($entries as $entry) {
+        foreach (expandScheduleEntrySegments($entry) as $segment) {
+            $segmentsByDay[(int)$segment['day']][] = $segment;
+        }
+    }
+
+    foreach ($segmentsByDay as $segments) {
+        usort($segments, static function (array $a, array $b): int {
+            return ($a['start'] <=> $b['start']) ?: ($a['stop'] <=> $b['stop']);
+        });
+
+        $previousStop = null;
+        foreach ($segments as $segment) {
+            if ($previousStop !== null && (int)$segment['start'] < $previousStop) {
+                return true;
+            }
+            $previousStop = max($previousStop ?? 0, (int)$segment['stop']);
+        }
+    }
+
+    return false;
+}
+
 function parseDowField(string $dow): ?array
 {
     if ($dow === '*') {
@@ -375,12 +265,135 @@ function parseDowField(string $dow): ?array
     return normalizeDays(explode(',', $dow));
 }
 
-function setScheduleManualOverride(string $module, string $action): void
+function shiftDays(array $days, int $delta): array
 {
+    $shifted = [];
+    foreach (normalizeDays($days) as $day) {
+        $shifted[] = (($day + $delta) % 7 + 7) % 7;
+    }
+    return normalizeDays($shifted);
+}
+
+function getNextScheduleBoundaryTimestamp(array $entries, ?DateTimeImmutable $now = null): ?int
+{
+    $now = $now ?? new DateTimeImmutable('now');
+    $nextTs = null;
+
+    for ($offset = 0; $offset <= 8; $offset++) {
+        $day = $now->modify('+' . $offset . ' day');
+        $weekday = (int)$day->format('w');
+
+        foreach ($entries as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            $days = normalizeDays((array)($entry['days'] ?? []));
+            $start = (string)($entry['start'] ?? '');
+            $stop = (string)($entry['stop'] ?? '');
+            if (
+                $days === [] ||
+                preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $start) !== 1 ||
+                preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $stop) !== 1
+            ) {
+                continue;
+            }
+
+            $boundarySpecs = [];
+            if ($start < $stop) {
+                if (in_array($weekday, $days, true)) {
+                    $boundarySpecs[] = $start;
+                    $boundarySpecs[] = $stop;
+                }
+            } else {
+                if (in_array($weekday, $days, true)) {
+                    $boundarySpecs[] = $start;
+                }
+                if (in_array($weekday, shiftDays($days, 1), true)) {
+                    $boundarySpecs[] = $stop;
+                }
+            }
+
+            foreach ($boundarySpecs as $hhmm) {
+                [$hour, $minute] = parseTimeParts($hhmm);
+                $candidate = $day->setTime($hour, $minute, 0);
+                if ($candidate <= $now) {
+                    continue;
+                }
+                $candidateTs = $candidate->getTimestamp();
+                if ($nextTs === null || $candidateTs < $nextTs) {
+                    $nextTs = $candidateTs;
+                }
+            }
+        }
+    }
+
+    return $nextTs;
+}
+
+function readScheduleManualOverride(): ?array
+{
+    $raw = @file_get_contents(SCHEDULE_MANUAL_OVERRIDE_FILE);
+    if (!is_string($raw) || trim($raw) === '') {
+        return null;
+    }
+
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        clearScheduleManualOverride();
+        return null;
+    }
+
+    $module = $data['module'] ?? null;
+    $action = $data['action'] ?? null;
+    $timestamp = $data['timestamp'] ?? null;
+    $expiresAt = $data['expiresAt'] ?? null;
+    if (
+        !is_string($module) || $module === '' ||
+        !is_string($action) || $action === '' ||
+        !is_int($timestamp) ||
+        !is_int($expiresAt) || $expiresAt <= 0
+    ) {
+        clearScheduleManualOverride();
+        return null;
+    }
+
+    return $data;
+}
+
+function getActiveScheduleManualOverride(): ?array
+{
+    $payload = readScheduleManualOverride();
+    if ($payload === null) {
+        return null;
+    }
+
+    $expiresAt = (int)($payload['expiresAt'] ?? 0);
+    if ($expiresAt <= 0 || time() >= $expiresAt) {
+        clearScheduleManualOverride();
+        return null;
+    }
+
+    return $payload;
+}
+
+function setScheduleManualOverride(array $modules, string $module, string $action): void
+{
+    $schedule = getSchedule($modules);
+    $entries = (($schedule['ok'] ?? false) === true && isset($schedule['entries']) && is_array($schedule['entries']))
+        ? (array)$schedule['entries']
+        : [];
+    $expiresAt = getNextScheduleBoundaryTimestamp($entries);
+    if ($expiresAt === null) {
+        clearScheduleManualOverride();
+        return;
+    }
+
     $payload = [
         'module' => $module,
         'action' => $action,
         'timestamp' => time(),
+        'expiresAt' => $expiresAt,
     ];
     @file_put_contents(SCHEDULE_MANUAL_OVERRIDE_FILE, json_encode($payload, JSON_UNESCAPED_SLASHES));
 }
@@ -390,6 +403,105 @@ function clearScheduleManualOverride(): void
     if (is_file(SCHEDULE_MANUAL_OVERRIDE_FILE)) {
         @unlink(SCHEDULE_MANUAL_OVERRIDE_FILE);
     }
+}
+
+function hasScheduleManualOverride(): bool
+{
+    return getActiveScheduleManualOverride() !== null;
+}
+
+function getActiveScheduleControlEntry(array $modules): ?array
+{
+    if (hasScheduleManualOverride()) {
+        return null;
+    }
+
+    $schedule = getSchedule($modules);
+    if (($schedule['ok'] ?? false) !== true) {
+        return null;
+    }
+
+    $entries = (array)($schedule['entries'] ?? []);
+    if ($entries === []) {
+        return null;
+    }
+
+    return resolveScheduleEntryForCurrentTime($entries);
+}
+
+function switchExclusiveModuleState(array $modules, ?string $selected): array
+{
+    runCommand('systemctl daemon-reload', $reloadCode);
+    if ($reloadCode !== 0) {
+        return ['ok' => false, 'error' => 'daemon_reload_failed'];
+    }
+
+    foreach ($modules as $module) {
+        $service = escapeshellarg($module . '.service');
+        if ($selected !== null && $module === $selected) {
+            runCommand("systemctl start $service", $code);
+        } else {
+            runCommand("systemctl stop $service", $code);
+        }
+        if ($code !== 0) {
+            return ['ok' => false, 'error' => 'service_switch_failed'];
+        }
+    }
+
+    return ['ok' => true];
+}
+
+function applyExclusiveModuleState(array $modules, ?string $selected, ?int $trafficPercent = null): array
+{
+    $lockHandle = acquireDistressAutotuneLock();
+    if ($lockHandle === false) {
+        return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
+    }
+
+    $previousSelected = getActiveModule($modules);
+    $previousTrafficState = ($selected !== null && $trafficPercent !== null)
+        ? getTrafficLimitRollbackSnapshot()
+        : null;
+
+    $resetDistressBaseline = $previousSelected === 'distress' && $selected !== 'distress';
+    $switchResult = switchExclusiveModuleState($modules, $selected);
+    if (($switchResult['ok'] ?? false) !== true) {
+        $rollbackResult = switchExclusiveModuleState($modules, $previousSelected);
+        releaseDistressAutotuneLock($lockHandle);
+        return $switchResult + [
+            'serviceRollbackOk' => (($rollbackResult['ok'] ?? false) === true),
+        ];
+    }
+
+    if ($resetDistressBaseline && !resetDistressAutotuneBaseline()) {
+        $rollbackResult = switchExclusiveModuleState($modules, $previousSelected);
+        releaseDistressAutotuneLock($lockHandle);
+        return [
+            'ok' => false,
+            'error' => 'distress_autotune_state_write_failed',
+            'serviceRollbackOk' => (($rollbackResult['ok'] ?? false) === true),
+        ];
+    }
+
+    if ($selected !== null && $trafficPercent !== null) {
+        $limitResult = setTrafficLimit($trafficPercent);
+        if (($limitResult['ok'] ?? false) !== true) {
+            $serviceRollbackResult = switchExclusiveModuleState($modules, $previousSelected);
+            $trafficRollbackOk = true;
+            if ($previousTrafficState !== null) {
+                $trafficRollbackResult = setTrafficLimit((int)$previousTrafficState['percent']);
+                $trafficRollbackOk = (($trafficRollbackResult['ok'] ?? false) === true);
+            }
+            releaseDistressAutotuneLock($lockHandle);
+            return $limitResult + [
+                'serviceRollbackOk' => (($serviceRollbackResult['ok'] ?? false) === true),
+                'trafficRollbackOk' => $trafficRollbackOk,
+            ];
+        }
+    }
+
+    releaseDistressAutotuneLock($lockHandle);
+    return ['ok' => true];
 }
 
 function getAutostart(array $modules): array
@@ -449,6 +561,13 @@ function setAutostart(array $modules, ?string $selected): array
     }
 
     runCommand('systemctl daemon-reload', $reloadCode);
+
+    if ($selected !== null) {
+        $scheduleResult = setScheduleEntries($modules, []);
+        if (($scheduleResult['ok'] ?? false) !== true) {
+            return $scheduleResult;
+        }
+    }
 
     $enabled = getEnabledAutostartModules($modules);
     if ($selected === null) {
@@ -563,39 +682,38 @@ function getServiceLogFile(string $module): ?string
 
 function serviceActivateExclusive(array $modules, string $selected): array
 {
-    runCommand('systemctl daemon-reload', $reloadCode);
-    if ($reloadCode !== 0) {
-        return ['ok' => false, 'error' => 'daemon_reload_failed'];
+    $result = applyExclusiveModuleState($modules, $selected);
+    if (($result['ok'] ?? false) !== true) {
+        return $result;
     }
-
-    foreach ($modules as $module) {
-        $service = escapeshellarg($module . '.service');
-        if ($module === $selected) {
-            runCommand("systemctl start $service", $code);
-        } else {
-            runCommand("systemctl stop $service", $code);
-        }
-        if ($code !== 0) {
-            return ['ok' => false, 'error' => 'service_switch_failed'];
-        }
-    }
-
-    setScheduleManualOverride($selected, 'start');
+    setScheduleManualOverride($modules, $selected, 'start');
     return ['ok' => true];
 }
 
-function serviceStop(string $module): array
+function serviceStop(array $modules, string $module): array
 {
+    $lockHandle = acquireDistressAutotuneLock();
+    if ($lockHandle === false) {
+        return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
+    }
+
     runCommand('systemctl daemon-reload', $reloadCode);
     if ($reloadCode !== 0) {
+        releaseDistressAutotuneLock($lockHandle);
         return ['ok' => false, 'error' => 'daemon_reload_failed'];
     }
     $service = escapeshellarg($module . '.service');
     runCommand("systemctl stop $service", $stopCode);
     if ($stopCode !== 0) {
+        releaseDistressAutotuneLock($lockHandle);
         return ['ok' => false, 'error' => 'service_stop_failed'];
     }
-    setScheduleManualOverride($module, 'stop');
+    if ($module === 'distress' && !resetDistressAutotuneBaseline()) {
+        releaseDistressAutotuneLock($lockHandle);
+        return ['ok' => false, 'error' => 'distress_autotune_state_write_failed'];
+    }
+    setScheduleManualOverride($modules, $module, 'stop');
+    releaseDistressAutotuneLock($lockHandle);
     return ['ok' => true];
 }
 
@@ -614,44 +732,6 @@ function serviceRestart(string $module): array
         return ['ok' => false, 'error' => 'service_restart_failed'];
     }
     return ['ok' => true, 'restarted' => true];
-}
-
-function systemReboot(): array
-{
-    $systemctl = findExecutable(['/usr/bin/systemctl', '/bin/systemctl']);
-    $shutdown = findExecutable(['/usr/sbin/shutdown', '/sbin/shutdown', '/usr/bin/shutdown', '/bin/shutdown']);
-    $reboot = findExecutable(['/usr/sbin/reboot', '/sbin/reboot', '/usr/bin/reboot', '/bin/reboot']);
-
-    $uid = function_exists('posix_geteuid') ? (string)posix_geteuid() : 'unknown';
-    appendRebootLog('request: uid=' . $uid);
-
-    $candidates = [];
-    if ($systemctl !== null) {
-        $candidates[] = ['name' => 'systemctl', 'cmd' => escapeshellarg($systemctl) . ' reboot'];
-    }
-    if ($shutdown !== null) {
-        $candidates[] = ['name' => 'shutdown', 'cmd' => escapeshellarg($shutdown) . ' -r now'];
-    }
-    if ($reboot !== null) {
-        $candidates[] = ['name' => 'reboot', 'cmd' => escapeshellarg($reboot)];
-    }
-
-    if ($candidates === []) {
-        appendRebootLog('error: reboot_command_not_found');
-        return ['ok' => false, 'error' => 'reboot_command_not_found'];
-    }
-
-    foreach ($candidates as $candidate) {
-        $name = $candidate['name'];
-        $cmd = $candidate['cmd'];
-        $output = runCommand($cmd, $code);
-        appendRebootLog('try ' . $name . ' exit=' . $code . ' output=' . str_replace("\n", ' ', $output));
-        if ($code === 0) {
-            return ['ok' => true, 'method' => $name];
-        }
-    }
-
-    return ['ok' => false, 'error' => 'reboot_failed'];
 }
 
 function statusSnapshot(array $modules, int $lines): array
@@ -794,7 +874,7 @@ function getSchedule(array $modules): array
     }
 
     $entries = [];
-    $newPattern = '/^#\s*ITARMYBOX\s+ENTRY\s+MODULE=(?<module>[a-zA-Z0-9_-]+)\s+DOW=(?<dow>\*|[0-6](?:,[0-6])*)\s+START=(?<start>[0-2][0-9]:[0-5][0-9])\s+STOP=(?<stop>[0-2][0-9]:[0-5][0-9])$/m';
+    $newPattern = '/^#\s*ITARMYBOX\s+ENTRY\s+MODULE=(?<module>[a-zA-Z0-9_-]+)\s+DOW=(?<dow>\*|[0-6](?:,[0-6])*)\s+START=(?<start>[0-2][0-9]:[0-5][0-9])\s+STOP=(?<stop>[0-2][0-9]:[0-5][0-9])(?:\s+POWER=(?<power>[0-9]{2,3}))?$/m';
     if (preg_match_all($newPattern, $raw, $matches, PREG_SET_ORDER) > 0) {
         foreach ($matches as $m) {
             $module = $m['module'];
@@ -810,6 +890,7 @@ function getSchedule(array $modules): array
                 'days' => $days,
                 'start' => $m['start'],
                 'stop' => $m['stop'],
+                'powerPercent' => normalizeTrafficPercentValue($m['power'] ?? null) ?? trafficLimitMbitToPercent(50),
             ];
             if (count($entries) >= MAX_SCHEDULE_ENTRIES) {
                 break;
@@ -830,6 +911,7 @@ function getSchedule(array $modules): array
                     'days' => $days,
                     'start' => $m['start'],
                     'stop' => $m['stop'],
+                    'powerPercent' => trafficLimitMbitToPercent(50),
                 ];
             }
         }
@@ -841,7 +923,16 @@ function getSchedule(array $modules): array
     ];
 }
 
-function setScheduleEntries(array $entries): array
+function buildRootHelperCliCommand(array $payload): string
+{
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($json) || $json === '') {
+        return '';
+    }
+    return '/usr/bin/env php ' . escapeshellarg(ROOT_HELPER_SCRIPT_PATH) . ' ' . escapeshellarg($json);
+}
+
+function setScheduleEntries(array $modules, array $entries): array
 {
     $raw = runCommand('crontab -l', $code);
     if ($code !== 0) {
@@ -854,30 +945,64 @@ function setScheduleEntries(array $entries): array
         if (count($entries) > MAX_SCHEDULE_ENTRIES) {
             return ['ok' => false, 'error' => 'too_many_entries'];
         }
+        if (scheduleEntriesOverlap($entries)) {
+            return ['ok' => false, 'error' => 'invalid_schedule_overlap'];
+        }
+
         $block = [SCHEDULE_BEGIN_MARKER];
+        $bootCommand = buildRootHelperCliCommand([
+            'action' => 'schedule_boot_sync',
+            'modules' => $modules,
+        ]);
+        if ($bootCommand === '') {
+            return ['ok' => false, 'error' => 'schedule_boot_command_failed'];
+        }
+        $block[] = "@reboot $bootCommand >/dev/null 2>&1";
         foreach ($entries as $entry) {
             $module = (string)($entry['module'] ?? '');
             $days = normalizeDays((array)($entry['days'] ?? []));
             $start = (string)($entry['start'] ?? '');
             $stop = (string)($entry['stop'] ?? '');
+            $powerPercent = normalizeTrafficPercentValue($entry['powerPercent'] ?? null);
             if (
                 $module === '' ||
                 $days === [] ||
                 preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $start) !== 1 ||
-                preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $stop) !== 1
+                preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $stop) !== 1 ||
+                $powerPercent === null
             ) {
                 return ['ok' => false, 'error' => 'invalid_entry'];
             }
 
-            $dow = count($days) === 7 ? '*' : implode(',', $days);
+            $startDow = count($days) === 7 ? '*' : implode(',', $days);
+            $stopDays = ($start < $stop) ? $days : shiftDays($days, 1);
+            $stopDow = count($stopDays) === 7 ? '*' : implode(',', $stopDays);
             [$startH, $startM] = parseTimeParts($start);
             [$stopH, $stopM] = parseTimeParts($stop);
-            $service = $module . '.service';
-            $overrideSafe = escapeshellarg(SCHEDULE_MANUAL_OVERRIDE_FILE);
-            $block[] = "# ITARMYBOX ENTRY MODULE=$module DOW=$dow START=$start STOP=$stop";
-            $block[] = "$startM $startH * * $dow test ! -s $overrideSafe && systemctl start $service >/dev/null 2>&1";
-            $block[] = "$stopM $stopH * * $dow test ! -s $overrideSafe && systemctl stop $service >/dev/null 2>&1";
+            $startCommand = buildRootHelperCliCommand([
+                'action' => 'schedule_activate',
+                'modules' => $modules,
+                'module' => $module,
+                'percent' => $powerPercent,
+            ]);
+            $stopCommand = buildRootHelperCliCommand([
+                'action' => 'schedule_deactivate',
+                'modules' => $modules,
+                'module' => $module,
+            ]);
+            if ($startCommand === '' || $stopCommand === '') {
+                return ['ok' => false, 'error' => 'schedule_command_failed'];
+            }
+            $block[] = "# ITARMYBOX ENTRY MODULE=$module DOW=$startDow START=$start STOP=$stop POWER=$powerPercent";
+            $block[] = "$startM $startH * * $startDow $startCommand >/dev/null 2>&1";
+            $block[] = "$stopM $stopH * * $stopDow $stopCommand >/dev/null 2>&1";
         }
+
+        foreach ($modules as $module) {
+            removeAutostartLinks($module);
+        }
+        runCommand('systemctl daemon-reload', $reloadCode);
+
         $block[] = SCHEDULE_END_MARKER;
         $new .= ($new === '' ? '' : "\n") . implode("\n", $block);
     }
@@ -903,7 +1028,87 @@ function setScheduleEntries(array $entries): array
     return ['ok' => true];
 }
 
-$rawRequest = stream_get_contents(STDIN);
+function resolveScheduleEntryForCurrentTime(array $entries, ?DateTimeImmutable $now = null): ?array
+{
+    $now = $now ?? new DateTimeImmutable('now');
+    $weekday = (int)$now->format('w');
+    $currentTime = $now->format('H:i');
+
+    foreach ($entries as $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        $module = (string)($entry['module'] ?? '');
+        $days = normalizeDays((array)($entry['days'] ?? []));
+        $start = (string)($entry['start'] ?? '');
+        $stop = (string)($entry['stop'] ?? '');
+        $powerPercent = normalizeTrafficPercentValue($entry['powerPercent'] ?? null);
+        if (
+            $module === '' ||
+            $days === [] ||
+            preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $start) !== 1 ||
+            preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $stop) !== 1 ||
+            $powerPercent === null
+        ) {
+            continue;
+        }
+
+        if ($start === $stop) {
+            continue;
+        }
+
+        $isActive = false;
+        if ($start < $stop) {
+            $isActive = in_array($weekday, $days, true) && $currentTime >= $start && $currentTime < $stop;
+        } else {
+            $previousWeekday = ($weekday + 6) % 7;
+            $isActive =
+                (in_array($weekday, $days, true) && $currentTime >= $start) ||
+                (in_array($previousWeekday, $days, true) && $currentTime < $stop);
+        }
+
+        if ($isActive) {
+            return [
+                'module' => $module,
+                'powerPercent' => $powerPercent,
+            ];
+        }
+    }
+
+    return null;
+}
+
+function scheduleBootSync(array $modules): array
+{
+    waitForTimeSyncReady();
+    $schedule = getSchedule($modules);
+    if (($schedule['ok'] ?? false) !== true) {
+        return $schedule;
+    }
+
+    $entries = (array)($schedule['entries'] ?? []);
+    if ($entries === []) {
+        return applyExclusiveModuleState($modules, null);
+    }
+
+    $selectedEntry = resolveScheduleEntryForCurrentTime($entries);
+    if ($selectedEntry === null) {
+        return applyExclusiveModuleState($modules, null);
+    }
+
+    return applyExclusiveModuleState(
+        $modules,
+        (string)$selectedEntry['module'],
+        (int)$selectedEntry['powerPercent']
+    );
+}
+
+$rawRequest = '';
+if (isset($argv[1]) && is_string($argv[1]) && trim($argv[1]) !== '') {
+    $rawRequest = $argv[1];
+} else {
+    $rawRequest = stream_get_contents(STDIN);
+}
 if (!is_string($rawRequest) || trim($rawRequest) === '') {
     fail('empty_request');
 }
@@ -923,205 +1128,6 @@ foreach ($modules as $module) {
         fail('invalid_module_name');
     }
 }
-
-if ($action === 'autostart_get') {
-    respond(getAutostart($modules));
-    exit(0);
-}
-
-if ($action === 'autostart_set') {
-    $selected = $request['selected'] ?? null;
-    if ($selected !== null && (!is_string($selected) || !in_array($selected, $modules, true))) {
-        fail('invalid_selected_module');
-    }
-    respond(setAutostart($modules, $selected));
-    exit(0);
-}
-
-if ($action === 'schedule_get') {
-    respond(getSchedule($modules));
-    exit(0);
-}
-
-if ($action === 'schedule_set') {
-    $entries = $request['entries'] ?? [];
-    if (!is_array($entries)) {
-        fail('invalid_entries');
-    }
-    $normalized = [];
-    foreach ($entries as $entry) {
-        if (!is_array($entry)) {
-            fail('invalid_entry');
-        }
-        $module = $entry['module'] ?? null;
-        $days = $entry['days'] ?? null;
-        $start = $entry['start'] ?? null;
-        $stop = $entry['stop'] ?? null;
-        if (!is_string($module) || !in_array($module, $modules, true)) {
-            fail('invalid_schedule_module');
-        }
-        if (!is_array($days)) {
-            fail('invalid_days');
-        }
-        if (preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string)$start) !== 1) {
-            fail('invalid_start');
-        }
-        if (preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string)$stop) !== 1) {
-            fail('invalid_stop');
-        }
-        $normalized[] = [
-            'module' => $module,
-            'days' => normalizeDays($days),
-            'start' => (string)$start,
-            'stop' => (string)$stop,
-        ];
-    }
-
-    respond(setScheduleEntries($normalized));
-    exit(0);
-}
-
-if ($action === 'service_activate_exclusive') {
-    $selected = $request['selected'] ?? null;
-    if (!is_string($selected) || !in_array($selected, $modules, true)) {
-        fail('invalid_selected_module');
-    }
-    respond(serviceActivateExclusive($modules, $selected));
-    exit(0);
-}
-
-if ($action === 'service_stop') {
-    $module = $request['module'] ?? null;
-    if (!is_string($module) || !in_array($module, $modules, true)) {
-        fail('invalid_module');
-    }
-    respond(serviceStop($module));
-    exit(0);
-}
-
-if ($action === 'service_restart') {
-    $module = $request['module'] ?? null;
-    if (!is_string($module) || !in_array($module, $modules, true)) {
-        fail('invalid_module');
-    }
-    respond(serviceRestart($module));
-    exit(0);
-}
-
-if ($action === 'system_reboot') {
-    respond(systemReboot());
-    exit(0);
-}
-
-if ($action === 'traffic_limit_get') {
-    respond(getTrafficLimitState());
-    exit(0);
-}
-
-if ($action === 'traffic_limit_set') {
-    $percent = (int)($request['percent'] ?? 0);
-    respond(setTrafficLimit($percent));
-    exit(0);
-}
-
-if ($action === 'vnstat_status') {
-    respond(['ok' => true, 'installed' => isVnstatInstalled()]);
-    exit(0);
-}
-
-if ($action === 'vnstat_install') {
-    respond(installVnstat());
-    exit(0);
-}
-
-if ($action === 'time_sync_status') {
-    respond(getTimeSyncStatus());
-    exit(0);
-}
-
-if ($action === 'time_sync_ensure') {
-    $timezone = $request['timezone'] ?? 'Europe/Kyiv';
-    if (!is_string($timezone) || trim($timezone) === '') {
-        fail('invalid_timezone');
-    }
-    respond(ensureTimeSyncForTimezone(trim($timezone)));
-    exit(0);
-}
-
-if ($action === 'service_logs') {
-    $module = $request['module'] ?? null;
-    $lines = (int)($request['lines'] ?? 80);
-    if (!is_string($module) || !in_array($module, $modules, true)) {
-        fail('invalid_module');
-    }
-    respond([
-        'ok' => true,
-        'logs' => getServiceLogsRaw($module, $lines),
-    ]);
-    exit(0);
-}
-
-if ($action === 'status_snapshot') {
-    $lines = (int)($request['lines'] ?? 80);
-    respond(statusSnapshot($modules, $lines));
-    exit(0);
-}
-
-if ($action === 'service_info') {
-    $module = $request['module'] ?? null;
-    if (!is_string($module) || !in_array($module, $modules, true)) {
-        fail('invalid_module');
-    }
-    respond(serviceInfo($module));
-    exit(0);
-}
-
-if ($action === 'service_execstart_get') {
-    $module = $request['module'] ?? null;
-    if (!is_string($module) || !in_array($module, $modules, true)) {
-        fail('invalid_module');
-    }
-    $execStart = readServiceExecStart($module);
-    if ($execStart === null) {
-        respond(['ok' => false, 'error' => 'execstart_read_failed']);
-        exit(0);
-    }
-    respond(['ok' => true, 'execStart' => $execStart]);
-    exit(0);
-}
-
-if ($action === 'service_execstart_set') {
-    $module = $request['module'] ?? null;
-    $execStart = $request['execStart'] ?? null;
-    if (!is_string($module) || !in_array($module, $modules, true)) {
-        fail('invalid_module');
-    }
-    if (!is_string($execStart) || trim($execStart) === '') {
-        fail('invalid_execstart');
-    }
-    $ok = updateServiceExecStart($module, trim($execStart));
-    respond(['ok' => $ok]);
-    exit(0);
-}
-
-if ($action === 'x100_config_get') {
-    $content = getX100Config();
-    if ($content === null) {
-        respond(['ok' => false, 'error' => 'x100_config_read_failed']);
-        exit(0);
-    }
-    respond(['ok' => true, 'content' => $content]);
-    exit(0);
-}
-
-if ($action === 'x100_config_set') {
-    $content = $request['content'] ?? null;
-    if (!is_string($content)) {
-        fail('invalid_content');
-    }
-    $ok = setX100Config($content);
-    respond(['ok' => $ok]);
-    exit(0);
-}
-
-fail('unknown_action');
+$response = dispatchRootHelperAction($action, $request, $modules);
+respond($response);
+exit(0);

@@ -1,5 +1,29 @@
 <form method="post" action="">
     <?php
+    $distressAutotune = getDistressAutotuneSettings();
+    $distressConcurrencyMode = (($distressAutotune['enabled'] ?? true) === true) ? 'auto' : 'manual';
+    $distressDesiredConcurrency = (int)($distressAutotune['desiredConcurrency'] ?? DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY);
+    $distressConfigConcurrency = (int)($distressAutotune['configConcurrency'] ?? $distressDesiredConcurrency);
+    $distressLiveAppliedConcurrency = isset($distressAutotune['liveAppliedConcurrency']) && is_numeric($distressAutotune['liveAppliedConcurrency'])
+        ? (int)$distressAutotune['liveAppliedConcurrency']
+        : null;
+    $distressConcurrencyValue = (string)($currentAdjustableParams['concurrency'] ?? $distressConfigConcurrency);
+    $distressAutotuneStatusKey = (string)($distressAutotune['statusKey'] ?? 'distress_autotune_status_active');
+    $distressAutotuneStatusText = $distressAutotuneStatusKey === 'distress_autotune_status_cooldown'
+        ? t($distressAutotuneStatusKey, ['seconds' => (string)($distressAutotune['cooldownRemaining'] ?? 0)])
+        : t($distressAutotuneStatusKey);
+$distressLastLoadText = isset($distressAutotune['lastLoadAverage']) && is_numeric($distressAutotune['lastLoadAverage'])
+    ? t('distress_autotune_last_load', [
+        'value' => number_format((float)$distressAutotune['lastLoadAverage'], 2, '.', ''),
+        'target' => number_format((float)($distressAutotune['targetLoad'] ?? 1.0), 1, '.', ''),
+    ])
+    : null;
+$distressLastRamText = isset($distressAutotune['lastRamFreePercent']) && is_numeric($distressAutotune['lastRamFreePercent'])
+    ? t('distress_autotune_last_ram_free', [
+        'value' => number_format((float)$distressAutotune['lastRamFreePercent'], 1, '.', ''),
+        'target' => number_format((float)($distressAutotune['minFreeRamPercent'] ?? 10.0), 1, '.', ''),
+    ])
+    : null;
     $distressUseMyIp = (int)($currentAdjustableParams['use-my-ip'] ?? 0);
     $distressFloodControlsEnabled = $distressUseMyIp > 0;
     $distressDisableUdpFlood = (string)($currentAdjustableParams['disable-udp-flood'] ?? '0');
@@ -13,8 +37,26 @@
         <input type="number" id="use-tor" name="use-tor" min="0" max="100" value="<?= $currentAdjustableParams['use-tor']??"" ?>" placeholder="<?= htmlspecialchars(t('placeholder_percent_default_0'), ENT_QUOTES, 'UTF-8') ?>">
     </div>
     <div class="form-group">
+        <label for="distress-concurrency-mode"><?= htmlspecialchars(t('distress_concurrency_mode'), ENT_QUOTES, 'UTF-8') ?></label>
+        <select id="distress-concurrency-mode" name="distress-concurrency-mode">
+            <option value="auto"<?= $distressConcurrencyMode === 'auto' ? ' selected' : '' ?>><?= htmlspecialchars(t('auto_mode'), ENT_QUOTES, 'UTF-8') ?></option>
+            <option value="manual"<?= $distressConcurrencyMode === 'manual' ? ' selected' : '' ?>><?= htmlspecialchars(t('manual_mode'), ENT_QUOTES, 'UTF-8') ?></option>
+        </select>
+        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_concurrency_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_status_label'), ENT_QUOTES, 'UTF-8') ?> <?= htmlspecialchars($distressAutotuneStatusText, ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_desired_value', ['value' => (string)$distressDesiredConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_config_value', ['value' => (string)$distressConfigConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_live_value', ['value' => $distressLiveAppliedConcurrency !== null ? (string)$distressLiveAppliedConcurrency : t('status_unavailable_short')]), ENT_QUOTES, 'UTF-8') ?></div>
+        <?php if ($distressLastLoadText !== null): ?>
+            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastLoadText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
+        <?php if ($distressLastRamText !== null): ?>
+            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastRamText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
+    </div>
+    <div class="form-group">
         <label for="concurrency"><?= htmlspecialchars(t('number_task_creators'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="text" id="concurrency" name="concurrency" value="<?= $currentAdjustableParams['concurrency']??"" ?>" placeholder="<?= htmlspecialchars(t('placeholder_digits_default_4096'), ENT_QUOTES, 'UTF-8') ?>">
+        <input type="text" id="concurrency" name="concurrency" value="<?= htmlspecialchars($distressConcurrencyValue, ENT_QUOTES, 'UTF-8') ?>" placeholder="<?= htmlspecialchars($distressConcurrencyMode === 'auto' ? '2048' : t('placeholder_digits_default_4096'), ENT_QUOTES, 'UTF-8') ?>" pattern="\d+" inputmode="numeric">
     </div>
     <div class="form-group">
         <label for="use-my-ip"><?= htmlspecialchars(t('percentage_personal_ip'), ENT_QUOTES, 'UTF-8') ?></label>
@@ -62,6 +104,8 @@
 <script>
     (function () {
         const useMyIpEl = document.getElementById("use-my-ip");
+        const concurrencyModeEl = document.getElementById("distress-concurrency-mode");
+        const concurrencyEl = document.getElementById("concurrency");
         const gatedFields = [
             document.getElementById("enable-icmp-flood"),
             document.getElementById("enable-packet-flood"),
@@ -90,6 +134,13 @@
             }
         }
 
+        function refreshConcurrencyModeState() {
+            if (!concurrencyModeEl || !concurrencyEl) {
+                return;
+            }
+            concurrencyEl.disabled = concurrencyModeEl.value === "auto";
+        }
+
         if (useMyIpEl) {
             useMyIpEl.addEventListener("input", refreshFloodControlsState);
             useMyIpEl.addEventListener("change", refreshFloodControlsState);
@@ -97,6 +148,10 @@
                 disableUdpFloodEl.addEventListener("change", refreshFloodControlsState);
             }
             refreshFloodControlsState();
+        }
+        if (concurrencyModeEl) {
+            concurrencyModeEl.addEventListener("change", refreshConcurrencyModeState);
+            refreshConcurrencyModeState();
         }
     })();
 </script>

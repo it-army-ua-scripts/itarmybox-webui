@@ -1,7 +1,6 @@
 <?php
 require_once 'i18n.php';
-require_once 'lib/tool_helpers.php';
-require_once 'lib/root_helper_client.php';
+require_once 'lib/tool_page_helpers.php';
 require_once 'lib/footer.php';
 $config = require 'config/config.php';
 
@@ -23,107 +22,39 @@ $daemonName = $_GET['daemon'] ?? '';
     <div class="content">
         <?php
         if (in_array($daemonName, $config['daemonNames'], true)) {
+            $allowedFlashKeys = tool_allowed_flash_keys();
+            $info = tool_service_info($config['daemonNames'], $daemonName);
+            $wasActiveBeforeSave = (($info['ok'] ?? false) === true) ? (bool)($info['active'] ?? false) : false;
             if (!empty($_POST)) {
-                $saveOk = false;
-                $saveError = '';
-                $restartError = '';
-                $feedbackClass = '';
-                $feedbackText = '';
-                $feedbackSecondary = '';
-                if ($daemonName === 'x100') {
-                    $saveOk = setX100ConfigValues($_POST);
-                } else {
-                    $allowedParamKeys = array_flip($config['adjustableParams'][$daemonName] ?? []);
-                    $paramsToSave = array_intersect_key($_POST, $allowedParamKeys);
-                    if ($daemonName === 'distress') {
-                        $distressValidation = normalizeAndValidateDistressPostParams($paramsToSave);
-                        if (($distressValidation['ok'] ?? false) !== true) {
-                            $saveError = (string)($distressValidation['error'] ?? 'invalid_distress_settings');
-                        } else {
-                            $paramsToSave = (array)$distressValidation['params'];
-                        }
-                    }
-                    if ($daemonName === 'mhddos') {
-                        $mhddosValidation = normalizeAndValidateMhddosPostParams($paramsToSave);
-                        if (($mhddosValidation['ok'] ?? false) !== true) {
-                            $saveError = (string)($mhddosValidation['error'] ?? 'invalid_mhddos_settings');
-                        } else {
-                            $paramsToSave = (array)$mhddosValidation['params'];
-                        }
-                    }
-                    $currentConfigString = getConfigStringFromServiceFile($daemonName);
-                    if ($saveError === '' && $currentConfigString !== '') {
-                        $saveOk = updateServiceFile(
-                            $daemonName,
-                            updateServiceConfigParams(
-                                $currentConfigString,
-                                $paramsToSave,
-                                $daemonName
-                            )
-                        )
-                        ;
-                    }
-                }
-                if ($saveOk) {
-                    $restartResponse = root_helper_request([
-                        'action' => 'service_restart',
-                        'modules' => $config['daemonNames'],
-                        'module' => $daemonName,
-                    ]);
-                    if (($restartResponse['ok'] ?? false) !== true) {
-                        $restartError = 'settings_saved_restart_failed';
-                    }
-                }
-                if ($saveOk) {
-                    $feedbackClass = 'status active';
-                    $feedbackText = t('service_updated');
-                    if ($restartError !== '') {
-                        $feedbackSecondary = t($restartError);
-                    }
-                } else {
-                    if ($saveError !== '') {
-                        $feedbackClass = 'status inactive';
-                        $feedbackText = t($saveError);
-                    } else {
-                        $feedbackClass = 'status inactive';
-                        $feedbackText = t('error') . ': ' . t('settings_not_saved');
-                    }
-                }
-                if ($feedbackText !== '') {
-                    echo '<div class="form-message ' . htmlspecialchars($feedbackClass, ENT_QUOTES, 'UTF-8') . '">'
-                        . htmlspecialchars($feedbackText, ENT_QUOTES, 'UTF-8')
-                        . '</div>';
-                }
-                if ($feedbackSecondary !== '') {
-                    echo '<div class="form-message status inactive">' . htmlspecialchars($feedbackSecondary, ENT_QUOTES, 'UTF-8') . '</div>';
-                }
+                $redirectParams = tool_handle_post($config, $daemonName, $_POST, $wasActiveBeforeSave);
+                header('Location: ' . build_tool_url($daemonName, $redirectParams));
+                exit;
             }
 
-            if ($daemonName === 'x100') {
-                $currentAdjustableParams = getX100ConfigValues();
-            } else {
-                $currentAdjustableParams = getCurrentAdjustableParams(
-                    getConfigStringFromServiceFile($daemonName),
-                    $config['adjustableParams'][$daemonName],
-                    $daemonName
-                );
+            $flashKey = (string)($_GET['flash'] ?? '');
+            $flashClass = ((string)($_GET['flashClass'] ?? '') === 'active') ? 'status active' : 'status inactive';
+            $flashSecondaryKey = (string)($_GET['flashSecondary'] ?? '');
+            if (in_array($flashKey, $allowedFlashKeys, true)) {
+                echo '<div class="form-message ' . htmlspecialchars($flashClass, ENT_QUOTES, 'UTF-8') . '">'
+                    . htmlspecialchars(t($flashKey), ENT_QUOTES, 'UTF-8')
+                    . '</div>';
             }
+            if (in_array($flashSecondaryKey, $allowedFlashKeys, true)) {
+                echo '<div class="form-message status inactive">' . htmlspecialchars(t($flashSecondaryKey), ENT_QUOTES, 'UTF-8') . '</div>';
+            }
+
+            $currentAdjustableParams = tool_current_adjustable_params($config, $daemonName);
             ?>
             <h1><?= htmlspecialchars(t('settings_for', ['module' => $daemonName]), ENT_QUOTES, 'UTF-8') ?></h1>
             <h2><?= htmlspecialchars(t('status_label'), ENT_QUOTES, 'UTF-8') ?></h2>
             <?php
-            $info = root_helper_request([
-                'action' => 'service_info',
-                'modules' => $config['daemonNames'],
-                'module' => $daemonName,
-            ]);
             $isActive = (($info['ok'] ?? false) === true) ? (bool)($info['active'] ?? false) : false;
             if ($isActive) {
                 echo htmlspecialchars(t('module_running', ['module' => $daemonName]), ENT_QUOTES, 'UTF-8');
-                echo '<div class="menu"><a href="' . htmlspecialchars(url_with_lang('/stop.php?daemon=' . rawurlencode($daemonName)), ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars(t('stop'), ENT_QUOTES, 'UTF-8') . '</a></div>';
+                echo render_module_action_form('/stop.php', $daemonName, t('stop'));
             } else {
                 echo htmlspecialchars(t('module_not_running', ['module' => $daemonName]), ENT_QUOTES, 'UTF-8');
-                echo '<div class="menu"><a href="' . htmlspecialchars(url_with_lang('/start.php?daemon=' . rawurlencode($daemonName)), ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars(t('start'), ENT_QUOTES, 'UTF-8') . '</a></div>';
+                echo render_module_action_form('/start.php', $daemonName, t('start'));
             }
 
             $statusText = trim((string)($info['statusText'] ?? ''));
@@ -141,7 +72,7 @@ $daemonName = $_GET['daemon'] ?? '';
         }
         ?>
         <div class="menu">
-            <a href="<?= htmlspecialchars(url_with_lang('/tools_list.php'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('back'), ENT_QUOTES, 'UTF-8') ?></a>
+            <?= render_back_link('/tools_list.php') ?>
         </div>
     </div>
 </div>

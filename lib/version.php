@@ -89,15 +89,15 @@ function webui_fetch_github_version(int $maxAgeSeconds = 300): string
     $rawUrl = 'https://raw.githubusercontent.com/it-army-ua-scripts/itarmybox-webui/'
         . rawurlencode($branch)
         . '/VERSION';
-    $remoteVersion = '';
-
-    if (is_executable('/usr/bin/curl')) {
-        $cmd = '/usr/bin/curl -fsSL --max-time 5 ' . escapeshellarg($rawUrl) . ' 2>/dev/null';
-        $remoteVersion = trim((string)@shell_exec($cmd));
-    } elseif (is_executable('/usr/bin/wget')) {
-        $cmd = '/usr/bin/wget -q -T 5 -O - ' . escapeshellarg($rawUrl) . ' 2>/dev/null';
-        $remoteVersion = trim((string)@shell_exec($cmd));
-    }
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'timeout' => 5,
+            'ignore_errors' => true,
+            'header' => "User-Agent: itarmybox-webui\r\n",
+        ],
+    ]);
+    $remoteVersion = trim((string)@file_get_contents($rawUrl, false, $context));
 
     if ($remoteVersion !== '') {
         webui_cache_github_version($remoteVersion);

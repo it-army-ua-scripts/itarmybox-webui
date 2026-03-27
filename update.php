@@ -2,6 +2,7 @@
 require_once 'i18n.php';
 require_once 'lib/footer.php';
 require_once 'lib/version.php';
+require_once 'lib/root_helper_client.php';
 
 $selectedBranch = webui_selected_branch();
 $updateLog = '';
@@ -10,11 +11,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $requestedBranch = trim((string)($_POST['branch'] ?? ''));
     if (!in_array($requestedBranch, WEBUI_ALLOWED_BRANCHES, true)) {
         $updateLog = t('update_branch_invalid');
-    } elseif (!webui_set_selected_branch($requestedBranch)) {
-        $updateLog = t('update_branch_save_failed');
     } else {
-        $selectedBranch = $requestedBranch;
-        $updateLog = (string)shell_exec("/bin/bash update.sh 2>&1");
+        $response = root_helper_request([
+            'action' => 'system_update_run',
+            'modules' => (require 'config/config.php')['daemonNames'],
+            'branch' => $requestedBranch,
+        ]);
+        $saveBranchError = false;
+        if (($response['ok'] ?? false) === true) {
+            if (webui_set_selected_branch($requestedBranch)) {
+                $selectedBranch = $requestedBranch;
+            } else {
+                $saveBranchError = true;
+            }
+        }
+        $updateLog = trim((string)($response['output'] ?? ''));
+        if ($updateLog === '') {
+            $updateLog = (($response['ok'] ?? false) === true)
+                ? 'Update completed.'
+                : (string)($response['error'] ?? 'update_failed');
+        }
+        if ($saveBranchError) {
+            $updateLog = t('update_branch_save_failed') . "\n\n" . $updateLog;
+        }
     }
 }
 ?>
@@ -48,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="log-box tool-log-box"><?= nl2br(htmlspecialchars($updateLog !== '' ? $updateLog : t('update_branch_select_hint'), ENT_QUOTES, 'UTF-8')) ?></div>
         </div>
         <div class="menu">
-            <a href="<?= htmlspecialchars(url_with_lang('/'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('back'), ENT_QUOTES, 'UTF-8') ?></a>
+            <?= render_back_link('/') ?>
         </div>
     </div>
 </div>

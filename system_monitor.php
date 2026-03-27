@@ -1,5 +1,69 @@
 <?php
+require_once 'lib/root_helper_client.php';
 header('Content-Type: application/json; charset=UTF-8');
+
+function run_read_command(array $command): ?string
+{
+    if ($command === []) {
+        return null;
+    }
+
+    $descriptors = [
+        0 => ['pipe', 'r'],
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+    $process = @proc_open($command, $descriptors, $pipes);
+    if (!is_resource($process)) {
+        return null;
+    }
+
+    fclose($pipes[0]);
+    $stdout = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    stream_get_contents($pipes[2]);
+    fclose($pipes[2]);
+
+    $exitCode = proc_close($process);
+    if ($exitCode !== 0 || !is_string($stdout)) {
+        return null;
+    }
+
+    return $stdout;
+}
+
+function detect_primary_network_interface(): string
+{
+    $ipPath = null;
+    foreach (['/usr/sbin/ip', '/usr/bin/ip', '/sbin/ip', '/bin/ip'] as $candidate) {
+        if (is_executable($candidate)) {
+            $ipPath = $candidate;
+            break;
+        }
+    }
+
+    if ($ipPath !== null) {
+        $output = run_read_command([$ipPath, 'route', 'show', 'default']);
+        if (is_string($output) && preg_match('/\bdev\s+([a-zA-Z0-9._:-]+)/', $output, $matches) === 1) {
+            $iface = trim((string)($matches[1] ?? ''));
+            if ($iface !== '' && $iface !== 'lo') {
+                return $iface;
+            }
+        }
+    }
+
+    $paths = glob('/sys/class/net/*');
+    if (is_array($paths)) {
+        foreach ($paths as $path) {
+            $iface = basename($path);
+            if ($iface !== '' && $iface !== 'lo') {
+                return $iface;
+            }
+        }
+    }
+
+    return 'eth0';
+}
 
 function read_meminfo(): array
 {
@@ -165,7 +229,7 @@ function read_interface_ipv4(string $iface): ?string
         return null;
     }
 
-    $output = @shell_exec($ipPath . ' -4 -o addr show dev ' . escapeshellarg($iface) . ' 2>/dev/null');
+    $output = run_read_command([$ipPath, '-4', '-o', 'addr', 'show', 'dev', $iface]);
     if (!is_string($output) || trim($output) === '') {
         return null;
     }
@@ -189,6 +253,24 @@ function format_rate_from_bytes(float $bytesPerSecond): string
         $unitIdx++;
     }
     return number_format($value, $value >= 100 ? 0 : ($value >= 10 ? 1 : 2), '.', '') . ' ' . $units[$unitIdx];
+}
+
+function format_bytes_binary(float $bytes): string
+{
+    if ($bytes < 0) {
+        $bytes = 0;
+    }
+
+    $units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+    $value = $bytes;
+    $unitIdx = 0;
+    while ($value >= 1024 && $unitIdx < count($units) - 1) {
+        $value /= 1024;
+        $unitIdx++;
+    }
+
+    $digits = $value >= 100 ? 0 : ($value >= 10 ? 1 : 2);
+    return number_format($value, $digits, '.', '') . ' ' . $units[$unitIdx];
 }
 
 function read_tx_rate_from_sysfs(string $iface): ?string
@@ -225,8 +307,7 @@ function read_tx_rate_vnstat(string $iface): ?string
     if ($vnstatPath === null) {
         return null;
     }
-    $ifaceArg = escapeshellarg($iface);
-    $output = @shell_exec($vnstatPath . ' -tr 2 -i ' . $ifaceArg . ' 2>/dev/null');
+    $output = run_read_command([$vnstatPath, '-tr', '2', '-i', $iface]);
     if (!is_string($output) || trim($output) === '') {
         return null;
     }
@@ -242,8 +323,17 @@ function read_today_tx_vnstat(string $iface): ?string
     if ($vnstatPath === null) {
         return null;
     }
-    $ifaceArg = escapeshellarg($iface);
-    $output = @shell_exec($vnstatPath . ' -i ' . $ifaceArg . ' --oneline 2>/dev/null');
+
+    $jsonOutput = run_read_command([$vnstatPath, '--json', 'd', '1', '-i', $iface]);
+    if (is_string($jsonOutput) && trim($jsonOutput) !== '') {
+        $data = json_decode($jsonOutput, true);
+        $day = $data['interfaces'][0]['traffic']['day'][0] ?? null;
+        if (is_array($day) && isset($day['tx']) && is_numeric($day['tx'])) {
+            return format_bytes_binary((float)$day['tx']);
+        }
+    }
+
+    $output = run_read_command([$vnstatPath, '-i', $iface, '--oneline']);
     if (!is_string($output) || trim($output) === '') {
         return null;
     }
@@ -255,7 +345,7 @@ function read_today_tx_vnstat(string $iface): ?string
     return $value !== '' ? $value : null;
 }
 
-$iface = 'eth0';
+$iface = detect_primary_network_interface();
 $meminfo = read_meminfo();
 $memTotal = (int)($meminfo['MemTotal'] ?? 0);
 $memAvailable = (int)($meminfo['MemAvailable'] ?? 0);
@@ -271,6 +361,8 @@ if ($txRate === null) {
     $txSource = 'sysfs';
 }
 
+$cpuPercent = read_cpu_usage_percent();
+
 echo json_encode([
     'ok' => true,
     'iface' => $iface,
@@ -278,7 +370,7 @@ echo json_encode([
     'todayTx' => read_today_tx_vnstat($iface),
     'txSource' => $txSource,
     'ramPercent' => $ramPercent,
-    'cpuPercent' => read_cpu_usage_percent(),
+    'cpuPercent' => $cpuPercent,
     'temperatureC' => read_temperature_celsius(),
     'memoryTemperatureC' => read_memory_temperature_celsius(),
     'ipv4' => read_interface_ipv4($iface),

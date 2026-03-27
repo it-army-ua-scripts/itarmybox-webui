@@ -28,43 +28,41 @@ function saveGlobalUserId(string $userId, array $config): bool
         return false;
     }
 
-    $updatedModules = [];
-    $updatedAny = false;
-
-    $mhddosConfig = getConfigStringFromServiceFile('mhddos');
-    if ($mhddosConfig !== '') {
-        $mhddosOk = updateServiceFile(
-            'mhddos',
-            updateServiceConfigParams(
-                $mhddosConfig,
-                ['user-id' => $userId],
-                'mhddos'
-            )
-        );
-        if ($mhddosOk) {
-            $updatedAny = true;
-            $updatedModules['mhddos'] = true;
+    $serviceConfigs = [];
+    foreach (['mhddos', 'distress'] as $module) {
+        $configString = getConfigStringFromServiceFile($module);
+        if ($configString !== '') {
+            $serviceConfigs[$module] = $configString;
         }
     }
 
-    $distressConfig = getConfigStringFromServiceFile('distress');
-    if ($distressConfig !== '') {
-        $distressOk = updateServiceFile(
-            'distress',
-            updateServiceConfigParams(
-                $distressConfig,
-                ['user-id' => $userId],
-                'distress'
-            )
-        );
-        if ($distressOk) {
-            $updatedAny = true;
-            $updatedModules['distress'] = true;
-        }
-    }
-
-    if (!$updatedAny) {
+    if ($serviceConfigs === []) {
         return false;
+    }
+
+    foreach ($serviceConfigs as $module => $configString) {
+        $updated = updateServiceFile(
+            $module,
+            updateServiceConfigParams(
+                $configString,
+                ['user-id' => $userId],
+                $module
+            )
+        );
+        if (!$updated) {
+            foreach ($serviceConfigs as $rollbackModule => $rollbackConfig) {
+                if ($rollbackModule === $module) {
+                    break;
+                }
+                root_helper_request([
+                    'action' => 'service_execstart_set',
+                    'modules' => $config['daemonNames'],
+                    'module' => $rollbackModule,
+                    'execStart' => $rollbackConfig,
+                ]);
+            }
+            return false;
+        }
     }
 
     $status = root_helper_request([
@@ -76,7 +74,7 @@ function saveGlobalUserId(string $userId, array $config): bool
     if (
         is_string($activeModule) &&
         in_array($activeModule, $config['daemonNames'], true) &&
-        isset($updatedModules[$activeModule])
+        isset($serviceConfigs[$activeModule])
     ) {
         root_helper_request([
             'action' => 'service_restart',
@@ -102,20 +100,37 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'status') {
 
 $message = '';
 $messageClass = '';
+if (isset($_GET['flash']) && is_string($_GET['flash'])) {
+    $flash = $_GET['flash'];
+    $messageClass = ((string)($_GET['flashClass'] ?? '') === 'active') ? 'status active' : 'status inactive';
+    if ($flash === 'user_id_saved') {
+        $message = t('user_id_saved');
+    } elseif ($flash === 'invalid_user_id') {
+        $message = t('error') . ': ' . t('invalid_user_id');
+    } elseif ($flash === 'settings_not_saved') {
+        $message = t('error') . ': ' . t('settings_not_saved');
+    }
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $userIdRaw = (string)($_POST['global_user_id'] ?? '');
     $userIdSubmitted = trim($userIdRaw);
 
     if ($userIdRaw !== $userIdSubmitted || ($userIdSubmitted !== '' && preg_match('/^\d+$/', $userIdSubmitted) !== 1)) {
-        $message = t('error') . ': ' . t('invalid_user_id');
-        $messageClass = 'status inactive';
+        header('Location: ' . build_page_url('/user_id.php', [
+            'flash' => 'invalid_user_id',
+            'flashClass' => 'inactive',
+        ]));
+        exit;
     } else {
         $ok = saveGlobalUserId($userIdSubmitted, $config);
-        $message = $ok ? t('service_updated') : (t('error') . ': ' . t('settings_not_saved'));
-        $messageClass = $ok ? 'status active' : 'status inactive';
         if ($ok) {
             $userId = $userIdSubmitted;
         }
+        header('Location: ' . build_page_url('/user_id.php', [
+            'flash' => $ok ? 'user_id_saved' : 'settings_not_saved',
+            'flashClass' => $ok ? 'active' : 'inactive',
+        ]));
+        exit;
     }
 }
 ?>
@@ -183,7 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </form>
         </div>
         <div class="menu centered">
-            <a href="<?= htmlspecialchars(url_with_lang('/settings.php'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('back'), ENT_QUOTES, 'UTF-8') ?></a>
+            <?= render_back_link('/settings.php') ?>
         </div>
     </div>
 </div>

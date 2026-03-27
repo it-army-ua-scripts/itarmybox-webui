@@ -25,6 +25,12 @@ $timezoneOptions = [
 ];
 
 $selectedTimezone = 'Europe/Kyiv';
+$message = '';
+$messageClass = '';
+if (isset($_GET['flash']) && is_string($_GET['flash']) && $_GET['flash'] !== '') {
+    $message = (string)$_GET['flash'];
+    $messageClass = ((string)($_GET['flashClass'] ?? '') === 'active') ? 'status active' : 'status inactive';
+}
 
 $status = root_helper_request([
     'action' => 'time_sync_status',
@@ -48,11 +54,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ]);
     $ok = (($response['ok'] ?? false) === true);
     $message = $ok ? t('time_sync_applied') : t('time_sync_failed');
-    $messageClass = $ok ? 'status active' : 'status inactive';
     if (!$ok && isset($response['error'])) {
         $message .= ' (' . $response['error'] . ')';
     }
-    $status = $response;
+    header('Location: ' . build_page_url('/time_sync.php', [
+        'flash' => $message,
+        'flashClass' => $ok ? 'active' : 'inactive',
+        'selectedTimezone' => $selectedTimezone,
+    ]));
+    exit;
+}
+
+if (isset($_GET['selectedTimezone']) && is_string($_GET['selectedTimezone']) && $_GET['selectedTimezone'] !== '') {
+    $selectedTimezone = (string)$_GET['selectedTimezone'];
 }
 
 $timezone = (string)($status['timezone'] ?? 'n/a');
@@ -111,7 +125,7 @@ if ($timezone !== '' && $timezone !== 'n/a' && !in_array($timezone, $timezoneOpt
         </div>
 
         <div class="menu centered">
-            <a href="<?= htmlspecialchars(url_with_lang('/settings.php'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('back'), ENT_QUOTES, 'UTF-8') ?></a>
+            <?= render_back_link('/settings.php') ?>
         </div>
     </div>
 </div>

@@ -7,28 +7,30 @@ $config = require 'config/config.php';
 $messageKey = '';
 $messageOk = false;
 
-if (isset($_GET['daemon']) && in_array($_GET['daemon'], $config['daemonNames'], true)) {
-    $daemon = (string)$_GET['daemon'];
-    $canStart = true;
-    if (in_array($daemon, ['mhddos', 'distress'], true)) {
-        $currentConfig = getConfigStringFromServiceFile($daemon);
-        if ($currentConfig !== '') {
-            $canStart = updateServiceFile($daemon, updateServiceConfigParams($currentConfig, [], $daemon));
-        } else {
-            $canStart = false;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $daemon = (string)($_POST['daemon'] ?? '');
+    if (in_array($daemon, $config['daemonNames'], true)) {
+        $canStart = true;
+        if (in_array($daemon, ['mhddos', 'distress'], true)) {
+            $currentConfig = getConfigStringFromServiceFile($daemon);
+            if ($currentConfig !== '') {
+                $canStart = updateServiceFile($daemon, updateServiceConfigParams($currentConfig, [], $daemon));
+            } else {
+                $canStart = false;
+            }
         }
-    }
-    if ($canStart) {
-        $response = root_helper_request([
-            'action' => 'service_activate_exclusive',
-            'modules' => $config['daemonNames'],
-            'selected' => $daemon,
-        ]);
-        $messageOk = (($response['ok'] ?? false) === true);
-        $messageKey = $messageOk ? 'start_requested' : 'start_failed';
-    } else {
-        $messageKey = 'start_failed';
-        $messageOk = false;
+        if ($canStart) {
+            $response = root_helper_request([
+                'action' => 'service_activate_exclusive',
+                'modules' => $config['daemonNames'],
+                'selected' => $daemon,
+            ]);
+            $messageOk = (($response['ok'] ?? false) === true);
+            $messageKey = $messageOk ? 'start_requested' : 'start_failed';
+        } else {
+            $messageKey = 'start_failed';
+            $messageOk = false;
+        }
     }
 }
 

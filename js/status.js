@@ -8,6 +8,7 @@
     const activeModuleNameEl = document.getElementById("active-module-name");
     const activeModuleStatusEl = document.getElementById("active-module-status");
     const autostartStatusEl = document.getElementById("autostart-status");
+    const controlStatusEl = document.getElementById("control-status");
 
     function appendOrReplace(el, newText, key) {
         const oldText = serviceState[key] || "";
@@ -27,25 +28,34 @@
         }
     }
 
-    function actionUrl(path, module) {
-        return path + "?daemon=" + encodeURIComponent(module) + "&lang=" + encodeURIComponent(config.lang || "uk");
+    function createActionForm(path, module, label) {
+        const form = document.createElement("form");
+        form.method = "post";
+        form.action = path + "?lang=" + encodeURIComponent(config.lang || "uk");
+
+        const daemonInput = document.createElement("input");
+        daemonInput.type = "hidden";
+        daemonInput.name = "daemon";
+        daemonInput.value = module;
+        form.appendChild(daemonInput);
+
+        const submitButton = document.createElement("button");
+        submitButton.type = "submit";
+        submitButton.textContent = label;
+        form.appendChild(submitButton);
+
+        return form;
     }
 
     function renderActiveModuleActions(activeModuleName, selectedModuleName) {
         activeModuleActionsEl.innerHTML = "";
         if (activeModuleName) {
-            const stopLink = document.createElement("a");
-            stopLink.href = actionUrl("/stop.php", activeModuleName);
-            stopLink.textContent = config.text.stop;
-            activeModuleActionsEl.appendChild(stopLink);
+            activeModuleActionsEl.appendChild(createActionForm("/stop.php", activeModuleName, config.text.stop));
             return;
         }
 
         if (selectedModuleName) {
-            const startLink = document.createElement("a");
-            startLink.href = actionUrl("/start.php", selectedModuleName);
-            startLink.textContent = config.text.start;
-            activeModuleActionsEl.appendChild(startLink);
+            activeModuleActionsEl.appendChild(createActionForm("/start.php", selectedModuleName, config.text.start));
         }
     }
 
@@ -55,10 +65,19 @@
         shared.setBooleanClass(el, "inactive", !isActive);
     }
 
+    function renderUnavailableState() {
+        activeModuleNameEl.textContent = config.text.activeModule;
+        setStatusBadge(activeModuleStatusEl, config.text.statusUnavailable, false);
+        setStatusBadge(autostartStatusEl, config.text.statusUnavailable, false);
+        setStatusBadge(controlStatusEl, config.text.statusUnavailable, false);
+        activeModuleActionsEl.innerHTML = "";
+    }
+
     async function updateStatus() {
         try {
             const data = await shared.fetchJson(config.ajaxUrl, { cache: "no-store" });
             if (!data || !data.ok) {
+                renderUnavailableState();
                 return;
             }
 
@@ -73,6 +92,17 @@
                 setStatusBadge(autostartStatusEl, config.text.autostartNone, false);
             }
 
+            if (data.scheduleLocked === true) {
+                const moduleName = typeof data.scheduleModule === "string" ? data.scheduleModule.toUpperCase() : "";
+                const power = Number.isFinite(Number(data.schedulePercent)) ? String(Math.round(Number(data.schedulePercent))) + "%" : "";
+                const text = moduleName && power
+                    ? config.text.controlSchedule.replace("{{module}}", moduleName).replace("{{power}}", power)
+                    : config.text.controlScheduleGeneric;
+                setStatusBadge(controlStatusEl, text, true);
+            } else {
+                setStatusBadge(controlStatusEl, config.text.controlManual, false);
+            }
+
             if (data.activeModule) {
                 activeModuleNameEl.textContent = config.text.activeModule;
                 setStatusBadge(activeModuleStatusEl, data.activeModule, true);
@@ -85,6 +115,7 @@
 
             appendOrReplace(commonLogEl, data.commonLogs || "", "common");
         } catch (e) {
+            renderUnavailableState();
         }
     }
 

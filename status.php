@@ -17,23 +17,40 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         'action' => 'autostart_get',
         'modules' => $daemonNames,
     ]);
+    $trafficLimitResponse = root_helper_request([
+        'action' => 'traffic_limit_get',
+        'modules' => $daemonNames,
+    ]);
     $activeModule = ($response['ok'] ?? false) ? ($response['activeModule'] ?? null) : null;
     $commonLogs = ($response['ok'] ?? false) ? (string)($response['commonLogs'] ?? '') : '';
     $selectedModule = (($autostartResponse['ok'] ?? false) === true) ? ($autostartResponse['active'] ?? null) : null;
+    $scheduleLocked = (($trafficLimitResponse['scheduleLocked'] ?? false) === true);
+    $scheduleModule = $scheduleLocked ? ($trafficLimitResponse['scheduleModule'] ?? null) : null;
+    $schedulePercent = $scheduleLocked ? ($trafficLimitResponse['schedulePercent'] ?? null) : null;
     if (!is_string($selectedModule) || !in_array($selectedModule, $daemonNames, true)) {
         $selectedModule = null;
     }
-
-    if (trim($commonLogs) === '') {
-        $commonLogs = (string)shell_exec("tail -n80 /var/log/adss.log 2>/dev/null");
+    if (!is_string($scheduleModule) || !in_array($scheduleModule, $daemonNames, true)) {
+        $scheduleModule = null;
     }
+    if (!is_int($schedulePercent) && !(is_string($schedulePercent) && preg_match('/^\d+$/', $schedulePercent) === 1)) {
+        $schedulePercent = null;
+    }
+
+    $statusOk = (($response['ok'] ?? false) === true);
+    $autostartOk = (($autostartResponse['ok'] ?? false) === true);
 
     echo json_encode(
         [
-            'ok' => true,
+            'ok' => $statusOk,
             'activeModule' => $activeModule,
             'selectedModule' => $selectedModule,
             'commonLogs' => $commonLogs,
+            'autostartOk' => $autostartOk,
+            'scheduleLocked' => $scheduleLocked,
+            'scheduleModule' => $scheduleModule,
+            'schedulePercent' => $schedulePercent !== null ? (int)$schedulePercent : null,
+            'error' => $statusOk ? null : (string)($response['error'] ?? 'status_unavailable'),
         ],
         JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
     );
@@ -76,20 +93,29 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     </div>
 
     <div class="service">
+        <div class="service-title"><?= htmlspecialchars(t('current_control'), ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="status inactive" id="control-status"><?= htmlspecialchars(t('checking'), ENT_QUOTES, 'UTF-8') ?></div>
+    </div>
+
+    <div class="service">
         <div class="log-box" id="common-log"></div>
         <div class="menu" id="active-module-actions"></div>
     </div>
 
     <div class="menu">
-        <a href="<?= htmlspecialchars(url_with_lang('/'), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(t('back'), ENT_QUOTES, 'UTF-8') ?></a>
+        <?= render_back_link('/') ?>
     </div>
 </div>
 <script id="status-config" type="application/json"><?= json_encode([
     'text' => [
         'activeModule' => t('active_module'),
         'noModuleRunning' => t('no_module_running'),
+        'statusUnavailable' => t('status_unavailable_short'),
         'autostartFor' => t('autostart_for', ['module' => '{{module}}']),
         'autostartNone' => t('autostart_none'),
+        'controlManual' => t('control_manual'),
+        'controlSchedule' => t('control_schedule', ['module' => '{{module}}', 'power' => '{{power}}']),
+        'controlScheduleGeneric' => t('control_schedule_generic'),
         'start' => t('start'),
         'stop' => t('stop'),
     ],
