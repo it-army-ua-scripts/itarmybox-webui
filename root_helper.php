@@ -671,10 +671,12 @@ function adjustDistressConcurrencyForRamFloor(int $currentConcurrency, float $ra
         return DISTRESS_AUTOTUNE_MIN_CONCURRENCY;
     }
 
-    // Approximate the new concurrency proportionally to the free RAM deficit.
-    $target = (int)floor($currentConcurrency * ($ramFreePercent / DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT));
-    $target = roundDistressConcurrency($target);
+    // Reduce proportionally to the RAM deficit, but cap the step so one tick does not overreact.
+    $deficitRatio = (DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT - $ramFreePercent) / DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT;
+    $percentDrop = (int)ceil($deficitRatio * 20.0);
+    $percentDrop = max(5, min(20, $percentDrop));
 
+    $target = adjustDistressConcurrencyByPercent($currentConcurrency, -$percentDrop);
     if ($target >= $currentConcurrency) {
         $target = roundDistressConcurrency($currentConcurrency - 64);
     }
