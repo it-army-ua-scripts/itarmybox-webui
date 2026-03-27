@@ -4,6 +4,14 @@
     padding: 0;
 }
 
+:root {
+    color-scheme: light;
+}
+
+html[data-theme="dark"] {
+    color-scheme: dark;
+}
+
 body {
     font-family: 'Roboto', sans-serif;
     min-height: 100vh;
@@ -22,6 +30,34 @@ body {
     padding-top: 58px;
     padding-bottom: 56px;
     overflow-x: hidden;
+}
+
+body,
+.container,
+.service,
+.form-container,
+.menu a,
+.menu button,
+.lang-btn,
+.theme-toggle,
+.app-header-bar,
+.app-footer,
+.power-lever,
+.home-monitor,
+.monitor-card,
+.autostart-link-card,
+.schedule-interval-card,
+.modal-card,
+.copy-bot-row,
+.form-group input,
+.form-group select,
+.form-group textarea,
+.log-box {
+    transition:
+        background 0.22s ease,
+        color 0.22s ease,
+        border-color 0.22s ease,
+        box-shadow 0.22s ease;
 }
 
 body.modal-open {
@@ -53,6 +89,14 @@ body.modal-open {
     background: rgba(245, 247, 250, 0.92);
     border-bottom: 1px solid rgba(44, 62, 80, 0.15);
     backdrop-filter: blur(4px);
+}
+
+.app-header-inner {
+    width: min(100%, 1040px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
 }
 
 .app-header-bar.is-empty .header-stat-pill {
@@ -765,6 +809,81 @@ h1 {
     margin-bottom: 12px;
 }
 
+.app-theme-bar {
+    position: fixed;
+    top: 10px;
+    right: 12px;
+    z-index: 70;
+}
+
+.theme-toggle {
+    position: relative;
+    width: 54px;
+    height: 30px;
+    border: 1px solid rgba(80, 102, 126, 0.2);
+    border-radius: 999px;
+    background: linear-gradient(180deg, #fef4c7 0%, #e5eefb 100%);
+    box-shadow: 0 10px 24px rgba(44, 62, 80, 0.14);
+    cursor: pointer;
+    transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.app-header-bar .theme-toggle {
+    flex: 0 0 auto;
+}
+
+.theme-toggle:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 28px rgba(44, 62, 80, 0.18);
+}
+
+.theme-toggle::before,
+.theme-toggle::after {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: rgba(44, 62, 80, 0.58);
+}
+
+.theme-toggle::before {
+    content: "L";
+    left: 9px;
+}
+
+.theme-toggle::after {
+    content: "D";
+    right: 9px;
+}
+
+.theme-toggle-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, #ffffff 0%, #dce8f8 100%);
+    box-shadow: 0 6px 14px rgba(31, 45, 61, 0.2);
+    transition: transform 0.25s ease, background 0.25s ease;
+}
+
+.theme-toggle.is-dark {
+    background: linear-gradient(180deg, #263446 0%, #111827 100%);
+    border-color: rgba(148, 163, 184, 0.28);
+}
+
+.theme-toggle.is-dark::before,
+.theme-toggle.is-dark::after {
+    color: rgba(226, 232, 240, 0.72);
+}
+
+.theme-toggle.is-dark .theme-toggle-thumb {
+    transform: translateX(24px);
+    background: linear-gradient(180deg, #e2e8f0 0%, #94a3b8 100%);
+}
+
 .lang-btn {
     border: 1px solid #c9d4df;
     background: #f7f9fb;
@@ -953,6 +1072,16 @@ h1 {
         margin-bottom: 6px;
     }
 
+    .app-header-inner {
+        gap: 8px;
+        justify-content: space-between;
+    }
+
+    .app-theme-bar {
+        top: 8px;
+        right: 10px;
+    }
+
     .home-container .header {
         margin-bottom: 8px;
     }
@@ -1129,6 +1258,226 @@ h1 {
         height: clamp(64px, 21vw, 86px);
     }
 
+}
+
+html[data-theme="dark"] body {
+    background: radial-gradient(circle at top, #182333 0%, #0f1724 45%, #09111b 100%);
+    color: #dbe6f4;
+}
+
+html[data-theme="dark"] .container {
+    background: linear-gradient(180deg, #162231 0%, #0f1824 100%);
+    box-shadow: 0 18px 44px rgba(2, 8, 23, 0.48);
+}
+
+html[data-theme="dark"] .app-header-bar,
+html[data-theme="dark"] .app-footer {
+    background: rgba(9, 17, 27, 0.88);
+    border-color: rgba(148, 163, 184, 0.16);
+}
+
+html[data-theme="dark"] .app-header-inner {
+    justify-content: space-between;
+}
+
+html[data-theme="dark"] .header-stat-pill,
+html[data-theme="dark"] .monitor-card,
+html[data-theme="dark"] .form-container,
+html[data-theme="dark"] .service,
+html[data-theme="dark"] .schedule-interval-card,
+html[data-theme="dark"] .autostart-link-card,
+html[data-theme="dark"] .power-help,
+html[data-theme="dark"] .modal-card,
+html[data-theme="dark"] .copy-bot-row {
+    background: linear-gradient(180deg, rgba(22, 34, 49, 0.98) 0%, rgba(13, 22, 34, 0.98) 100%);
+    border-color: rgba(100, 122, 148, 0.3);
+    color: #dbe6f4;
+    box-shadow: 0 14px 30px rgba(2, 8, 23, 0.3);
+}
+
+html[data-theme="dark"] .header-stat-pill {
+    background: linear-gradient(180deg, rgba(20, 32, 46, 0.98) 0%, rgba(13, 22, 34, 0.98) 100%);
+}
+
+html[data-theme="dark"] .power-lever,
+html[data-theme="dark"] .home-monitor {
+    border-color: rgba(100, 122, 148, 0.3);
+    box-shadow: 0 16px 32px rgba(2, 8, 23, 0.28);
+}
+
+html[data-theme="dark"] .power-lever {
+    background:
+        radial-gradient(circle at top left, rgba(239, 68, 68, 0.18), transparent 34%),
+        linear-gradient(180deg, #1b2432 0%, #111a27 100%);
+}
+
+html[data-theme="dark"] .home-monitor {
+    background:
+        radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 34%),
+        linear-gradient(180deg, #182436 0%, #101827 100%);
+}
+
+html[data-theme="dark"] .monitor-card-tx {
+    background: linear-gradient(180deg, #12243d 0%, #0e1d31 100%);
+    border-color: rgba(96, 165, 250, 0.24);
+}
+
+html[data-theme="dark"] .header h1,
+html[data-theme="dark"] h1,
+html[data-theme="dark"] .service-title,
+html[data-theme="dark"] .monitor-value,
+html[data-theme="dark"] .power-lever-value span:first-child,
+html[data-theme="dark"] .modal-card h2,
+html[data-theme="dark"] .footer-version,
+html[data-theme="dark"] .app-footer,
+html[data-theme="dark"] .menu a,
+html[data-theme="dark"] .menu button {
+    color: #e5edf7;
+}
+
+html[data-theme="dark"] .header-stat-label,
+html[data-theme="dark"] .monitor-label,
+html[data-theme="dark"] .power-note,
+html[data-theme="dark"] .power-status,
+html[data-theme="dark"] .schedule-limit-hint,
+html[data-theme="dark"] .autostart-link-body,
+html[data-theme="dark"] .copy-bot-hint,
+html[data-theme="dark"] .modal-card p,
+html[data-theme="dark"] .form-group label,
+html[data-theme="dark"] .power-scale {
+    color: #9fb2c7;
+}
+
+html[data-theme="dark"] .power-lever-value span:last-child,
+html[data-theme="dark"] .autostart-link-title,
+html[data-theme="dark"] .modal-badge {
+    color: #f8c79b;
+}
+
+html[data-theme="dark"] .menu a,
+html[data-theme="dark"] .menu button,
+html[data-theme="dark"] .lang-btn,
+html[data-theme="dark"] .modal-btn-secondary {
+    background: linear-gradient(180deg, #1d2b3c 0%, #15202e 100%);
+    border-color: rgba(100, 122, 148, 0.32);
+    box-shadow: 0 10px 22px rgba(2, 8, 23, 0.28);
+}
+
+html[data-theme="dark"] .submit-btn:hover,
+html[data-theme="dark"] .modal-btn-primary:hover,
+html[data-theme="dark"] .active-branch-btn:hover {
+    background: linear-gradient(180deg, #4a88e7 0%, #336dc2 100%) !important;
+}
+
+html[data-theme="dark"] .menu a:hover,
+html[data-theme="dark"] .menu button:hover,
+html[data-theme="dark"] .lang-btn:hover,
+html[data-theme="dark"] .modal-btn-secondary:hover {
+    background: linear-gradient(180deg, #243549 0%, #192534 100%);
+}
+
+html[data-theme="dark"] .lang-btn.active,
+html[data-theme="dark"] .submit-btn,
+html[data-theme="dark"] .modal-btn-primary,
+html[data-theme="dark"] .active-branch-btn {
+    background: linear-gradient(180deg, #3d7bd9 0%, #2d63b2 100%) !important;
+    border-color: rgba(96, 165, 250, 0.36) !important;
+    color: #f8fbff !important;
+}
+
+html[data-theme="dark"] .branch-switch-actions .submit-btn {
+    background: linear-gradient(180deg, #1c2a3a 0%, #15202c 100%);
+    border-color: rgba(100, 122, 148, 0.3);
+    color: #dbe6f4;
+}
+
+html[data-theme="dark"] .branch-switch-actions .submit-btn:hover {
+    background: linear-gradient(180deg, #223246 0%, #182433 100%);
+}
+
+html[data-theme="dark"] .form-group input,
+html[data-theme="dark"] .form-group select,
+html[data-theme="dark"] .form-group textarea {
+    background: #0f1824;
+    border-color: rgba(100, 122, 148, 0.38);
+    color: #e5edf7;
+}
+
+html[data-theme="dark"] .form-group input:focus,
+html[data-theme="dark"] .form-group select:focus,
+html[data-theme="dark"] .form-group textarea:focus {
+    border-color: #60a5fa;
+}
+
+html[data-theme="dark"] .schedule-day-item span {
+    background: #132031;
+    border-color: rgba(100, 122, 148, 0.32);
+    color: #dbe6f4;
+}
+
+html[data-theme="dark"] .schedule-day-item input[type="checkbox"]:disabled + span {
+    background: #101827;
+    border-color: rgba(71, 85, 105, 0.34);
+    color: #6f8298;
+}
+
+html[data-theme="dark"] .schedule-day-item input[type="checkbox"]:checked + span {
+    background: #3d7bd9;
+    border-color: #3d7bd9;
+    color: #f8fbff;
+}
+
+html[data-theme="dark"] .status.active,
+html[data-theme="dark"] .footer-update-state.up-to-date,
+html[data-theme="dark"] .autostart-link-pill.is-active,
+html[data-theme="dark"] .schedule-interval-live,
+html[data-theme="dark"] .form-message.status.active {
+    color: #86efac;
+}
+
+html[data-theme="dark"] .footer-update-state.up-to-date {
+    background: rgba(22, 101, 52, 0.28);
+}
+
+html[data-theme="dark"] .status.inactive,
+html[data-theme="dark"] .footer-update-state.update-needed,
+html[data-theme="dark"] .form-message.status.inactive {
+    color: #fca5a5;
+}
+
+html[data-theme="dark"] .footer-update-state.update-needed {
+    background: rgba(153, 27, 27, 0.3);
+}
+
+html[data-theme="dark"] .footer-update-action {
+    background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+    color: #fff;
+}
+
+html[data-theme="dark"] .footer-update-action:hover {
+    background: linear-gradient(180deg, #f87171 0%, #c62828 100%);
+}
+
+html[data-theme="dark"] .log-box {
+    background: #020617;
+    color: #dbe6f4;
+    border: 1px solid rgba(100, 122, 148, 0.28);
+}
+
+html[data-theme="dark"] .copy-bot-btn {
+    background: linear-gradient(180deg, #16304c 0%, #11253a 100%);
+    border-color: rgba(96, 165, 250, 0.34);
+    color: #bfdbfe;
+}
+
+html[data-theme="dark"] .copy-bot-btn:hover {
+    box-shadow: 0 14px 28px rgba(30, 64, 175, 0.28);
+}
+
+html[data-theme="dark"] .copy-bot-btn.copied {
+    background: linear-gradient(180deg, #153426 0%, #10281d 100%);
+    border-color: rgba(74, 222, 128, 0.34);
+    color: #bbf7d0;
 }
 
 @media (max-width: 900px) and (orientation: landscape) {

@@ -10,9 +10,14 @@
 </head>
 <body>
 <div class="app-header-bar is-empty" id="app-header-bar">
-    <div class="header-stat-pill">
-        <span class="header-stat-label" id="today-tx-label"></span>
-        <span class="header-stat-value" id="today-tx-value"></span>
+    <div class="app-header-inner">
+        <div class="header-stat-pill">
+            <span class="header-stat-label" id="today-tx-label"></span>
+            <span class="header-stat-value" id="today-tx-value"></span>
+        </div>
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle theme" title="Toggle theme">
+            <span class="theme-toggle-thumb"></span>
+        </button>
     </div>
 </div>
 
@@ -27,21 +32,21 @@
             <img src="/image/logo.png" alt="logo" class="header-logo">
             <img src="/image/artline_logo.png" alt="artline-logo" class="header-logo header-logo-artline">
         </div>
-        <h1 id="title">Головне меню</h1>
+        <h1 id="title">&#1043;&#1086;&#1083;&#1086;&#1074;&#1085;&#1077; &#1084;&#1077;&#1085;&#1102;</h1>
     </div>
 
     <div class="content">
         <ul class="menu">
-            <li><a href="/status.php" id="link-status">Статус</a></li>
-            <li><a href="/tools_list.php" id="link-tools">Інструменти</a></li>
-            <li><a href="/settings.php" id="link-settings">Налаштування</a></li>
+            <li><a href="/status.php" id="link-status">&#1057;&#1090;&#1072;&#1090;&#1091;&#1089;</a></li>
+            <li><a href="/tools_list.php" id="link-tools">&#1030;&#1085;&#1089;&#1090;&#1088;&#1091;&#1084;&#1077;&#1085;&#1090;&#1080;</a></li>
+            <li><a href="/settings.php" id="link-settings">&#1053;&#1072;&#1083;&#1072;&#1096;&#1090;&#1091;&#1074;&#1072;&#1085;&#1085;&#1103;</a></li>
         </ul>
 
-        <section class="power-lever" aria-label="Керування потужністю">
+        <section class="power-lever" aria-label="&#1050;&#1077;&#1088;&#1091;&#1074;&#1072;&#1085;&#1085;&#1103; &#1087;&#1086;&#1090;&#1091;&#1078;&#1085;&#1110;&#1089;&#1090;&#1102;">
             <div class="power-lever-head">
                 <div class="power-lever-value">
                     <span id="power-percent">31%</span>
-                    <span id="power-rate">50 Мбіт/с</span>
+                    <span id="power-rate">50 &#1052;&#1073;&#1110;&#1090;/&#1089;</span>
                 </div>
                 <div class="power-lever-note" id="power-note">eth0 outgoing</div>
             </div>
@@ -52,11 +57,11 @@
                 <span>80%</span>
                 <span>100%</span>
             </div>
-            <div class="power-help" id="power-help">Піднімайте потужність поступово. Важливо, щоб itarmybox не заважав комфортному доступу до інтернету.</div>
+            <div class="power-help" id="power-help">&#1055;&#1110;&#1076;&#1085;&#1110;&#1084;&#1072;&#1081;&#1090;&#1077; &#1087;&#1086;&#1090;&#1091;&#1078;&#1085;&#1110;&#1089;&#1090;&#1100; &#1087;&#1086;&#1089;&#1090;&#1091;&#1087;&#1086;&#1074;&#1086;. &#1042;&#1072;&#1078;&#1083;&#1080;&#1074;&#1086;, &#1097;&#1086;&#1073; itarmybox &#1085;&#1077; &#1079;&#1072;&#1074;&#1072;&#1078;&#1072;&#1074; &#1082;&#1086;&#1084;&#1092;&#1086;&#1088;&#1090;&#1085;&#1086;&#1084;&#1091; &#1076;&#1086;&#1089;&#1090;&#1091;&#1087;&#1091; &#1076;&#1086; &#1110;&#1085;&#1090;&#1077;&#1088;&#1085;&#1077;&#1090;&#1091;.</div>
             <div class="power-status" id="power-status"></div>
         </section>
 
-        <section class="home-monitor" aria-label="Моніторинг системи">
+        <section class="home-monitor" aria-label="&#1052;&#1086;&#1085;&#1110;&#1090;&#1086;&#1088;&#1080;&#1085;&#1075; &#1089;&#1080;&#1089;&#1090;&#1077;&#1084;&#1080;">
             <div class="home-monitor-grid">
                 <div class="monitor-card monitor-card-tx">
                     <div class="monitor-label" id="monitor-tx-label">TX eth0</div>
@@ -89,8 +94,8 @@
 
 <div class="modal-backdrop" id="user-id-modal" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="user-id-modal-title" aria-describedby="user-id-modal-text">
-        <div class="modal-badge" id="user-id-modal-badge">Підказка IT Army</div>
-        <h2 id="user-id-modal-title">Потрібен User ID</h2>
+        <div class="modal-badge" id="user-id-modal-badge">&#1055;&#1110;&#1076;&#1082;&#1072;&#1079;&#1082;&#1072; IT Army</div>
+        <h2 id="user-id-modal-title">&#1055;&#1086;&#1090;&#1088;&#1110;&#1073;&#1077;&#1085; User ID</h2>
         <p id="user-id-modal-text"></p>
         <div class="copy-bot-row">
             <button type="button" class="copy-bot-btn" id="copy-bot-name" aria-describedby="copy-bot-hint" aria-label="Copy bot name">@itarmy_stats_bot</button>
@@ -98,19 +103,19 @@
         </div>
         <label class="modal-checkbox-row" for="user-id-modal-skip">
             <input type="checkbox" id="user-id-modal-skip">
-            <span id="user-id-modal-skip-label">Нагадати пізніше</span>
+            <span id="user-id-modal-skip-label">&#1053;&#1072;&#1075;&#1072;&#1076;&#1072;&#1090;&#1080; &#1087;&#1110;&#1079;&#1085;&#1110;&#1096;&#1077;</span>
         </label>
         <div class="modal-actions">
             <button type="button" class="modal-btn modal-btn-secondary" id="user-id-modal-close">OK</button>
-            <a class="modal-btn modal-btn-primary" id="user-id-modal-link" href="/user_id.php">Відкрити налаштування</a>
+            <a class="modal-btn modal-btn-primary" id="user-id-modal-link" href="/user_id.php">&#1042;&#1110;&#1076;&#1082;&#1088;&#1080;&#1090;&#1080; &#1085;&#1072;&#1083;&#1072;&#1096;&#1090;&#1091;&#1074;&#1072;&#1085;&#1085;&#1103;</a>
         </div>
     </div>
 </div>
 
 <footer class="app-footer">
-    <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">Слава Україні!</span>.</div>
-    <div class="footer-version"><span id="footer-version-current-label">Версія</span>: <span id="footer-version-current">...</span> | <span id="footer-version-github-label">GitHub</span>: <span id="footer-version-github">...</span> | <span id="footer-branch-label">Гілка</span>: <span id="footer-version-branch">...</span></div>
-    <div class="footer-update-row"><span id="footer-update-state" class="footer-update-state up-to-date">Актуальна</span> <a id="footer-update-action" class="footer-update-action" href="/settings.php">Оновити</a></div>
+    <div>&copy; 2022-<span id="copyright-year"></span> IT Army of Ukraine. <span id="footer-slogan">&#1057;&#1083;&#1072;&#1074;&#1072; &#1059;&#1082;&#1088;&#1072;&#1111;&#1085;&#1110;!</span>.</div>
+    <div class="footer-version"><span id="footer-version-current-label">&#1042;&#1077;&#1088;&#1089;&#1110;&#1103;</span>: <span id="footer-version-current">...</span> | <span id="footer-version-github-label">GitHub</span>: <span id="footer-version-github">...</span> | <span id="footer-branch-label">&#1043;&#1110;&#1083;&#1082;&#1072;</span>: <span id="footer-version-branch">...</span></div>
+    <div class="footer-update-row"><span id="footer-update-state" class="footer-update-state up-to-date">&#1040;&#1082;&#1090;&#1091;&#1072;&#1083;&#1100;&#1085;&#1072;</span> <a id="footer-update-action" class="footer-update-action" href="/settings.php">&#1054;&#1085;&#1086;&#1074;&#1080;&#1090;&#1080;</a></div>
 </footer>
 
 <script id="home-translations" type="application/json">
@@ -151,39 +156,39 @@
     "footerSlogan": "Glory to Ukraine!"
   },
   "uk": {
-    "title": "Головне меню",
-    "status": "Статус",
-    "tools": "Інструменти",
-    "settings": "Налаштування",
-    "userIdMissingBadge": "Підказка IT Army",
-    "userIdMissingTitle": "Потрібен User ID",
-    "userIdMissingNotice": "Для отримання персональної статистики та участі в топі користувачів потрібно дізнатись свій персональний User ID у Telegram-боті статистики та вказати його у відповідному полі в налаштуваннях.",
-    "openUserIdSettings": "Відкрити налаштування",
+    "title": "\u0413\u043e\u043b\u043e\u0432\u043d\u0435 \u043c\u0435\u043d\u044e",
+    "status": "\u0421\u0442\u0430\u0442\u0443\u0441",
+    "tools": "\u0406\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u0438",
+    "settings": "\u041d\u0430\u043b\u0430\u0448\u0442\u0443\u0432\u0430\u043d\u043d\u044f",
+    "userIdMissingBadge": "\u041f\u0456\u0434\u043a\u0430\u0437\u043a\u0430 IT Army",
+    "userIdMissingTitle": "\u041f\u043e\u0442\u0440\u0456\u0431\u0435\u043d User ID",
+    "userIdMissingNotice": "\u0414\u043b\u044f \u043e\u0442\u0440\u0438\u043c\u0430\u043d\u043d\u044f \u043f\u0435\u0440\u0441\u043e\u043d\u0430\u043b\u044c\u043d\u043e\u0457 \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0438 \u0442\u0430 \u0443\u0447\u0430\u0441\u0442\u0456 \u0432 \u0442\u043e\u043f\u0456 \u043a\u043e\u0440\u0438\u0441\u0442\u0443\u0432\u0430\u0447\u0456\u0432 \u043f\u043e\u0442\u0440\u0456\u0431\u043d\u043e \u0434\u0456\u0437\u043d\u0430\u0442\u0438\u0441\u044c \u0441\u0432\u0456\u0439 \u043f\u0435\u0440\u0441\u043e\u043d\u0430\u043b\u044c\u043d\u0438\u0439 User ID \u0443 Telegram-\u0431\u043e\u0442\u0456 \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0438 \u0442\u0430 \u0432\u043a\u0430\u0437\u0430\u0442\u0438 \u0439\u043e\u0433\u043e \u0443 \u0432\u0456\u0434\u043f\u043e\u0432\u0456\u0434\u043d\u043e\u043c\u0443 \u043f\u043e\u043b\u0456 \u0432 \u043d\u0430\u043b\u0430\u0448\u0442\u0443\u0432\u0430\u043d\u043d\u044f\u0445.",
+    "openUserIdSettings": "\u0412\u0456\u0434\u043a\u0440\u0438\u0442\u0438 \u043d\u0430\u043b\u0430\u0448\u0442\u0443\u0432\u0430\u043d\u043d\u044f",
     "closeModal": "OK",
-    "copyBotHint": "Натисніть на назву бота, щоб скопіювати",
-    "copiedBotHint": "Скопійовано",
-    "skipUserIdModal": "Нагадати пізніше",
-    "versionLabel": "Версія",
+    "copyBotHint": "\u041d\u0430\u0442\u0438\u0441\u043d\u0456\u0442\u044c \u043d\u0430 \u043d\u0430\u0437\u0432\u0443 \u0431\u043e\u0442\u0430, \u0449\u043e\u0431 \u0441\u043a\u043e\u043f\u0456\u044e\u0432\u0430\u0442\u0438",
+    "copiedBotHint": "\u0421\u043a\u043e\u043f\u0456\u0439\u043e\u0432\u0430\u043d\u043e",
+    "skipUserIdModal": "\u041d\u0430\u0433\u0430\u0434\u0430\u0442\u0438 \u043f\u0456\u0437\u043d\u0456\u0448\u0435",
+    "versionLabel": "\u0412\u0435\u0440\u0441\u0456\u044f",
     "githubLabel": "GitHub",
-    "branchLabel": "Гілка",
-    "updateAvailable": "Доступне оновлення",
-    "upToDate": "Актуальна",
-    "updateNow": "Оновити",
+    "branchLabel": "\u0413\u0456\u043b\u043a\u0430",
+    "updateAvailable": "\u0414\u043e\u0441\u0442\u0443\u043f\u043d\u0435 \u043e\u043d\u043e\u0432\u043b\u0435\u043d\u043d\u044f",
+    "upToDate": "\u0410\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u0430",
+    "updateNow": "\u041e\u043d\u043e\u0432\u0438\u0442\u0438",
     "powerNote": "eth0 outgoing",
-    "powerHelp": "Піднімайте потужність поступово. Важливо, щоб itarmybox не заважав комфортному доступу до інтернету.",
-    "powerApplying": "Застосування...",
-    "powerApplied": "Застосовано",
-    "powerApplyFailed": "Не вдалося застосувати",
-    "powerControlledBySchedule": "Керується розкладом ({{module}})",
-    "powerControlledByScheduleGeneric": "Керується розкладом",
-    "powerControlledByScheduleHint": "Керується розкладом ({{module}}). Змініть потужність у налаштуваннях розкладу.",
-    "powerControlledByScheduleHintGeneric": "Керується розкладом. Змініть потужність у налаштуваннях розкладу.",
-    "todayTxLabel": "Відправлено за сьогодні:",
+    "powerHelp": "\u041f\u0456\u0434\u043d\u0456\u043c\u0430\u0439\u0442\u0435 \u043f\u043e\u0442\u0443\u0436\u043d\u0456\u0441\u0442\u044c \u043f\u043e\u0441\u0442\u0443\u043f\u043e\u0432\u043e. \u0412\u0430\u0436\u043b\u0438\u0432\u043e, \u0449\u043e\u0431 itarmybox \u043d\u0435 \u0437\u0430\u0432\u0430\u0436\u0430\u0432 \u043a\u043e\u043c\u0444\u043e\u0440\u0442\u043d\u043e\u043c\u0443 \u0434\u043e\u0441\u0442\u0443\u043f\u0443 \u0434\u043e \u0456\u043d\u0442\u0435\u0440\u043d\u0435\u0442\u0443.",
+    "powerApplying": "\u0417\u0430\u0441\u0442\u043e\u0441\u0443\u0432\u0430\u043d\u043d\u044f...",
+    "powerApplied": "\u0417\u0430\u0441\u0442\u043e\u0441\u043e\u0432\u0430\u043d\u043e",
+    "powerApplyFailed": "\u041d\u0435 \u0432\u0434\u0430\u043b\u043e\u0441\u044f \u0437\u0430\u0441\u0442\u043e\u0441\u0443\u0432\u0430\u0442\u0438",
+    "powerControlledBySchedule": "\u041a\u0435\u0440\u0443\u0454\u0442\u044c\u0441\u044f \u0440\u043e\u0437\u043a\u043b\u0430\u0434\u043e\u043c ({{module}})",
+    "powerControlledByScheduleGeneric": "\u041a\u0435\u0440\u0443\u0454\u0442\u044c\u0441\u044f \u0440\u043e\u0437\u043a\u043b\u0430\u0434\u043e\u043c",
+    "powerControlledByScheduleHint": "\u041a\u0435\u0440\u0443\u0454\u0442\u044c\u0441\u044f \u0440\u043e\u0437\u043a\u043b\u0430\u0434\u043e\u043c ({{module}}). \u0417\u043c\u0456\u043d\u0456\u0442\u044c \u043f\u043e\u0442\u0443\u0436\u043d\u0456\u0441\u0442\u044c \u0443 \u043d\u0430\u043b\u0430\u0448\u0442\u0443\u0432\u0430\u043d\u043d\u044f\u0445 \u0440\u043e\u0437\u043a\u043b\u0430\u0434\u0443.",
+    "powerControlledByScheduleHintGeneric": "\u041a\u0435\u0440\u0443\u0454\u0442\u044c\u0441\u044f \u0440\u043e\u0437\u043a\u043b\u0430\u0434\u043e\u043c. \u0417\u043c\u0456\u043d\u0456\u0442\u044c \u043f\u043e\u0442\u0443\u0436\u043d\u0456\u0441\u0442\u044c \u0443 \u043d\u0430\u043b\u0430\u0448\u0442\u0443\u0432\u0430\u043d\u043d\u044f\u0445 \u0440\u043e\u0437\u043a\u043b\u0430\u0434\u0443.",
+    "todayTxLabel": "\u0412\u0456\u0434\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u043e \u0437\u0430 \u0441\u044c\u043e\u0433\u043e\u0434\u043d\u0456:",
     "monitorTemperature": "CPU TEMP",
     "monitorMemoryTemperature": "DDR temp",
     "monitorIp": "eth0 IP",
-    "monitorUnavailable": "н/д",
-    "footerSlogan": "Слава Україні!"
+    "monitorUnavailable": "\u043d/\u0434",
+    "footerSlogan": "\u0421\u043b\u0430\u0432\u0430 \u0423\u043a\u0440\u0430\u0457\u043d\u0456!"
   }
 }
 </script>
@@ -198,8 +203,20 @@
   "vnstatAutoInstall": true
 }
 </script>
+<script id="theme-config" type="application/json">
+{
+  "toggleLabel": "Toggle theme",
+  "darkLabel": "Dark theme",
+  "lightLabel": "Light theme"
+}
+</script>
+<script src="/js/theme.js"></script>
 <script src="/js/app_shared.js"></script>
-<script src="/js/home.js"></script>
+<script src="/js/home_runtime.js"></script>
+<script src="/js/home_power.js"></script>
+<script src="/js/home_monitor.js"></script>
+<script src="/js/home_userid.js"></script>
+<script src="/js/home_init.js"></script>
 <script>
     document.getElementById("copyright-year").textContent = String(new Date().getFullYear());
 </script>

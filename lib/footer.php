@@ -28,6 +28,11 @@ function render_app_footer(string $extraHtml = ''): string
     $slogan = htmlspecialchars(t('footer_slogan'), ENT_QUOTES, 'UTF-8');
     $branchLabel = htmlspecialchars(t('footer_branch'), ENT_QUOTES, 'UTF-8');
     $branch = htmlspecialchars(webui_selected_branch(), ENT_QUOTES, 'UTF-8');
+    $themeConfig = json_encode([
+        'toggleLabel' => t('theme_toggle'),
+        'darkLabel' => t('theme_dark'),
+        'lightLabel' => t('theme_light'),
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $backScript = <<<HTML
 <script>
 function appGoBack(link) {
@@ -51,5 +56,7 @@ HTML;
         . '<div>&copy; 2022-' . $year . ' IT Army of Ukraine. ' . $slogan . '.</div>'
         . '<div class="footer-version">' . $branchLabel . ': ' . $branch . '</div>'
         . '</footer>'
+        . '<script id="theme-config" type="application/json">' . $themeConfig . '</script>'
+        . '<script src="/js/theme.js"></script>'
         . $backScript;
 }

@@ -1,0 +1,160 @@
+<?php
+
+require_once __DIR__ . '/root_helper_client.php';
+
+function getServiceLogs(string $serviceName): string
+{
+    $config = require __DIR__ . '/../config/config.php';
+    $response = root_helper_request([
+        'action' => 'service_logs',
+        'modules' => $config['daemonNames'],
+        'module' => $serviceName,
+        'lines' => 5,
+    ]);
+    $logs = (string)($response['logs'] ?? '');
+    if (trim($logs) === '') {
+        $logs = "No journal entries available for this service.";
+    }
+    return preg_replace('/^[ \t]+/m', '', $logs) ?? $logs;
+}
+
+function getConfigStringFromServiceFile(string $serviceName): string
+{
+    $config = require __DIR__ . '/../config/config.php';
+    $response = root_helper_request([
+        'action' => 'service_execstart_get',
+        'modules' => $config['daemonNames'],
+        'module' => $serviceName,
+    ]);
+    if (($response['ok'] ?? false) !== true) {
+        return '';
+    }
+    return (string)($response['execStart'] ?? '');
+}
+
+function getCurrentAdjustableParams(string $configString, array $adjustableParams, string $daemonName): array
+{
+    $configAsArray = str_getcsv($configString, ' ');
+    $currentAdjustableParams = [];
+    $aliases = [
+        'ifaces' => ['bind'],
+        'bind' => ['ifaces'],
+        'disable-udp-flood' => ['direct-udp-failover'],
+        'direct-udp-failover' => ['disable-udp-flood'],
+    ];
+    $flagOnlyByDaemon = [
+        'distress' => ['enable-icmp-flood', 'enable-packet-flood', 'disable-udp-flood'],
+    ];
+    $flagOnly = array_flip($flagOnlyByDaemon[$daemonName] ?? []);
+    $options = [];
+    for ($i = 1; $i < count($configAsArray); $i++) {
+        $token = $configAsArray[$i];
+        if (!str_starts_with($token, '--')) {
+            continue;
+        }
+        $key = substr($token, 2);
+        $next = $configAsArray[$i + 1] ?? null;
+        if ($next !== null && !str_starts_with($next, '--')) {
+            $options[$key] = $next;
+            $i++;
+        } else {
+            $options[$key] = true;
+        }
+    }
+
+    foreach ($adjustableParams as $adjustableParam) {
+        $candidateKeys = array_merge([$adjustableParam], $aliases[$adjustableParam] ?? []);
+        foreach ($candidateKeys as $candidateKey) {
+            if (array_key_exists($candidateKey, $options)) {
+                $value = $options[$candidateKey];
+                if (isset($flagOnly[$adjustableParam])) {
+                    $currentAdjustableParams[$adjustableParam] = ($value === true) ? '1' : (string)$value;
+                } else {
+                    $currentAdjustableParams[$adjustableParam] = ($value === true) ? '' : (string)$value;
+                }
+                break;
+            }
+        }
+    }
+    return $currentAdjustableParams;
+}
+
+function updateServiceConfigParams(string $configString, array $updatedParams, string $daemonName): array
+{
+    $configAsArray = str_getcsv($configString, ' ');
+    $aliases = [
+        'ifaces' => ['bind'],
+        'bind' => ['ifaces'],
+        'disable-udp-flood' => ['direct-udp-failover'],
+        'direct-udp-failover' => ['disable-udp-flood'],
+    ];
+    $flagOnlyByDaemon = [
+        'distress' => ['enable-icmp-flood', 'enable-packet-flood', 'disable-udp-flood'],
+    ];
+    $flagOnly = array_flip($flagOnlyByDaemon[$daemonName] ?? []);
+
+    $baseTokens = [];
+    $options = [];
+    foreach ($configAsArray as $idx => $token) {
+        if ($idx === 0) {
+            $baseTokens[] = $token;
+            continue;
+        }
+        if (!str_starts_with($token, '--')) {
+            continue;
+        }
+        $key = substr($token, 2);
+        $next = $configAsArray[$idx + 1] ?? null;
+        if ($next !== null && !str_starts_with($next, '--')) {
+            $options[$key] = $next;
+        } else {
+            $options[$key] = true;
+        }
+    }
+
+    if ($daemonName === 'distress') {
+        unset($options['distress-concurrency-mode']);
+    }
+
+    foreach ($updatedParams as $updatedParamKey => $updatedParam) {
+        if ($updatedParamKey === 'distress-concurrency-mode') {
+            continue;
+        }
+        $updatedParam = trim((string)$updatedParam);
+        $allKeys = array_merge([$updatedParamKey], $aliases[$updatedParamKey] ?? []);
+        foreach ($allKeys as $optionKey) {
+            unset($options[$optionKey]);
+        }
+
+        $isFlagOnly = isset($flagOnly[$updatedParamKey]);
+        if ($updatedParam === '' || $updatedParam === '0') {
+            continue;
+        }
+        $options[$updatedParamKey] = $isFlagOnly ? true : $updatedParam;
+    }
+
+    if (in_array($daemonName, ['mhddos', 'distress'], true)) {
+        $options['source'] = 'itarmybox';
+    }
+
+    $out = $baseTokens;
+    foreach ($options as $key => $value) {
+        $out[] = '--' . $key;
+        if ($value !== true) {
+            $out[] = $value;
+        }
+    }
+    return $out;
+}
+
+function updateServiceFile(string $serviceName, array $updatedConfigParams): bool
+{
+    $config = require __DIR__ . '/../config/config.php';
+    $response = root_helper_request([
+        'action' => 'service_execstart_set',
+        'modules' => $config['daemonNames'],
+        'module' => $serviceName,
+        'execStart' => implode(' ', $updatedConfigParams),
+    ]);
+    return ($response['ok'] ?? false) === true;
+}

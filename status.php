@@ -37,10 +37,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         $schedulePercent = null;
     }
 
-    if (trim($commonLogs) === '') {
-        $commonLogs = (string)shell_exec("tail -n80 /var/log/adss.log 2>/dev/null");
-    }
-
     $statusOk = (($response['ok'] ?? false) === true);
     $autostartOk = (($autostartResponse['ok'] ?? false) === true);
 
