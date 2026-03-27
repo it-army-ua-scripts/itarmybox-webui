@@ -216,6 +216,8 @@ Check these first:
 - If autotune successfully writes new distress config concurrency but `serviceRestart('distress')` fails, the code now attempts rollback of config/state and returns richer diagnostics about the failed restart and rollback outcome.
 - `lib/root_helper_client.php` now uses longer action-specific read timeouts for long-running root-helper actions.
 - update branch state should be persisted only after a successful update path, not before running the update.
+- Update runs through root-helper should not refresh `itarmybox-root-helper.socket` in the middle of the request; otherwise the active Unix socket response can be interrupted even when the update itself succeeds.
+- The WebUI update flow should update only the WebUI repository; do not piggyback updates for `/opt/itarmy` from this script.
 - theme support is shared: PHP pages mount the toggle through `render_app_footer()`, and the home page shows it inside the fixed header bar.
 - home page language switching should call `window.ItArmyTheme.refresh()` so the toggle labels stay in sync after `applyLang(...)`.
 - The home page power slider now guards against race conditions: scheduled applies block background refresh repainting, duplicate release events are deduplicated, schedule lock physically disables the slider, and stale POST responses should not overwrite newer slider state.

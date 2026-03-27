@@ -79,19 +79,4 @@ echo "Updating to version $github_version ..."
 echo "DONE! Updated from $current_version to $github_version"
 persist_selected_branch
 
-if [ -d "$ITARMY_DIR/.git" ]; then
-  echo "Updating $ITARMY_DIR ..."
-  cd "$ITARMY_DIR"
-  current_branch="$(/usr/bin/git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
-  if [ -z "$current_branch" ] || [ "$current_branch" = "HEAD" ]; then
-    current_branch="main"
-  fi
-  /usr/bin/git fetch origin "$current_branch"
-  /usr/bin/git reset --hard "origin/$current_branch"
-  /usr/bin/git clean -fd
-  echo "DONE! Updated $ITARMY_DIR (branch: $current_branch)"
-else
-  echo "Skip $ITARMY_DIR: not found or not a git repository."
-fi
-
 refresh_webui_systemd_units
