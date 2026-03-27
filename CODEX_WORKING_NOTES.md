@@ -220,6 +220,7 @@ Check these first:
 - home page language switching should call `window.ItArmyTheme.refresh()` so the toggle labels stay in sync after `applyLang(...)`.
 - The home page power slider now guards against race conditions: scheduled applies block background refresh repainting, duplicate release events are deduplicated, schedule lock physically disables the slider, and stale POST responses should not overwrite newer slider state.
 - The home page power slider should stay encapsulated in `js/home_power.js`; `js/home_init.js` should only wire high-level startup and call `initPowerControls()`.
+- `render_back_link()` should avoid `history.back()` when the referrer is effectively the same document after a save/apply redirect; otherwise users can get a confusing extra back step.
 
 ## Refactor roadmap snapshot
 

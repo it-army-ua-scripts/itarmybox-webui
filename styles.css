@@ -155,23 +155,50 @@ body.status-page {
 }
 
 .logo-row {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 10px 14px;
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at top left, rgba(59, 130, 246, 0.14), transparent 36%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(240, 246, 253, 0.94) 100%);
+    border: 1px solid rgba(175, 193, 214, 0.52);
+    box-shadow: 0 14px 28px rgba(44, 62, 80, 0.08);
+}
+
+.header-logo-badge {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 10px;
+    min-width: 72px;
+    min-height: 72px;
+    padding: 8px;
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(242, 247, 252, 0.98) 100%);
+    border: 1px solid rgba(167, 188, 211, 0.52);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 10px 20px rgba(44, 62, 80, 0.08);
+}
+
+.header-logo-badge-artline {
+    min-width: 112px;
+    padding-inline: 10px;
 }
 
 .header-logo {
-    height: clamp(40px, 10vw, 56px);
+    display: block;
+    height: clamp(42px, 10vw, 58px);
     width: auto;
-    max-width: 52vw;
+    max-width: 100%;
     vertical-align: middle;
     object-fit: contain;
+    filter: drop-shadow(0 4px 10px rgba(15, 23, 42, 0.08));
 }
 
 .header-logo-artline {
-    height: clamp(68px, 18vw, 92px);
+    height: clamp(36px, 8vw, 48px);
 }
 
 .home-container .logo-row {
@@ -509,6 +536,14 @@ h1 {
     border-radius: 5px;
     font-size: 1rem;
     transition: border-color 0.3s ease;
+}
+
+.form-group input[type="range"].power-slider {
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background-color: transparent;
+    font-size: initial;
 }
 
 .form-group input:focus,
@@ -1105,6 +1140,19 @@ h1 {
     .home-container .logo-row {
         gap: 8px;
         margin-bottom: 4px;
+        padding: 8px 10px;
+    }
+
+    .home-container .header-logo-badge {
+        min-width: 58px;
+        min-height: 58px;
+        padding: 6px;
+        border-radius: 14px;
+    }
+
+    .home-container .header-logo-badge-artline {
+        min-width: 90px;
+        padding-inline: 8px;
     }
 
     .home-container .header-logo {
@@ -1113,7 +1161,7 @@ h1 {
     }
 
     .home-container .header-logo-artline {
-        height: clamp(40px, 12vw, 52px);
+        height: clamp(30px, 9vw, 40px);
     }
 
     .home-container #title {
@@ -1255,7 +1303,7 @@ h1 {
     }
 
     .header-logo-artline {
-        height: clamp(64px, 21vw, 86px);
+        height: clamp(38px, 13vw, 52px);
     }
 
 }
@@ -1297,6 +1345,24 @@ html[data-theme="dark"] .copy-bot-row {
 
 html[data-theme="dark"] .header-stat-pill {
     background: linear-gradient(180deg, rgba(20, 32, 46, 0.98) 0%, rgba(13, 22, 34, 0.98) 100%);
+}
+
+html[data-theme="dark"] .logo-row {
+    background:
+        radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 36%),
+        linear-gradient(180deg, rgba(22, 34, 49, 0.98) 0%, rgba(13, 22, 34, 0.98) 100%);
+    border-color: rgba(100, 122, 148, 0.3);
+    box-shadow: 0 16px 30px rgba(2, 8, 23, 0.28);
+}
+
+html[data-theme="dark"] .header-logo-badge {
+    background: linear-gradient(180deg, #182738 0%, #111b28 100%);
+    border-color: rgba(100, 122, 148, 0.28);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 22px rgba(2, 8, 23, 0.24);
+}
+
+html[data-theme="dark"] .header-logo {
+    filter: drop-shadow(0 6px 12px rgba(2, 8, 23, 0.28));
 }
 
 html[data-theme="dark"] .power-lever,
@@ -1376,6 +1442,26 @@ html[data-theme="dark"] .modal-btn-secondary:hover {
     background: linear-gradient(180deg, #243549 0%, #192534 100%);
 }
 
+html[data-theme="dark"] .menu a.main-status-active {
+    border-color: rgba(74, 222, 128, 0.72);
+    box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.22), 0 0 18px rgba(34, 197, 94, 0.26);
+}
+
+html[data-theme="dark"] .menu a.main-status-active:hover {
+    border-color: rgba(110, 231, 183, 0.82);
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.28), 0 0 22px rgba(74, 222, 128, 0.32);
+}
+
+html[data-theme="dark"] .menu a.main-status-inactive {
+    border-color: rgba(248, 113, 113, 0.72);
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2), 0 0 18px rgba(239, 68, 68, 0.24);
+}
+
+html[data-theme="dark"] .menu a.main-status-inactive:hover {
+    border-color: rgba(252, 165, 165, 0.8);
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.26), 0 0 22px rgba(248, 113, 113, 0.3);
+}
+
 html[data-theme="dark"] .lang-btn.active,
 html[data-theme="dark"] .submit-btn,
 html[data-theme="dark"] .modal-btn-primary,
@@ -1403,10 +1489,22 @@ html[data-theme="dark"] .form-group textarea {
     color: #e5edf7;
 }
 
+html[data-theme="dark"] .form-group input[type="range"].power-slider {
+    background-color: transparent;
+    border-color: transparent;
+}
+
 html[data-theme="dark"] .form-group input:focus,
 html[data-theme="dark"] .form-group select:focus,
 html[data-theme="dark"] .form-group textarea:focus {
     border-color: #60a5fa;
+}
+
+html[data-theme="dark"] .form-message {
+    background: linear-gradient(180deg, #15202e 0%, #101925 100%);
+    border-color: rgba(100, 122, 148, 0.28);
+    color: #dbe6f4;
+    box-shadow: 0 12px 24px rgba(2, 8, 23, 0.28);
 }
 
 html[data-theme="dark"] .schedule-day-item span {
@@ -1439,6 +1537,33 @@ html[data-theme="dark"] .footer-update-state.up-to-date {
     background: rgba(22, 101, 52, 0.28);
 }
 
+html[data-theme="dark"] .autostart-link-pill {
+    background: linear-gradient(180deg, #162231 0%, #101925 100%);
+    border-color: rgba(100, 122, 148, 0.22);
+    color: #c7d6e8;
+}
+
+html[data-theme="dark"] .autostart-link-pill.is-active {
+    background: linear-gradient(180deg, rgba(20, 83, 45, 0.38) 0%, rgba(18, 63, 38, 0.44) 100%);
+    border-color: rgba(74, 222, 128, 0.28);
+}
+
+html[data-theme="dark"] .schedule-interval-live {
+    background: linear-gradient(180deg, rgba(20, 83, 45, 0.4) 0%, rgba(18, 63, 38, 0.46) 100%);
+    box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.14);
+}
+
+html[data-theme="dark"] .schedule-interval-card.is-active-now {
+    background: linear-gradient(180deg, rgba(18, 63, 38, 0.38) 0%, rgba(13, 22, 34, 0.98) 100%);
+    border-color: rgba(74, 222, 128, 0.26);
+    box-shadow: 0 14px 30px rgba(2, 8, 23, 0.32), 0 0 0 1px rgba(34, 197, 94, 0.08);
+}
+
+html[data-theme="dark"] .form-message.status.active {
+    background: linear-gradient(180deg, rgba(20, 83, 45, 0.4) 0%, rgba(18, 63, 38, 0.46) 100%);
+    border-color: rgba(74, 222, 128, 0.32);
+}
+
 html[data-theme="dark"] .status.inactive,
 html[data-theme="dark"] .footer-update-state.update-needed,
 html[data-theme="dark"] .form-message.status.inactive {
@@ -1447,6 +1572,11 @@ html[data-theme="dark"] .form-message.status.inactive {
 
 html[data-theme="dark"] .footer-update-state.update-needed {
     background: rgba(153, 27, 27, 0.3);
+}
+
+html[data-theme="dark"] .form-message.status.inactive {
+    background: linear-gradient(180deg, rgba(127, 29, 29, 0.34) 0%, rgba(69, 10, 10, 0.42) 100%);
+    border-color: rgba(248, 113, 113, 0.28);
 }
 
 html[data-theme="dark"] .footer-update-action {

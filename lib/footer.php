@@ -39,7 +39,10 @@ function appGoBack(link) {
     try {
         if (document.referrer) {
             const referrer = new URL(document.referrer, window.location.href);
-            if (referrer.origin === window.location.origin && window.history.length > 1) {
+            const current = new URL(window.location.href);
+            const sameOrigin = referrer.origin === window.location.origin;
+            const sameDocument = (referrer.pathname + referrer.search) === (current.pathname + current.search);
+            if (sameOrigin && !sameDocument && window.history.length > 1) {
                 window.history.back();
                 return false;
             }
