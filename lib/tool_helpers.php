@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/root_helper_client.php';
 
-const DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY = 4000;
+const DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY = 1024;
+const DISTRESS_MANUAL_DEFAULT_CONCURRENCY = 4096;
+const DISTRESS_MAX_CONCURRENCY = 40960;
 
 function getServiceLogs(string $serviceName): string
 {
@@ -287,13 +289,22 @@ function normalizeAndValidateDistressPostParams(array $params): array
 
     $concurrencyRaw = (string)($params['concurrency'] ?? '');
     if ($concurrencyRaw === '') {
-        $normalized['concurrency'] = (string)DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY;
+        if ($concurrencyModeRaw === 'auto') {
+            $autotuneSettings = getDistressAutotuneSettings();
+            $normalized['concurrency'] = (string)(
+                (($autotuneSettings['ok'] ?? false) === true && ($autotuneSettings['enabled'] ?? false) === true)
+                    ? (int)($autotuneSettings['currentConcurrency'] ?? DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY)
+                    : DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY
+            );
+        } else {
+            $normalized['concurrency'] = (string)DISTRESS_MANUAL_DEFAULT_CONCURRENCY;
+        }
     } else {
         if ($concurrencyRaw !== trim($concurrencyRaw) || preg_match('/^\d+$/', $concurrencyRaw) !== 1) {
             return ['ok' => false, 'error' => 'invalid_concurrency'];
         }
         $concurrency = (int)$concurrencyRaw;
-        if ($concurrency < 500) {
+        if ($concurrency < 64 || $concurrency > DISTRESS_MAX_CONCURRENCY) {
             return ['ok' => false, 'error' => 'invalid_concurrency'];
         }
         $normalized['concurrency'] = (string)$concurrency;
@@ -334,8 +345,8 @@ function getDistressAutotuneSettings(): array
         return [
             'ok' => false,
             'enabled' => true,
-            'currentConcurrency' => DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY,
-            'defaultConcurrency' => DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY,
+            'currentConcurrency' => DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
+            'defaultConcurrency' => DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
         ];
     }
 
@@ -343,14 +354,15 @@ function getDistressAutotuneSettings(): array
         'ok' => true,
         'enabled' => ($response['enabled'] ?? false) === true,
         'serviceActive' => ($response['serviceActive'] ?? false) === true,
-        'currentConcurrency' => (int)($response['currentConcurrency'] ?? DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY),
-        'defaultConcurrency' => (int)($response['defaultConcurrency'] ?? DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY),
-        'step' => (int)($response['step'] ?? 500),
-        'cpuHigh' => (float)($response['cpuHigh'] ?? 95),
-        'cpuLow' => (float)($response['cpuLow'] ?? 70),
-        'cooldownSeconds' => (int)($response['cooldownSeconds'] ?? 60),
+        'currentConcurrency' => (int)($response['currentConcurrency'] ?? DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY),
+        'defaultConcurrency' => (int)($response['defaultConcurrency'] ?? DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY),
+        'cooldownSeconds' => (int)($response['cooldownSeconds'] ?? 300),
         'cooldownRemaining' => (int)($response['cooldownRemaining'] ?? 0),
         'statusKey' => (string)($response['statusKey'] ?? 'distress_autotune_status_active'),
+        'targetLoad' => (float)($response['targetLoad'] ?? 4.2),
+        'lastLoadAverage' => isset($response['lastLoadAverage']) && is_numeric($response['lastLoadAverage'])
+            ? (float)$response['lastLoadAverage']
+            : null,
     ];
 }
 

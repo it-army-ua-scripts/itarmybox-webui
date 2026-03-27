@@ -21,11 +21,13 @@ const ROOT_HELPER_INSTALL_SCRIPT = '/var/www/html/itarmybox-webui/systemd/instal
 const VNSTAT_INTERFACE = 'eth0';
 const DISTRESS_AUTOTUNE_TIMER_NAME = 'itarmybox-distress-autotune.timer';
 const DISTRESS_AUTOTUNE_STATE_FILE = '/opt/itarmy/distress-autotune.json';
-const DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY = 4000;
-const DISTRESS_AUTOTUNE_STEP = 500;
-const DISTRESS_AUTOTUNE_MIN_CONCURRENCY = 500;
-const DISTRESS_AUTOTUNE_HIGH_CPU = 95.0;
-const DISTRESS_AUTOTUNE_LOW_CPU = 70.0;
+const DISTRESS_AUTOTUNE_LOCK_FILE = '/tmp/itarmybox-distress-autotune.lock';
+const DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY = 1024;
+const DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY = 4096;
+const DISTRESS_AUTOTUNE_MIN_CONCURRENCY = 64;
+const DISTRESS_AUTOTUNE_MAX_CONCURRENCY = 40960;
+const DISTRESS_AUTOTUNE_TARGET_LOAD = 4.2;
+const DISTRESS_AUTOTUNE_DEAD_ZONE_LOWER = 3.8;
 const DISTRESS_AUTOTUNE_COOLDOWN_SECONDS = 300;
 
 function respond(array $data): void
@@ -109,11 +111,17 @@ function isSystemdUnitKnown(string $unitName): bool
 
 function ensureDistressAutotuneTimerInstalled(): bool
 {
-    if (isSystemdUnitKnown(DISTRESS_AUTOTUNE_TIMER_NAME)) {
-        return true;
+    if (!repairRootHelperAccess()) {
+        return isSystemdUnitKnown(DISTRESS_AUTOTUNE_TIMER_NAME);
     }
 
-    return repairRootHelperAccess() && isSystemdUnitKnown(DISTRESS_AUTOTUNE_TIMER_NAME);
+    $systemctl = findSystemctl();
+    if ($systemctl !== null) {
+        runCommand(escapeshellarg($systemctl) . ' daemon-reload', $reloadCode);
+        runCommand(escapeshellarg($systemctl) . ' enable --now ' . escapeshellarg(DISTRESS_AUTOTUNE_TIMER_NAME), $enableCode);
+    }
+
+    return isSystemdUnitKnown(DISTRESS_AUTOTUNE_TIMER_NAME);
 }
 
 function findAptGet(): ?string
@@ -396,7 +404,7 @@ function normalizeDistressConcurrency($value): ?int
         return null;
     }
 
-    return $concurrency;
+    return min(DISTRESS_AUTOTUNE_MAX_CONCURRENCY, $concurrency);
 }
 
 function getExecStartOptionValue(string $execStartLine, string $option): ?string
@@ -442,12 +450,12 @@ function getDistressCurrentConcurrency(): int
 {
     $execStart = readServiceExecStart('distress');
     if (!is_string($execStart) || $execStart === '') {
-        return DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY;
+        return DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY;
     }
 
     $value = getExecStartOptionValue($execStart, 'concurrency');
     $concurrency = normalizeDistressConcurrency($value);
-    return $concurrency ?? DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY;
+    return $concurrency ?? DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY;
 }
 
 function setDistressCurrentConcurrency(int $concurrency): bool
@@ -467,11 +475,11 @@ function setDistressCurrentConcurrency(int $concurrency): bool
 
 function readDistressAutotuneState(): array
 {
-    $defaults = [
-        'enabled' => true,
-        'currentConcurrency' => DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY,
+        $defaults = [
+            'enabled' => true,
+        'currentConcurrency' => DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
         'lastAdjustedAt' => 0,
-        'lastCpuPercent' => null,
+        'lastLoadAverage' => null,
     ];
 
     $raw = @file_get_contents(DISTRESS_AUTOTUNE_STATE_FILE);
@@ -487,36 +495,72 @@ function readDistressAutotuneState(): array
     $currentConcurrency = normalizeDistressConcurrency($data['currentConcurrency'] ?? null)
         ?? getDistressCurrentConcurrency();
     $lastAdjustedAt = isset($data['lastAdjustedAt']) && is_int($data['lastAdjustedAt']) ? $data['lastAdjustedAt'] : 0;
-    $lastCpuPercent = isset($data['lastCpuPercent']) && is_numeric($data['lastCpuPercent'])
-        ? (float)$data['lastCpuPercent']
+    $lastLoadAverage = isset($data['lastLoadAverage']) && is_numeric($data['lastLoadAverage'])
+        ? (float)$data['lastLoadAverage']
         : null;
 
     return [
         'enabled' => ($data['enabled'] ?? true) === true,
         'currentConcurrency' => $currentConcurrency,
         'lastAdjustedAt' => $lastAdjustedAt,
-        'lastCpuPercent' => $lastCpuPercent,
+        'lastLoadAverage' => $lastLoadAverage,
     ];
 }
 
 function writeDistressAutotuneState(array $state): bool
 {
-    $payload = json_encode([
-        'enabled' => ($state['enabled'] ?? false) === true,
-        'currentConcurrency' => (int)($state['currentConcurrency'] ?? DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY),
+        $payload = json_encode([
+            'enabled' => ($state['enabled'] ?? false) === true,
+        'currentConcurrency' => (int)($state['currentConcurrency'] ?? DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY),
         'lastAdjustedAt' => (int)($state['lastAdjustedAt'] ?? 0),
-        'lastCpuPercent' => isset($state['lastCpuPercent']) && is_numeric($state['lastCpuPercent'])
-            ? (float)$state['lastCpuPercent']
+        'lastLoadAverage' => isset($state['lastLoadAverage']) && is_numeric($state['lastLoadAverage'])
+            ? (float)$state['lastLoadAverage']
             : null,
     ], JSON_UNESCAPED_SLASHES);
 
     return is_string($payload) && @file_put_contents(DISTRESS_AUTOTUNE_STATE_FILE, $payload) !== false;
 }
 
+function acquireDistressAutotuneLock()
+{
+    $handle = @fopen(DISTRESS_AUTOTUNE_LOCK_FILE, 'c+');
+    if ($handle === false) {
+        return false;
+    }
+    if (!flock($handle, LOCK_EX)) {
+        fclose($handle);
+        return false;
+    }
+    return $handle;
+}
+
+function releaseDistressAutotuneLock($handle): void
+{
+    if (is_resource($handle)) {
+        flock($handle, LOCK_UN);
+        fclose($handle);
+    }
+}
+
+function resetDistressAutotuneBaseline(): bool
+{
+    $state = readDistressAutotuneState();
+    if (($state['enabled'] ?? false) !== true) {
+        return true;
+    }
+
+    if (!setDistressCurrentConcurrency(DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY)) {
+        return false;
+    }
+
+    $state['currentConcurrency'] = DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY;
+    $state['lastAdjustedAt'] = 0;
+    $state['lastLoadAverage'] = null;
+    return writeDistressAutotuneState($state);
+}
+
 function getDistressAutotuneStatus(): array
 {
-    ensureDistressAutotuneTimerInstalled();
-
     $state = readDistressAutotuneState();
     $currentConcurrency = getDistressCurrentConcurrency();
     if ($currentConcurrency !== (int)$state['currentConcurrency']) {
@@ -544,15 +588,13 @@ function getDistressAutotuneStatus(): array
         'enabled' => $enabled,
         'serviceActive' => $serviceActive,
         'currentConcurrency' => $currentConcurrency,
-        'defaultConcurrency' => DISTRESS_AUTOTUNE_DEFAULT_CONCURRENCY,
-        'step' => DISTRESS_AUTOTUNE_STEP,
-        'cpuHigh' => DISTRESS_AUTOTUNE_HIGH_CPU,
-        'cpuLow' => DISTRESS_AUTOTUNE_LOW_CPU,
+        'defaultConcurrency' => DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
+        'targetLoad' => DISTRESS_AUTOTUNE_TARGET_LOAD,
         'cooldownSeconds' => DISTRESS_AUTOTUNE_COOLDOWN_SECONDS,
         'cooldownRemaining' => $cooldownRemaining,
         'statusKey' => $statusKey,
         'lastAdjustedAt' => (int)($state['lastAdjustedAt'] ?? 0),
-        'lastCpuPercent' => $state['lastCpuPercent'] ?? null,
+        'lastLoadAverage' => $state['lastLoadAverage'] ?? null,
     ];
 }
 
@@ -560,13 +602,20 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
 {
     ensureDistressAutotuneTimerInstalled();
 
+    $lockHandle = acquireDistressAutotuneLock();
+    if ($lockHandle === false) {
+        return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
+    }
+
     $enabled = ($enabledValue === true || $enabledValue === '1' || $enabledValue === 1 || $enabledValue === 'true');
     $concurrency = normalizeDistressConcurrency($concurrencyValue);
     if ($concurrency === null) {
+        releaseDistressAutotuneLock($lockHandle);
         return ['ok' => false, 'error' => 'invalid_concurrency'];
     }
 
     if (!setDistressCurrentConcurrency($concurrency)) {
+        releaseDistressAutotuneLock($lockHandle);
         return ['ok' => false, 'error' => 'distress_concurrency_write_failed'];
     }
 
@@ -574,71 +623,115 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
     $state['enabled'] = $enabled;
     $state['currentConcurrency'] = $concurrency;
     $state['lastAdjustedAt'] = 0;
-    $state['lastCpuPercent'] = null;
+    $state['lastLoadAverage'] = null;
     if (!writeDistressAutotuneState($state)) {
+        releaseDistressAutotuneLock($lockHandle);
         return ['ok' => false, 'error' => 'distress_autotune_state_write_failed'];
     }
 
+    releaseDistressAutotuneLock($lockHandle);
     return getDistressAutotuneStatus();
 }
 
-function distressAutotuneTick($cpuPercent): array
+function roundDistressConcurrency(int $value): int
 {
-    if (!is_numeric($cpuPercent)) {
-        return ['ok' => false, 'error' => 'invalid_cpu_percent'];
+    $value = max(DISTRESS_AUTOTUNE_MIN_CONCURRENCY, min(DISTRESS_AUTOTUNE_MAX_CONCURRENCY, $value));
+    $step = 64;
+    $rounded = (int)(round($value / $step) * $step);
+    return max(DISTRESS_AUTOTUNE_MIN_CONCURRENCY, min(DISTRESS_AUTOTUNE_MAX_CONCURRENCY, $rounded));
+}
+
+function adjustDistressConcurrencyByPercent(int $currentConcurrency, int $percent): int
+{
+    $next = (int)round($currentConcurrency * (100 + $percent) / 100);
+    return roundDistressConcurrency($next);
+}
+
+function calculateDistressTargetConcurrency(int $currentConcurrency, float $loadAverage): int
+{
+    if ($loadAverage > 4.6) {
+        return adjustDistressConcurrencyByPercent($currentConcurrency, -20);
+    }
+    if ($loadAverage > DISTRESS_AUTOTUNE_TARGET_LOAD) {
+        return adjustDistressConcurrencyByPercent($currentConcurrency, -10);
+    }
+    if ($loadAverage >= DISTRESS_AUTOTUNE_DEAD_ZONE_LOWER) {
+        return $currentConcurrency;
+    }
+    if ($loadAverage >= 3.0) {
+        return adjustDistressConcurrencyByPercent($currentConcurrency, 10);
+    }
+    if ($loadAverage >= 1.0) {
+        return adjustDistressConcurrencyByPercent($currentConcurrency, 15);
+    }
+    return adjustDistressConcurrencyByPercent($currentConcurrency, 20);
+}
+
+function distressAutotuneTick($loadAverage): array
+{
+    if (!is_numeric($loadAverage)) {
+        return ['ok' => false, 'error' => 'invalid_load_average'];
     }
 
-    $cpu = max(0.0, min(100.0, (float)$cpuPercent));
+    $lockHandle = acquireDistressAutotuneLock();
+    if ($lockHandle === false) {
+        return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
+    }
+
+    $load = max(0.0, (float)$loadAverage);
     $state = readDistressAutotuneState();
     if (($state['enabled'] ?? false) !== true) {
+        releaseDistressAutotuneLock($lockHandle);
         return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'manual_mode'];
     }
 
     if (!serviceIsActive('distress')) {
+        releaseDistressAutotuneLock($lockHandle);
         return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'distress_inactive'];
     }
 
     $currentConcurrency = getDistressCurrentConcurrency();
     $state['currentConcurrency'] = $currentConcurrency;
-    $state['lastCpuPercent'] = $cpu;
+    $state['lastLoadAverage'] = $load;
     $now = time();
     if (($now - (int)($state['lastAdjustedAt'] ?? 0)) < DISTRESS_AUTOTUNE_COOLDOWN_SECONDS) {
         writeDistressAutotuneState($state);
+        releaseDistressAutotuneLock($lockHandle);
         return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'cooldown'];
     }
 
-    $targetConcurrency = $currentConcurrency;
-    if ($cpu > DISTRESS_AUTOTUNE_HIGH_CPU) {
-        $targetConcurrency = max(DISTRESS_AUTOTUNE_MIN_CONCURRENCY, $currentConcurrency - DISTRESS_AUTOTUNE_STEP);
-    } elseif ($cpu < DISTRESS_AUTOTUNE_LOW_CPU) {
-        $targetConcurrency = $currentConcurrency + DISTRESS_AUTOTUNE_STEP;
-    }
+    $targetConcurrency = calculateDistressTargetConcurrency($currentConcurrency, $load);
 
     if ($targetConcurrency === $currentConcurrency) {
         writeDistressAutotuneState($state);
+        releaseDistressAutotuneLock($lockHandle);
         return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'within_range'];
     }
 
     if (!setDistressCurrentConcurrency($targetConcurrency)) {
+        releaseDistressAutotuneLock($lockHandle);
         return ['ok' => false, 'error' => 'distress_concurrency_write_failed'];
     }
 
     $restart = serviceRestart('distress');
     if (($restart['ok'] ?? false) !== true) {
+        releaseDistressAutotuneLock($lockHandle);
         return ['ok' => false, 'error' => 'service_restart_failed'];
     }
 
     $state['currentConcurrency'] = $targetConcurrency;
     $state['lastAdjustedAt'] = $now;
-    $state['lastCpuPercent'] = $cpu;
+    $state['lastLoadAverage'] = $load;
     if (!writeDistressAutotuneState($state)) {
+        releaseDistressAutotuneLock($lockHandle);
         return ['ok' => false, 'error' => 'distress_autotune_state_write_failed'];
     }
 
+    releaseDistressAutotuneLock($lockHandle);
     return getDistressAutotuneStatus() + [
         'changed' => true,
         'previousConcurrency' => $currentConcurrency,
-        'cpuPercent' => $cpu,
+        'loadAverage' => $load,
     ];
 }
 
@@ -1401,15 +1494,32 @@ function switchExclusiveModuleState(array $modules, ?string $selected): array
 
 function applyExclusiveModuleState(array $modules, ?string $selected, ?int $trafficPercent = null): array
 {
+    $lockHandle = acquireDistressAutotuneLock();
+    if ($lockHandle === false) {
+        return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
+    }
+
     $previousSelected = getActiveModule($modules);
     $previousTrafficState = ($selected !== null && $trafficPercent !== null)
         ? getTrafficLimitRollbackSnapshot()
         : null;
 
+    $resetDistressBaseline = $previousSelected === 'distress' && $selected !== 'distress';
     $switchResult = switchExclusiveModuleState($modules, $selected);
     if (($switchResult['ok'] ?? false) !== true) {
         $rollbackResult = switchExclusiveModuleState($modules, $previousSelected);
+        releaseDistressAutotuneLock($lockHandle);
         return $switchResult + [
+            'serviceRollbackOk' => (($rollbackResult['ok'] ?? false) === true),
+        ];
+    }
+
+    if ($resetDistressBaseline && !resetDistressAutotuneBaseline()) {
+        $rollbackResult = switchExclusiveModuleState($modules, $previousSelected);
+        releaseDistressAutotuneLock($lockHandle);
+        return [
+            'ok' => false,
+            'error' => 'distress_autotune_state_write_failed',
             'serviceRollbackOk' => (($rollbackResult['ok'] ?? false) === true),
         ];
     }
@@ -1423,6 +1533,7 @@ function applyExclusiveModuleState(array $modules, ?string $selected, ?int $traf
                 $trafficRollbackResult = setTrafficLimit((int)$previousTrafficState['percent']);
                 $trafficRollbackOk = (($trafficRollbackResult['ok'] ?? false) === true);
             }
+            releaseDistressAutotuneLock($lockHandle);
             return $limitResult + [
                 'serviceRollbackOk' => (($serviceRollbackResult['ok'] ?? false) === true),
                 'trafficRollbackOk' => $trafficRollbackOk,
@@ -1430,6 +1541,7 @@ function applyExclusiveModuleState(array $modules, ?string $selected, ?int $traf
         }
     }
 
+    releaseDistressAutotuneLock($lockHandle);
     return ['ok' => true];
 }
 
@@ -1621,16 +1733,28 @@ function serviceActivateExclusive(array $modules, string $selected): array
 
 function serviceStop(array $modules, string $module): array
 {
+    $lockHandle = acquireDistressAutotuneLock();
+    if ($lockHandle === false) {
+        return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
+    }
+
     runCommand('systemctl daemon-reload', $reloadCode);
     if ($reloadCode !== 0) {
+        releaseDistressAutotuneLock($lockHandle);
         return ['ok' => false, 'error' => 'daemon_reload_failed'];
     }
     $service = escapeshellarg($module . '.service');
     runCommand("systemctl stop $service", $stopCode);
     if ($stopCode !== 0) {
+        releaseDistressAutotuneLock($lockHandle);
         return ['ok' => false, 'error' => 'service_stop_failed'];
     }
+    if ($module === 'distress' && !resetDistressAutotuneBaseline()) {
+        releaseDistressAutotuneLock($lockHandle);
+        return ['ok' => false, 'error' => 'distress_autotune_state_write_failed'];
+    }
     setScheduleManualOverride($modules, $module, 'stop');
+    releaseDistressAutotuneLock($lockHandle);
     return ['ok' => true];
 }
 
@@ -2325,7 +2449,7 @@ if ($action === 'distress_autotune_set') {
 }
 
 if ($action === 'distress_autotune_tick') {
-    respond(distressAutotuneTick($request['cpuPercent'] ?? null));
+    respond(distressAutotuneTick($request['loadAverage'] ?? null));
     exit(0);
 }
 

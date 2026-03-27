@@ -1,47 +1,21 @@
 <?php
 require_once 'lib/root_helper_client.php';
 
-function read_cpu_sample(): ?array
+function read_load_average_1m(): ?float
 {
-    $raw = @file('/proc/stat', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-    if (!is_array($raw) || !isset($raw[0])) {
+    $raw = @file_get_contents('/proc/loadavg');
+    if (!is_string($raw) || trim($raw) === '') {
         return null;
     }
-    if (preg_match('/^cpu\s+(.+)$/', $raw[0], $matches) !== 1) {
+    if (preg_match('/^\s*([0-9]+(?:\.[0-9]+)?)/', $raw, $matches) !== 1) {
         return null;
     }
-    $parts = preg_split('/\s+/', trim($matches[1]));
-    if (!is_array($parts) || count($parts) < 4) {
-        return null;
-    }
-    $values = array_map('intval', $parts);
-    $idle = ($values[3] ?? 0) + ($values[4] ?? 0);
-    $total = array_sum($values);
-    return ['idle' => $idle, 'total' => $total];
+    return (float)$matches[1];
 }
 
-function read_cpu_usage_percent(): ?float
-{
-    $first = read_cpu_sample();
-    if ($first === null) {
-        return null;
-    }
-    usleep(120000);
-    $second = read_cpu_sample();
-    if ($second === null) {
-        return null;
-    }
-    $totalDelta = $second['total'] - $first['total'];
-    $idleDelta = $second['idle'] - $first['idle'];
-    if ($totalDelta <= 0) {
-        return null;
-    }
-    return max(0, min(100, 100 * ($totalDelta - $idleDelta) / $totalDelta));
-}
-
-$cpuPercent = read_cpu_usage_percent();
-if ($cpuPercent === null) {
-    fwrite(STDERR, "cpu unavailable\n");
+$loadAverage = read_load_average_1m();
+if ($loadAverage === null) {
+    fwrite(STDERR, "load average unavailable\n");
     exit(1);
 }
 
@@ -54,7 +28,7 @@ if (!is_array($modules) || $modules === []) {
 $response = root_helper_request([
     'action' => 'distress_autotune_tick',
     'modules' => $modules,
-    'cpuPercent' => $cpuPercent,
+    'loadAverage' => $loadAverage,
 ]);
 
 exit((($response['ok'] ?? false) === true) ? 0 : 1);
