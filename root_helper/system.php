@@ -61,7 +61,10 @@ function runSystemUpdate(?string $branch = null): array
         $envPrefix = 'ITARMYBOX_UPDATE_BRANCH=' . escapeshellarg($normalizedBranch) . ' ';
     }
 
-    $output = runCommandVerbose($envPrefix . '/usr/bin/env bash ' . escapeshellarg(UPDATE_SCRIPT_PATH), $code);
+    $output = runCommandVerbose(
+        $envPrefix . 'ITARMYBOX_SKIP_ROOT_HELPER_REFRESH=1 /usr/bin/env bash ' . escapeshellarg(UPDATE_SCRIPT_PATH),
+        $code
+    );
     return [
         'ok' => $code === 0,
         'error' => $code === 0 ? null : 'update_failed',

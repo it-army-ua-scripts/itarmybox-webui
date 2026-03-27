@@ -216,11 +216,14 @@ Check these first:
 - If autotune successfully writes new distress config concurrency but `serviceRestart('distress')` fails, the code now attempts rollback of config/state and returns richer diagnostics about the failed restart and rollback outcome.
 - `lib/root_helper_client.php` now uses longer action-specific read timeouts for long-running root-helper actions.
 - update branch state should be persisted only after a successful update path, not before running the update.
+- Update runs through root-helper should not refresh `itarmybox-root-helper.socket` in the middle of the request; otherwise the active Unix socket response can be interrupted even when the update itself succeeds.
+- The WebUI update flow should update only the WebUI repository; do not piggyback updates for `/opt/itarmy` from this script.
+- WebUI update needs write access to `/var/www/html/itarmybox-webui` in `itarmybox-root-helper@.service`; with `ProtectSystem=strict`, missing this path in `ReadWritePaths` causes `read-only file system` during `git reset/clean`.
 - theme support is shared: PHP pages mount the toggle through `render_app_footer()`, and the home page shows it inside the fixed header bar.
 - home page language switching should call `window.ItArmyTheme.refresh()` so the toggle labels stay in sync after `applyLang(...)`.
 - The home page power slider now guards against race conditions: scheduled applies block background refresh repainting, duplicate release events are deduplicated, schedule lock physically disables the slider, and stale POST responses should not overwrite newer slider state.
 - The home page power slider should stay encapsulated in `js/home_power.js`; `js/home_init.js` should only wire high-level startup and call `initPowerControls()`.
-- `render_back_link()` should avoid `history.back()` when the referrer is effectively the same document after a save/apply redirect; otherwise users can get a confusing extra back step.
+- `render_back_link()` should be a plain fallback link to the logical parent page. Using `history.back()` created navigation loops after `POST -> redirect -> flash`, especially between `tool.php` and `tools_list.php`.
 
 ## Refactor roadmap snapshot
 
