@@ -263,6 +263,7 @@ function resetDistressAutotuneBaseline(): bool
         return true;
     }
 
+    $previousConfigConcurrency = getDistressConfigConcurrency();
     if (!setDistressConfigConcurrency(DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY)) {
         return false;
     }
@@ -271,7 +272,12 @@ function resetDistressAutotuneBaseline(): bool
     $state['lastAdjustedAt'] = 0;
     $state['lastLoadAverage'] = null;
     $state['lastRamFreePercent'] = null;
-    return writeDistressAutotuneState($state);
+    if (writeDistressAutotuneState($state)) {
+        return true;
+    }
+
+    setDistressConfigConcurrency($previousConfigConcurrency);
+    return false;
 }
 
 function getDistressAutotuneStatus(): array
@@ -345,20 +351,28 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
         return ['ok' => false, 'error' => 'invalid_concurrency'];
     }
 
+    $previousConfigConcurrency = getDistressConfigConcurrency();
+    $previousState = readDistressAutotuneState();
     if (!setDistressConfigConcurrency($concurrency)) {
         releaseDistressAutotuneLock($lockHandle);
         return ['ok' => false, 'error' => 'distress_concurrency_write_failed'];
     }
 
-    $state = readDistressAutotuneState();
+    $state = $previousState;
     $state['enabled'] = $enabled;
     $state['desiredConcurrency'] = $concurrency;
     $state['lastAdjustedAt'] = 0;
     $state['lastLoadAverage'] = null;
     $state['lastRamFreePercent'] = null;
     if (!writeDistressAutotuneState($state)) {
+        $rollbackConfigOk = setDistressConfigConcurrency($previousConfigConcurrency);
         releaseDistressAutotuneLock($lockHandle);
-        return ['ok' => false, 'error' => 'distress_autotune_state_write_failed'];
+        return [
+            'ok' => false,
+            'error' => 'distress_autotune_state_write_failed',
+            'rollbackConfigOk' => $rollbackConfigOk,
+            'configConcurrencyAfterRollback' => getDistressConfigConcurrency(),
+        ];
     }
 
     releaseDistressAutotuneLock($lockHandle);

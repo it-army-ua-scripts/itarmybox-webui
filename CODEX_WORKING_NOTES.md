@@ -214,6 +214,7 @@ Check these first:
   - `configConcurrency` from `ExecStart`
   - `liveAppliedConcurrency` from the active process cmdline
 - If autotune successfully writes new distress config concurrency but `serviceRestart('distress')` fails, the code now attempts rollback of config/state and returns richer diagnostics about the failed restart and rollback outcome.
+- Distress autotune config/state writes should stay rollback-safe: `setDistressAutotuneMode()` and related reset/save flows should not leave `ExecStart` changed if autotune state persistence fails afterward.
 - `lib/root_helper_client.php` now uses longer action-specific read timeouts for long-running root-helper actions.
 - update branch state should be persisted only after a successful update path, not before running the update.
 - Update runs through root-helper should not refresh `itarmybox-root-helper.socket` in the middle of the request; otherwise the active Unix socket response can be interrupted even when the update itself succeeds.
