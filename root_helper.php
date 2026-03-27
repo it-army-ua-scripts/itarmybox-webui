@@ -28,6 +28,8 @@ const DISTRESS_AUTOTUNE_MIN_CONCURRENCY = 64;
 const DISTRESS_AUTOTUNE_MAX_CONCURRENCY = 40960;
 const DISTRESS_AUTOTUNE_TARGET_LOAD = 4.2;
 const DISTRESS_AUTOTUNE_DEAD_ZONE_LOWER = 3.8;
+const DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT = 10.0;
+const DISTRESS_AUTOTUNE_RAM_RECOVERY_PERCENT = 12.0;
 const DISTRESS_AUTOTUNE_COOLDOWN_SECONDS = 300;
 
 function respond(array $data): void
@@ -476,10 +478,11 @@ function setDistressCurrentConcurrency(int $concurrency): bool
 function readDistressAutotuneState(): array
 {
         $defaults = [
-            'enabled' => true,
+        'enabled' => true,
         'currentConcurrency' => DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
         'lastAdjustedAt' => 0,
         'lastLoadAverage' => null,
+        'lastRamFreePercent' => null,
     ];
 
     $raw = @file_get_contents(DISTRESS_AUTOTUNE_STATE_FILE);
@@ -498,12 +501,16 @@ function readDistressAutotuneState(): array
     $lastLoadAverage = isset($data['lastLoadAverage']) && is_numeric($data['lastLoadAverage'])
         ? (float)$data['lastLoadAverage']
         : null;
+    $lastRamFreePercent = isset($data['lastRamFreePercent']) && is_numeric($data['lastRamFreePercent'])
+        ? (float)$data['lastRamFreePercent']
+        : null;
 
     return [
         'enabled' => ($data['enabled'] ?? true) === true,
         'currentConcurrency' => $currentConcurrency,
         'lastAdjustedAt' => $lastAdjustedAt,
         'lastLoadAverage' => $lastLoadAverage,
+        'lastRamFreePercent' => $lastRamFreePercent,
     ];
 }
 
@@ -515,6 +522,9 @@ function writeDistressAutotuneState(array $state): bool
         'lastAdjustedAt' => (int)($state['lastAdjustedAt'] ?? 0),
         'lastLoadAverage' => isset($state['lastLoadAverage']) && is_numeric($state['lastLoadAverage'])
             ? (float)$state['lastLoadAverage']
+            : null,
+        'lastRamFreePercent' => isset($state['lastRamFreePercent']) && is_numeric($state['lastRamFreePercent'])
+            ? (float)$state['lastRamFreePercent']
             : null,
     ], JSON_UNESCAPED_SLASHES);
 
@@ -556,6 +566,7 @@ function resetDistressAutotuneBaseline(): bool
     $state['currentConcurrency'] = DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY;
     $state['lastAdjustedAt'] = 0;
     $state['lastLoadAverage'] = null;
+    $state['lastRamFreePercent'] = null;
     return writeDistressAutotuneState($state);
 }
 
@@ -590,11 +601,13 @@ function getDistressAutotuneStatus(): array
         'currentConcurrency' => $currentConcurrency,
         'defaultConcurrency' => DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
         'targetLoad' => DISTRESS_AUTOTUNE_TARGET_LOAD,
+        'minFreeRamPercent' => DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT,
         'cooldownSeconds' => DISTRESS_AUTOTUNE_COOLDOWN_SECONDS,
         'cooldownRemaining' => $cooldownRemaining,
         'statusKey' => $statusKey,
         'lastAdjustedAt' => (int)($state['lastAdjustedAt'] ?? 0),
         'lastLoadAverage' => $state['lastLoadAverage'] ?? null,
+        'lastRamFreePercent' => $state['lastRamFreePercent'] ?? null,
     ];
 }
 
@@ -624,6 +637,7 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
     $state['currentConcurrency'] = $concurrency;
     $state['lastAdjustedAt'] = 0;
     $state['lastLoadAverage'] = null;
+    $state['lastRamFreePercent'] = null;
     if (!writeDistressAutotuneState($state)) {
         releaseDistressAutotuneLock($lockHandle);
         return ['ok' => false, 'error' => 'distress_autotune_state_write_failed'];
@@ -647,8 +661,35 @@ function adjustDistressConcurrencyByPercent(int $currentConcurrency, int $percen
     return roundDistressConcurrency($next);
 }
 
-function calculateDistressTargetConcurrency(int $currentConcurrency, float $loadAverage): int
+function adjustDistressConcurrencyForRamFloor(int $currentConcurrency, float $ramFreePercent): int
 {
+    if ($ramFreePercent >= DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT) {
+        return $currentConcurrency;
+    }
+
+    if ($ramFreePercent <= 0.0) {
+        return DISTRESS_AUTOTUNE_MIN_CONCURRENCY;
+    }
+
+    // Approximate the new concurrency proportionally to the free RAM deficit.
+    $target = (int)floor($currentConcurrency * ($ramFreePercent / DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT));
+    $target = roundDistressConcurrency($target);
+
+    if ($target >= $currentConcurrency) {
+        $target = roundDistressConcurrency($currentConcurrency - 64);
+    }
+
+    return max(DISTRESS_AUTOTUNE_MIN_CONCURRENCY, min($target, $currentConcurrency));
+}
+
+function calculateDistressTargetConcurrency(int $currentConcurrency, float $loadAverage, float $ramFreePercent): int
+{
+    if ($ramFreePercent < DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT) {
+        return adjustDistressConcurrencyForRamFloor($currentConcurrency, $ramFreePercent);
+    }
+    if ($ramFreePercent < DISTRESS_AUTOTUNE_RAM_RECOVERY_PERCENT) {
+        return $currentConcurrency;
+    }
     if ($loadAverage > 4.6) {
         return adjustDistressConcurrencyByPercent($currentConcurrency, -20);
     }
@@ -667,10 +708,13 @@ function calculateDistressTargetConcurrency(int $currentConcurrency, float $load
     return adjustDistressConcurrencyByPercent($currentConcurrency, 20);
 }
 
-function distressAutotuneTick($loadAverage): array
+function distressAutotuneTick($loadAverage, $ramFreePercent): array
 {
     if (!is_numeric($loadAverage)) {
         return ['ok' => false, 'error' => 'invalid_load_average'];
+    }
+    if (!is_numeric($ramFreePercent)) {
+        return ['ok' => false, 'error' => 'invalid_ram_free_percent'];
     }
 
     $lockHandle = acquireDistressAutotuneLock();
@@ -679,6 +723,7 @@ function distressAutotuneTick($loadAverage): array
     }
 
     $load = max(0.0, (float)$loadAverage);
+    $freeRam = max(0.0, min(100.0, (float)$ramFreePercent));
     $state = readDistressAutotuneState();
     if (($state['enabled'] ?? false) !== true) {
         releaseDistressAutotuneLock($lockHandle);
@@ -693,6 +738,7 @@ function distressAutotuneTick($loadAverage): array
     $currentConcurrency = getDistressCurrentConcurrency();
     $state['currentConcurrency'] = $currentConcurrency;
     $state['lastLoadAverage'] = $load;
+    $state['lastRamFreePercent'] = $freeRam;
     $now = time();
     if (($now - (int)($state['lastAdjustedAt'] ?? 0)) < DISTRESS_AUTOTUNE_COOLDOWN_SECONDS) {
         writeDistressAutotuneState($state);
@@ -700,7 +746,7 @@ function distressAutotuneTick($loadAverage): array
         return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'cooldown'];
     }
 
-    $targetConcurrency = calculateDistressTargetConcurrency($currentConcurrency, $load);
+    $targetConcurrency = calculateDistressTargetConcurrency($currentConcurrency, $load, $freeRam);
 
     if ($targetConcurrency === $currentConcurrency) {
         writeDistressAutotuneState($state);
@@ -732,6 +778,7 @@ function distressAutotuneTick($loadAverage): array
         'changed' => true,
         'previousConcurrency' => $currentConcurrency,
         'loadAverage' => $load,
+        'ramFreePercent' => $freeRam,
     ];
 }
 
@@ -2449,7 +2496,7 @@ if ($action === 'distress_autotune_set') {
 }
 
 if ($action === 'distress_autotune_tick') {
-    respond(distressAutotuneTick($request['loadAverage'] ?? null));
+    respond(distressAutotuneTick($request['loadAverage'] ?? null, $request['ramFreePercent'] ?? null));
     exit(0);
 }
 

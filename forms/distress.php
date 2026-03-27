@@ -7,12 +7,18 @@
     $distressAutotuneStatusText = $distressAutotuneStatusKey === 'distress_autotune_status_cooldown'
         ? t($distressAutotuneStatusKey, ['seconds' => (string)($distressAutotune['cooldownRemaining'] ?? 0)])
         : t($distressAutotuneStatusKey);
-    $distressLastLoadText = isset($distressAutotune['lastLoadAverage']) && is_numeric($distressAutotune['lastLoadAverage'])
-        ? t('distress_autotune_last_load', [
-            'value' => number_format((float)$distressAutotune['lastLoadAverage'], 2, '.', ''),
-            'target' => number_format((float)($distressAutotune['targetLoad'] ?? 4.2), 1, '.', ''),
-        ])
-        : null;
+$distressLastLoadText = isset($distressAutotune['lastLoadAverage']) && is_numeric($distressAutotune['lastLoadAverage'])
+    ? t('distress_autotune_last_load', [
+        'value' => number_format((float)$distressAutotune['lastLoadAverage'], 2, '.', ''),
+        'target' => number_format((float)($distressAutotune['targetLoad'] ?? 4.2), 1, '.', ''),
+    ])
+    : null;
+$distressLastRamText = isset($distressAutotune['lastRamFreePercent']) && is_numeric($distressAutotune['lastRamFreePercent'])
+    ? t('distress_autotune_last_ram_free', [
+        'value' => number_format((float)$distressAutotune['lastRamFreePercent'], 1, '.', ''),
+        'target' => number_format((float)($distressAutotune['minFreeRamPercent'] ?? 10.0), 1, '.', ''),
+    ])
+    : null;
     $distressUseMyIp = (int)($currentAdjustableParams['use-my-ip'] ?? 0);
     $distressFloodControlsEnabled = $distressUseMyIp > 0;
     $distressDisableUdpFlood = (string)($currentAdjustableParams['disable-udp-flood'] ?? '0');
@@ -36,6 +42,9 @@
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_current_value', ['value' => $distressConcurrencyValue]), ENT_QUOTES, 'UTF-8') ?></div>
         <?php if ($distressLastLoadText !== null): ?>
             <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastLoadText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
+        <?php if ($distressLastRamText !== null): ?>
+            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastRamText, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
     </div>
     <div class="form-group">

@@ -360,8 +360,12 @@ function getDistressAutotuneSettings(): array
         'cooldownRemaining' => (int)($response['cooldownRemaining'] ?? 0),
         'statusKey' => (string)($response['statusKey'] ?? 'distress_autotune_status_active'),
         'targetLoad' => (float)($response['targetLoad'] ?? 4.2),
+        'minFreeRamPercent' => (float)($response['minFreeRamPercent'] ?? 10.0),
         'lastLoadAverage' => isset($response['lastLoadAverage']) && is_numeric($response['lastLoadAverage'])
             ? (float)$response['lastLoadAverage']
+            : null,
+        'lastRamFreePercent' => isset($response['lastRamFreePercent']) && is_numeric($response['lastRamFreePercent'])
+            ? (float)$response['lastRamFreePercent']
             : null,
     ];
 }
