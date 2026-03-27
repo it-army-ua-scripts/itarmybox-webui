@@ -8,6 +8,17 @@ GITHUB_REPO="https://github.com/it-army-ua-scripts/itarmybox-webui.git"
 BRANCH_STATE_FILE="/tmp/itarmybox-webui-update-branch.txt"
 GITHUB_BRANCH="main"
 ITARMY_DIR="/opt/itarmy"
+INSTALL_ROOT_HELPER_SCRIPT="$REPO_DIR/systemd/install-root-helper.sh"
+
+refresh_webui_systemd_units() {
+  if [ -x "$INSTALL_ROOT_HELPER_SCRIPT" ] || [ -f "$INSTALL_ROOT_HELPER_SCRIPT" ]; then
+    echo "Refreshing WebUI systemd units ..."
+    /usr/bin/env bash "$INSTALL_ROOT_HELPER_SCRIPT"
+    echo "DONE! WebUI systemd units refreshed."
+  else
+    echo "Skip WebUI systemd refresh: $INSTALL_ROOT_HELPER_SCRIPT not found."
+  fi
+}
 
 if [ -f "$BRANCH_STATE_FILE" ]; then
   saved_branch="$(tr -d ' \t\r\n' < "$BRANCH_STATE_FILE" 2>/dev/null || true)"
@@ -37,12 +48,14 @@ echo "GitHub version: $github_version"
 if [ "$GITHUB_BRANCH" != "dev" ]; then
   if [ "$github_version" = "$current_version" ]; then
     echo "Version is the same, update skipped."
+    refresh_webui_systemd_units
     exit 0
   fi
 
   latest_version="$(printf '%s\n%s\n' "$current_version" "$github_version" | sort -V | tail -n 1)"
   if [ "$latest_version" != "$github_version" ]; then
     echo "GitHub version is not newer, update skipped."
+    refresh_webui_systemd_units
     exit 0
   fi
 else
@@ -69,11 +82,4 @@ else
   echo "Skip $ITARMY_DIR: not found or not a git repository."
 fi
 
-INSTALL_ROOT_HELPER_SCRIPT="$REPO_DIR/systemd/install-root-helper.sh"
-if [ -x "$INSTALL_ROOT_HELPER_SCRIPT" ] || [ -f "$INSTALL_ROOT_HELPER_SCRIPT" ]; then
-  echo "Refreshing WebUI systemd units ..."
-  /usr/bin/env bash "$INSTALL_ROOT_HELPER_SCRIPT"
-  echo "DONE! WebUI systemd units refreshed."
-else
-  echo "Skip WebUI systemd refresh: $INSTALL_ROOT_HELPER_SCRIPT not found."
-fi
+refresh_webui_systemd_units
