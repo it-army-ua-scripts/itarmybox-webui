@@ -206,7 +206,7 @@ Check these first:
   - Wi-Fi SSID `Artline`, Wi-Fi tx power `1.00 dBm`
   - timezone `Europe/Kyiv` with NTP ensure
   - update branch `main`
-  - browser theme preference cleared from `localStorage`
+  - browser theme preference and desired home traffic slider value cleared from `localStorage`
 - Distress autotune no longer uses a fixed target load of `4.2`; it now derives target load from the weighted CPU capacity of the target `4x Cortex-A73 + 2x Cortex-A53` system, keeping roughly one CPU core equivalent in reserve for the system and aiming below full saturation.
 - Distress autotune now starts from `2048`, caps at `30720`, keeps a RAM safety window of `10%..15%`, and increases concurrency a bit faster when the system has headroom.
 - Distress autotune state should be reasoned about as three separate values:

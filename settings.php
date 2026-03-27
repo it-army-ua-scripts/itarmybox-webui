@@ -87,6 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
 (() => {
     try {
         window.localStorage.removeItem('itarmybox-theme');
+        window.localStorage.removeItem('itarmybox-traffic-desired');
         if (window.ItArmyTheme && typeof window.ItArmyTheme.refresh === 'function') {
             window.ItArmyTheme.refresh();
         }
