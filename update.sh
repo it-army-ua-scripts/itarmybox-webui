@@ -9,6 +9,11 @@ BRANCH_STATE_FILE="/tmp/itarmybox-webui-update-branch.txt"
 GITHUB_BRANCH="main"
 ITARMY_DIR="/opt/itarmy"
 INSTALL_ROOT_HELPER_SCRIPT="$REPO_DIR/systemd/install-root-helper.sh"
+GIT_BIN="/usr/bin/git"
+
+git_safe() {
+  "$GIT_BIN" -c "safe.directory=$REPO_DIR" "$@"
+}
 
 refresh_webui_systemd_units() {
   if [ -x "$INSTALL_ROOT_HELPER_SCRIPT" ] || [ -f "$INSTALL_ROOT_HELPER_SCRIPT" ]; then
@@ -45,9 +50,9 @@ fi
 echo "Current version: $current_version"
 echo "Selected branch: $GITHUB_BRANCH"
 
-/usr/bin/git fetch "$GITHUB_REPO" "$GITHUB_BRANCH"
+git_safe fetch "$GITHUB_REPO" "$GITHUB_BRANCH"
 
-github_version="$(/usr/bin/git show FETCH_HEAD:VERSION 2>/dev/null | tr -d ' \t\r\n' || true)"
+github_version="$(git_safe show FETCH_HEAD:VERSION 2>/dev/null | tr -d ' \t\r\n' || true)"
 if [ -z "$github_version" ]; then
   echo "Cannot read VERSION from $GITHUB_REPO ($GITHUB_BRANCH), update aborted."
   exit 1
@@ -74,8 +79,8 @@ else
 fi
 
 echo "Updating to version $github_version ..."
-/usr/bin/git reset --hard FETCH_HEAD
-/usr/bin/git clean -fd
+git_safe reset --hard FETCH_HEAD
+git_safe clean -fd
 echo "DONE! Updated from $current_version to $github_version"
 persist_selected_branch
 
