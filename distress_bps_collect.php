@@ -6,11 +6,12 @@ require_once __DIR__ . '/lib/root_helper_client.php';
 
 const DISTRESS_BPS_STATE_FILE = __DIR__ . '/var/state/distress-bps.json';
 const DISTRESS_BPS_DEBUG_LOG_FILE = __DIR__ . '/var/log/distress-bps-collector-debug.log';
-const DISTRESS_BPS_SAMPLE_LIMIT = 6;
-const DISTRESS_BPS_LOG_LINES = 240;
+const DISTRESS_BPS_SAMPLE_LIMIT = 24;
+const DISTRESS_BPS_LOG_LINES = 480;
 const DISTRESS_BPS_STALE_AFTER_SECONDS = 900;
 const DISTRESS_BPS_MIN_SAMPLES = 3;
 const DISTRESS_BPS_WARMUP_AFTER_START_SECONDS = 60;
+const DISTRESS_BPS_AVERAGING_WINDOW_SECONDS = 240;
 
 function writeDistressBpsDebugLog(string $event, array $context = []): void
 {
@@ -200,6 +201,15 @@ function buildDistressBpsStatePayload(string $logs): array
         ];
     }
 
+    if ($samples !== []) {
+        $latestSampleAt = (int)$samples[count($samples) - 1]['capturedAt'];
+        $windowStartedAt = $latestSampleAt - DISTRESS_BPS_AVERAGING_WINDOW_SECONDS;
+        $samples = array_values(array_filter(
+            $samples,
+            static fn(array $sample): bool => (int)$sample['capturedAt'] >= $windowStartedAt
+        ));
+    }
+
     if (count($samples) > DISTRESS_BPS_SAMPLE_LIMIT) {
         $samples = array_slice($samples, -DISTRESS_BPS_SAMPLE_LIMIT);
     }
@@ -224,6 +234,7 @@ function buildDistressBpsStatePayload(string $logs): array
         'staleAfterSeconds' => DISTRESS_BPS_STALE_AFTER_SECONDS,
         'minSamples' => DISTRESS_BPS_MIN_SAMPLES,
         'sampleLimit' => DISTRESS_BPS_SAMPLE_LIMIT,
+        'averagingWindowSeconds' => DISTRESS_BPS_AVERAGING_WINDOW_SECONDS,
         'sampleCount' => $sampleCount,
         'movingAverageMbps' => $movingAverageMbps,
         'latestBpsMbps' => $latestBpsMbps,
@@ -242,6 +253,7 @@ function buildDistressBpsStatePayload(string $logs): array
     writeDistressBpsDebugLog('collector_payload', [
         'logLines' => count($lines),
         'sampleCount' => $sampleCount,
+        'averagingWindowSeconds' => DISTRESS_BPS_AVERAGING_WINDOW_SECONDS,
         'movingAverageMbps' => $movingAverageMbps,
         'latestBpsMbps' => $latestBpsMbps,
         'latestSampleAt' => $latestSampleAt,

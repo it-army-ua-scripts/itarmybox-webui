@@ -3,7 +3,7 @@ Description=Run IT Army Box Distress BPS collector periodically
 
 [Timer]
 OnBootSec=40s
-OnUnitActiveSec=180s
+OnUnitActiveSec=360s
 Unit=itarmybox-distress-bps-collector.service
 Persistent=true
 
