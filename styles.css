@@ -1013,11 +1013,12 @@ h1 {
     border-radius: 10px;
     padding: clamp(10px, 1.4vw, 14px);
     height: clamp(200px, 42vh, 420px);
-    overflow-y: auto;
+    overflow-y: scroll;
     overflow-x: auto;
-    overscroll-behavior: contain;
+    overscroll-behavior-y: none;
+    overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
-    touch-action: auto;
+    touch-action: pan-y pinch-zoom;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-break: break-word;
