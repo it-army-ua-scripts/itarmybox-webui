@@ -65,15 +65,19 @@ function normalizeAndValidateDistressPostParams(array $params): array
 
     $concurrencyRaw = (string)($params['concurrency'] ?? '');
     if ($concurrencyRaw === '') {
+        $autotuneSettings = getDistressAutotuneSettings();
         if ($concurrencyModeRaw === 'auto') {
-            $autotuneSettings = getDistressAutotuneSettings();
             $normalized['concurrency'] = (string)(
                 (($autotuneSettings['ok'] ?? false) === true && ($autotuneSettings['enabled'] ?? false) === true)
                     ? (int)($autotuneSettings['currentConcurrency'] ?? DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY)
                     : DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY
             );
         } else {
-            $normalized['concurrency'] = (string)DISTRESS_MANUAL_DEFAULT_CONCURRENCY;
+            $normalized['concurrency'] = (string)(
+                (($autotuneSettings['ok'] ?? false) === true)
+                    ? (int)($autotuneSettings['configConcurrency'] ?? DISTRESS_MANUAL_DEFAULT_CONCURRENCY)
+                    : DISTRESS_MANUAL_DEFAULT_CONCURRENCY
+            );
         }
     } else {
         if ($concurrencyRaw !== trim($concurrencyRaw) || preg_match('/^\d+$/', $concurrencyRaw) !== 1) {
