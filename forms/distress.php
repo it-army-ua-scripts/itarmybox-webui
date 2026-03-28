@@ -24,6 +24,24 @@ $distressLastRamText = isset($distressAutotune['lastRamFreePercent']) && is_nume
         'target' => number_format((float)($distressAutotune['minFreeRamPercent'] ?? 10.0), 1, '.', ''),
     ])
     : null;
+$distressLastBpsText = isset($distressAutotune['lastBpsMbps']) && is_numeric($distressAutotune['lastBpsMbps'])
+    ? t('distress_autotune_last_bps', [
+        'value' => number_format((float)$distressAutotune['lastBpsMbps'], 3, '.', ''),
+    ])
+    : null;
+$distressBestBpsText = isset($distressAutotune['bestBpsMbps']) && is_numeric($distressAutotune['bestBpsMbps'])
+    ? t('distress_autotune_best_bps', [
+        'value' => number_format((float)$distressAutotune['bestBpsMbps'], 3, '.', ''),
+        'concurrency' => isset($distressAutotune['bestBpsConcurrency']) && is_numeric($distressAutotune['bestBpsConcurrency'])
+            ? (string)((int)$distressAutotune['bestBpsConcurrency'])
+            : t('status_unavailable_short'),
+    ])
+    : null;
+$distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is_numeric($distressAutotune['lastTargetCount'])
+    ? t('distress_autotune_last_target_count', [
+        'value' => (string)((int)$distressAutotune['lastTargetCount']),
+    ])
+    : null;
     $distressUseMyIp = (int)($currentAdjustableParams['use-my-ip'] ?? 0);
     $distressFloodControlsEnabled = $distressUseMyIp > 0;
     $distressDisableUdpFlood = (string)($currentAdjustableParams['disable-udp-flood'] ?? '0');
@@ -52,6 +70,15 @@ $distressLastRamText = isset($distressAutotune['lastRamFreePercent']) && is_nume
         <?php endif; ?>
         <?php if ($distressLastRamText !== null): ?>
             <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastRamText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
+        <?php if ($distressLastBpsText !== null): ?>
+            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastBpsText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
+        <?php if ($distressBestBpsText !== null): ?>
+            <div class="schedule-limit-hint"><?= htmlspecialchars($distressBestBpsText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
+        <?php if ($distressLastTargetCountText !== null): ?>
+            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastTargetCountText, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
     </div>
     <div class="form-group">
