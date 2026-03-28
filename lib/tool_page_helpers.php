@@ -78,16 +78,17 @@ function tool_handle_post(array $config, string $daemonName, array $post, bool $
         $currentConfigString = getConfigStringFromServiceFile($daemonName);
         if ($saveError === '' && $currentConfigString !== '') {
             $updatedConfigParams = updateServiceConfigParams($currentConfigString, $paramsToSave, $daemonName);
-            $saveOk = updateServiceFile($daemonName, $updatedConfigParams);
-            if ($saveOk && $daemonName === 'distress') {
-                $saveOk = saveDistressAutotuneSettings(
+            if ($daemonName === 'distress') {
+                $saveOk = saveDistressSettings(
+                    implode(' ', $updatedConfigParams),
                     (($distressValidation['autotuneEnabled'] ?? false) === true),
                     (int)($distressValidation['concurrencyValue'] ?? 0)
                 );
                 if (!$saveOk && $saveError === '') {
-                    updateServiceExecStartString($daemonName, $currentConfigString);
                     $saveError = 'settings_not_saved';
                 }
+            } else {
+                $saveOk = updateServiceFile($daemonName, $updatedConfigParams);
             }
         }
     }

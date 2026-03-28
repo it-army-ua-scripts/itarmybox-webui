@@ -189,3 +189,17 @@ function saveDistressAutotuneSettings(bool $enabled, int $concurrency): bool
 
     return ($response['ok'] ?? false) === true;
 }
+
+function saveDistressSettings(string $execStartLine, bool $enabled, int $concurrency): bool
+{
+    $config = require __DIR__ . '/../config/config.php';
+    $response = root_helper_request([
+        'action' => 'distress_settings_set',
+        'modules' => $config['daemonNames'],
+        'execStart' => $execStartLine,
+        'enabled' => $enabled,
+        'concurrency' => $concurrency,
+    ]);
+
+    return ($response['ok'] ?? false) === true;
+}

@@ -51,8 +51,12 @@ function distressAutotuneDebugLog(string $event, array $context = []): void
 
 function ensureDistressAutotuneTimerInstalled(): bool
 {
+    if (isSystemdUnitKnown(DISTRESS_AUTOTUNE_TIMER_NAME)) {
+        return true;
+    }
+
     if (!repairRootHelperAccess()) {
-        return isSystemdUnitKnown(DISTRESS_AUTOTUNE_TIMER_NAME);
+        return false;
     }
 
     $systemctl = findSystemctl();
@@ -461,6 +465,64 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
             'error' => 'distress_autotune_state_write_failed',
             'rollbackConfigOk' => $rollbackConfigOk,
             'configConcurrencyAfterRollback' => getDistressConfigConcurrency(),
+        ];
+    }
+
+    releaseDistressAutotuneLock($lockHandle);
+    return getDistressAutotuneStatus();
+}
+
+function saveDistressSettings(string $execStartLine, $enabledValue, $concurrencyValue): array
+{
+    ensureDistressAutotuneTimerInstalled();
+
+    if (!str_starts_with($execStartLine, 'ExecStart=')) {
+        return ['ok' => false, 'error' => 'invalid_execstart'];
+    }
+
+    $enabled = ($enabledValue === true || $enabledValue === '1' || $enabledValue === 1 || $enabledValue === 'true');
+    $concurrency = normalizeDistressConcurrency($concurrencyValue);
+    if ($concurrency === null) {
+        return ['ok' => false, 'error' => 'invalid_concurrency'];
+    }
+
+    $lockHandle = acquireDistressAutotuneLock();
+    if ($lockHandle === false) {
+        return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
+    }
+
+    $previousExecStart = readServiceExecStart('distress');
+    if (!is_string($previousExecStart) || $previousExecStart === '') {
+        releaseDistressAutotuneLock($lockHandle);
+        return ['ok' => false, 'error' => 'execstart_read_failed'];
+    }
+
+    $previousState = readDistressAutotuneState();
+    $configChanged = $previousExecStart !== $execStartLine;
+    if ($configChanged && !updateServiceExecStart('distress', $execStartLine)) {
+        releaseDistressAutotuneLock($lockHandle);
+        return ['ok' => false, 'error' => 'distress_concurrency_write_failed'];
+    }
+
+    $state = $previousState;
+    $state['enabled'] = $enabled;
+    $state['desiredConcurrency'] = $concurrency;
+    $state['lastAdjustedAt'] = 0;
+    $state['lastLoadAverage'] = null;
+    $state['lastRamFreePercent'] = null;
+    $state['lastBpsMbps'] = null;
+    $state['bestBpsMbps'] = null;
+    $state['bestBpsConcurrency'] = null;
+    $state['lastTargetCount'] = null;
+    $state['lastBpsCycleId'] = null;
+    $state['bpsSettleCyclesRemaining'] = 0;
+    if (!writeDistressAutotuneState($state)) {
+        $rollbackConfigOk = !$configChanged || updateServiceExecStart('distress', $previousExecStart);
+        releaseDistressAutotuneLock($lockHandle);
+        return [
+            'ok' => false,
+            'error' => 'distress_autotune_state_write_failed',
+            'rollbackConfigOk' => $rollbackConfigOk,
         ];
     }
 

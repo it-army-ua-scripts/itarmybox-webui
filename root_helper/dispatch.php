@@ -176,6 +176,12 @@ function dispatchRootHelperAction(string $action, array $request, array $modules
             return getDistressAutotuneStatus();
         case 'distress_autotune_set':
             return setDistressAutotuneMode($request['enabled'] ?? null, $request['concurrency'] ?? null);
+        case 'distress_settings_set':
+            $execStart = $request['execStart'] ?? null;
+            if (!is_string($execStart) || trim($execStart) === '') {
+                fail('invalid_execstart');
+            }
+            return saveDistressSettings(trim($execStart), $request['enabled'] ?? null, $request['concurrency'] ?? null);
         case 'distress_autotune_tick':
             return distressAutotuneTick($request['loadAverage'] ?? null, $request['ramFreePercent'] ?? null);
         case 'service_logs':
