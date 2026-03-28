@@ -1013,10 +1013,11 @@ h1 {
     border-radius: 10px;
     padding: clamp(10px, 1.4vw, 14px);
     height: clamp(200px, 42vh, 420px);
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
+    touch-action: auto;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-break: break-word;
@@ -1024,7 +1025,6 @@ h1 {
     font-family: Consolas, "Courier New", monospace;
     font-size: clamp(12px, 1.15vw, 13px);
     line-height: 1.45;
-    scrollbar-gutter: stable both-edges;
 }
 
 .status-log-launchable {
