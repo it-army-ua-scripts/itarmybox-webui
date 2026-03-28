@@ -5,10 +5,40 @@ declare(strict_types=1);
 require_once __DIR__ . '/lib/root_helper_client.php';
 
 const DISTRESS_BPS_STATE_FILE = __DIR__ . '/var/state/distress-bps.json';
+const DISTRESS_BPS_DEBUG_LOG_FILE = __DIR__ . '/var/log/distress-bps-collector-debug.log';
 const DISTRESS_BPS_SAMPLE_LIMIT = 6;
 const DISTRESS_BPS_LOG_LINES = 240;
 const DISTRESS_BPS_STALE_AFTER_SECONDS = 900;
 const DISTRESS_BPS_MIN_SAMPLES = 3;
+
+function writeDistressBpsDebugLog(string $event, array $context = []): void
+{
+    $dir = dirname(DISTRESS_BPS_DEBUG_LOG_FILE);
+    if (!is_dir($dir) && !(@mkdir($dir, 0775, true) || is_dir($dir))) {
+        return;
+    }
+
+    $parts = ['event=' . $event];
+    foreach ($context as $key => $value) {
+        if (is_bool($value)) {
+            $normalized = $value ? 'true' : 'false';
+        } elseif ($value === null) {
+            $normalized = 'null';
+        } elseif (is_scalar($value)) {
+            $normalized = (string)$value;
+        } else {
+            $json = json_encode($value, JSON_UNESCAPED_SLASHES);
+            $normalized = is_string($json) ? $json : 'unserializable';
+        }
+        $parts[] = $key . '=' . $normalized;
+    }
+
+    @file_put_contents(
+        DISTRESS_BPS_DEBUG_LOG_FILE,
+        '[' . date('Y-m-d H:i:s') . '] ' . implode(' ', $parts) . "\n",
+        FILE_APPEND
+    );
+}
 
 function isLikelyDistressLogLine(string $line): bool
 {
@@ -158,7 +188,7 @@ function buildDistressBpsStatePayload(string $logs): array
         $latestSampleAt = (int)$latestSample['capturedAt'];
     }
 
-    return [
+    $payload = [
         'updatedAt' => time(),
         'staleAfterSeconds' => DISTRESS_BPS_STALE_AFTER_SECONDS,
         'minSamples' => DISTRESS_BPS_MIN_SAMPLES,
@@ -174,6 +204,20 @@ function buildDistressBpsStatePayload(string $logs): array
         'hasFreshSamples' => $sampleCount > 0 && $latestSampleAt !== null,
         'samples' => $samples,
     ];
+
+    writeDistressBpsDebugLog('collector_payload', [
+        'logLines' => count($lines),
+        'sampleCount' => $sampleCount,
+        'movingAverageMbps' => $movingAverageMbps,
+        'latestBpsMbps' => $latestBpsMbps,
+        'latestSampleAt' => $latestSampleAt,
+        'latestTargetCount' => $latestTargetCount,
+        'cycleId' => $cycleId,
+        'cycleStartedAt' => $cycleStartedAt,
+        'hasFreshSamples' => $payload['hasFreshSamples'],
+    ]);
+
+    return $payload;
 }
 
 function writeDistressBpsState(array $payload): bool
@@ -198,4 +242,10 @@ function writeDistressBpsState(array $payload): bool
 $logs = readDistressLogs(DISTRESS_BPS_LOG_LINES);
 $payload = buildDistressBpsStatePayload($logs);
 
-exit(writeDistressBpsState($payload) ? 0 : 1);
+$ok = writeDistressBpsState($payload);
+writeDistressBpsDebugLog('collector_write', [
+    'ok' => $ok,
+    'stateFile' => DISTRESS_BPS_STATE_FILE,
+]);
+
+exit($ok ? 0 : 1);

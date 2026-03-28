@@ -10,6 +10,7 @@ const TRAFFIC_LIMIT_STATE_FILE = '/tmp/itarmybox-traffic-limit.json';
 const ROOT_HELPER_WEBUI_DIR = '/var/www/html/itarmybox-webui';
 const ROOT_HELPER_VAR_DIR = ROOT_HELPER_WEBUI_DIR . '/var';
 const ROOT_HELPER_STATE_DIR = ROOT_HELPER_VAR_DIR . '/state';
+const ROOT_HELPER_LOG_DIR = ROOT_HELPER_VAR_DIR . '/log';
 const ROOT_HELPER_SCRIPT_PATH = ROOT_HELPER_WEBUI_DIR . '/root_helper.php';
 const WIFI_TXPOWER_MIN_CENTIDBM = 100;
 const WIFI_TXPOWER_MAX_CENTIDBM = 3100;
@@ -126,7 +127,18 @@ function migrateLegacyFileIfNeeded(string $legacyPath, string $targetPath): bool
 
 function ensureWebuiVarLayout(): bool
 {
-    return ensureDirectoryExists(ROOT_HELPER_STATE_DIR);
+    return ensureDirectoryExists(ROOT_HELPER_STATE_DIR)
+        && ensureDirectoryExists(ROOT_HELPER_LOG_DIR);
+}
+
+function writeDebugLogLine(string $filePath, string $message): void
+{
+    if (!ensureParentDirectoryExists($filePath)) {
+        return;
+    }
+
+    $timestamp = date('Y-m-d H:i:s');
+    @file_put_contents($filePath, '[' . $timestamp . '] ' . $message . "\n", FILE_APPEND);
 }
 
 function repairRootHelperAccess(): bool
