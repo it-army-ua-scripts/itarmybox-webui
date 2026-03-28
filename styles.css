@@ -1508,6 +1508,14 @@ html[data-theme="dark"] .power-scale {
     color: #9fb2c7;
 }
 
+html[data-theme="dark"] .header-stat-label {
+    color: #c7d6e8;
+}
+
+html[data-theme="dark"] .header-stat-value {
+    color: #f2f7fd;
+}
+
 html[data-theme="dark"] .power-lever-value span:last-child,
 html[data-theme="dark"] .autostart-link-title,
 html[data-theme="dark"] .modal-badge {
@@ -1520,6 +1528,7 @@ html[data-theme="dark"] .lang-btn,
 html[data-theme="dark"] .modal-btn-secondary {
     background: linear-gradient(180deg, #1d2b3c 0%, #15202e 100%);
     border-color: rgba(100, 122, 148, 0.32);
+    color: #c9d7e7;
     box-shadow: 0 10px 22px rgba(2, 8, 23, 0.28);
 }
 
