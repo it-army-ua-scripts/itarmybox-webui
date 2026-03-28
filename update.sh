@@ -7,7 +7,6 @@ REPO_DIR="/var/www/html/itarmybox-webui"
 GITHUB_REPO="https://github.com/it-army-ua-scripts/itarmybox-webui.git"
 BRANCH_STATE_FILE="/tmp/itarmybox-webui-update-branch.txt"
 GITHUB_BRANCH="main"
-ITARMY_DIR="/opt/itarmy"
 INSTALL_ROOT_HELPER_SCRIPT="$REPO_DIR/systemd/install-root-helper.sh"
 GIT_BIN="/usr/bin/git"
 
@@ -80,7 +79,7 @@ fi
 
 echo "Updating to version $github_version ..."
 git_safe reset --hard FETCH_HEAD
-git_safe clean -fd
+git_safe clean -fd -e var/
 echo "DONE! Updated from $current_version to $github_version"
 persist_selected_branch
 

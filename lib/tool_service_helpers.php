@@ -149,12 +149,17 @@ function updateServiceConfigParams(string $configString, array $updatedParams, s
 
 function updateServiceFile(string $serviceName, array $updatedConfigParams): bool
 {
+    return updateServiceExecStartString($serviceName, implode(' ', $updatedConfigParams));
+}
+
+function updateServiceExecStartString(string $serviceName, string $execStart): bool
+{
     $config = require __DIR__ . '/../config/config.php';
     $response = root_helper_request([
         'action' => 'service_execstart_set',
         'modules' => $config['daemonNames'],
         'module' => $serviceName,
-        'execStart' => implode(' ', $updatedConfigParams),
+        'execStart' => $execStart,
     ]);
     return ($response['ok'] ?? false) === true;
 }

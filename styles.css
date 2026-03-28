@@ -1006,23 +1006,96 @@ h1 {
 }
 
 .log-box {
+    width: 100%;
+    max-width: 100%;
     background: #111;
     color: #f1f1f1;
-    border-radius: 6px;
-    padding: 10px;
-    height: min(42vh, 320px);
-    min-height: 200px;
-    max-height: 420px;
-    overflow: auto;
-    overscroll-behavior: contain;
+    border-radius: 10px;
+    padding: clamp(10px, 1.4vw, 14px);
+    height: clamp(200px, 42vh, 420px);
+    overflow-y: scroll;
+    overflow-x: auto;
+    overscroll-behavior-y: none;
+    overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
+    touch-action: pan-y pinch-zoom;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
     word-break: break-word;
     text-align: left;
     font-family: Consolas, "Courier New", monospace;
-    font-size: 13px;
-    line-height: 1.4;
+    font-size: clamp(12px, 1.15vw, 13px);
+    line-height: 1.45;
+}
+
+.status-log-launchable {
+    cursor: zoom-in;
+}
+
+.status-log-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 130;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(15, 23, 42, 0.72);
+    backdrop-filter: blur(4px);
+}
+
+.status-log-modal[hidden] {
+    display: none !important;
+}
+
+.status-log-modal-card {
+    display: flex;
+    flex-direction: column;
+    width: min(100%, 1180px);
+    max-width: calc(100vw - 24px);
+    height: min(calc(100dvh - 24px), calc(100vh - 24px));
+    min-height: 320px;
+    padding: clamp(10px, 1.8vw, 16px);
+    border-radius: 18px;
+    border: 1px solid rgba(151, 175, 204, 0.32);
+    background: linear-gradient(180deg, #ffffff 0%, #f4f8fc 100%);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.status-log-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.status-log-modal-close {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(151, 175, 204, 0.42);
+    border-radius: 999px;
+    background: linear-gradient(180deg, #f8fbff 0%, #eaf1f7 100%);
+    color: #20364a;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 8px 16px rgba(44, 62, 80, 0.08);
+}
+
+.status-log-modal-close:hover {
+    background: linear-gradient(180deg, #ffffff 0%, #eef4fb 100%);
+}
+
+.status-log-box-fullscreen {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    border-radius: 14px;
+    font-size: clamp(12px, 1vw, 14px);
+    line-height: 1.5;
 }
 
 .tool-log-box {
@@ -1086,11 +1159,32 @@ h1 {
     }
 
     .status-page .log-box {
-        height: min(40vh, 280px);
-        min-height: 170px;
-        max-height: 320px;
+        height: clamp(170px, 36vh, 280px);
         font-size: 12px;
         line-height: 1.35;
+    }
+
+    .status-log-modal {
+        padding: 12px;
+    }
+
+    .status-log-modal-card {
+        width: min(100%, calc(100vw - 12px));
+        max-width: calc(100vw - 12px);
+        height: min(calc(100dvh - 12px), calc(100vh - 12px));
+        padding: 12px;
+        border-radius: 16px;
+    }
+
+    .status-log-modal-close {
+        width: 32px;
+        height: 32px;
+        font-size: 1.05rem;
+    }
+
+    .status-log-box-fullscreen {
+        font-size: 12px;
+        line-height: 1.4;
     }
 
     .menu {
@@ -1414,6 +1508,14 @@ html[data-theme="dark"] .power-scale {
     color: #9fb2c7;
 }
 
+html[data-theme="dark"] .header-stat-label {
+    color: #c7d6e8;
+}
+
+html[data-theme="dark"] .header-stat-value {
+    color: #f2f7fd;
+}
+
 html[data-theme="dark"] .power-lever-value span:last-child,
 html[data-theme="dark"] .autostart-link-title,
 html[data-theme="dark"] .modal-badge {
@@ -1426,6 +1528,7 @@ html[data-theme="dark"] .lang-btn,
 html[data-theme="dark"] .modal-btn-secondary {
     background: linear-gradient(180deg, #1d2b3c 0%, #15202e 100%);
     border-color: rgba(100, 122, 148, 0.32);
+    color: #c9d7e7;
     box-shadow: 0 10px 22px rgba(2, 8, 23, 0.28);
 }
 
@@ -1594,6 +1697,23 @@ html[data-theme="dark"] .log-box {
     border: 1px solid rgba(100, 122, 148, 0.28);
 }
 
+html[data-theme="dark"] .status-log-modal-card {
+    border-color: rgba(100, 122, 148, 0.3);
+    background: linear-gradient(180deg, #162231 0%, #0f1824 100%);
+    box-shadow: 0 24px 60px rgba(2, 8, 23, 0.48);
+}
+
+html[data-theme="dark"] .status-log-modal-close {
+    background: linear-gradient(180deg, #1d2b3c 0%, #15202e 100%);
+    border-color: rgba(100, 122, 148, 0.32);
+    color: #e5edf7;
+    box-shadow: 0 10px 22px rgba(2, 8, 23, 0.28);
+}
+
+html[data-theme="dark"] .status-log-modal-close:hover {
+    background: linear-gradient(180deg, #243549 0%, #192534 100%);
+}
+
 html[data-theme="dark"] .copy-bot-btn {
     background: linear-gradient(180deg, #16304c 0%, #11253a 100%);
     border-color: rgba(96, 165, 250, 0.34);
@@ -1634,8 +1754,13 @@ html[data-theme="dark"] .copy-bot-btn.copied {
     }
 
     .status-page .log-box {
-        height: min(34vh, 220px);
-        min-height: 140px;
+        height: clamp(140px, 34vh, 220px);
+    }
+
+    .status-log-modal-card {
+        width: min(100%, calc(100vw - 20px));
+        max-width: calc(100vw - 20px);
+        height: min(calc(100dvh - 20px), calc(100vh - 20px));
     }
 }
 

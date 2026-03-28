@@ -158,6 +158,18 @@ function getDistressAutotuneSettings(): array
         'lastRamFreePercent' => isset($response['lastRamFreePercent']) && is_numeric($response['lastRamFreePercent'])
             ? (float)$response['lastRamFreePercent']
             : null,
+        'lastBpsMbps' => isset($response['lastBpsMbps']) && is_numeric($response['lastBpsMbps'])
+            ? (float)$response['lastBpsMbps']
+            : null,
+        'bestBpsMbps' => isset($response['bestBpsMbps']) && is_numeric($response['bestBpsMbps'])
+            ? (float)$response['bestBpsMbps']
+            : null,
+        'bestBpsConcurrency' => isset($response['bestBpsConcurrency']) && is_numeric($response['bestBpsConcurrency'])
+            ? (int)$response['bestBpsConcurrency']
+            : null,
+        'lastTargetCount' => isset($response['lastTargetCount']) && is_numeric($response['lastTargetCount'])
+            ? max(0, (int)$response['lastTargetCount'])
+            : null,
     ];
 }
 
