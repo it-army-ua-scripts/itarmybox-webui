@@ -226,6 +226,8 @@ Check these first:
 - The home page power slider should stay encapsulated in `js/home_power.js`; `js/home_init.js` should only wire high-level startup and call `initPowerControls()`.
 - `render_back_link()` should be a plain fallback link to the logical parent page. Using `history.back()` created navigation loops after `POST -> redirect -> flash`, especially between `tool.php` and `tools_list.php`.
 - The shared status log on `status.php` now supports fullscreen viewing by double-clicking the log box; it should keep live updates while open and close via second double-click, `Esc`, close button, or backdrop click.
+- Exclusive module switching should remain truly exclusive: stop non-selected modules first, verify they are inactive, then start the selected module and verify the final active-module set.
+- Do not rely on `getActiveModule()` to infer health when multiple modules might be active; use explicit active-module-set checks where exclusivity matters.
 
 ## Refactor roadmap snapshot
 

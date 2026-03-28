@@ -438,14 +438,34 @@ function switchExclusiveModuleState(array $modules, ?string $selected): array
 
     foreach ($modules as $module) {
         $service = escapeshellarg($module . '.service');
-        if ($selected !== null && $module === $selected) {
-            runCommand("systemctl start $service", $code);
-        } else {
+        if ($selected === null || $module !== $selected) {
             runCommand("systemctl stop $service", $code);
+            if ($code === 0 && !waitForServiceInactive($module)) {
+                return ['ok' => false, 'error' => 'service_stop_verification_failed'];
+            }
         }
         if ($code !== 0) {
             return ['ok' => false, 'error' => 'service_switch_failed'];
         }
+    }
+
+    if ($selected !== null) {
+        $selectedService = escapeshellarg($selected . '.service');
+        runCommand("systemctl start $selectedService", $code);
+        if ($code !== 0) {
+            return ['ok' => false, 'error' => 'service_switch_failed'];
+        }
+    }
+
+    $expectedActive = $selected !== null ? [$selected] : [];
+    $actualActive = getActiveModules($modules);
+    if (!sameModuleSet($actualActive, $expectedActive)) {
+        return [
+            'ok' => false,
+            'error' => 'service_state_verification_failed',
+            'expectedActive' => $expectedActive,
+            'actualActive' => $actualActive,
+        ];
     }
 
     return ['ok' => true];
@@ -458,7 +478,8 @@ function applyExclusiveModuleState(array $modules, ?string $selected, ?int $traf
         return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
     }
 
-    $previousSelected = getActiveModule($modules);
+    $previousActiveModules = getActiveModules($modules);
+    $previousSelected = $previousActiveModules[0] ?? null;
     $previousTrafficState = ($selected !== null && $trafficPercent !== null)
         ? getTrafficLimitRollbackSnapshot()
         : null;
@@ -466,7 +487,7 @@ function applyExclusiveModuleState(array $modules, ?string $selected, ?int $traf
     $resetDistressBaseline = $previousSelected === 'distress' && $selected !== 'distress';
     $switchResult = switchExclusiveModuleState($modules, $selected);
     if (($switchResult['ok'] ?? false) !== true) {
-        $rollbackResult = switchExclusiveModuleState($modules, $previousSelected);
+        $rollbackResult = restoreModuleStateSet($modules, $previousActiveModules);
         releaseDistressAutotuneLock($lockHandle);
         return $switchResult + [
             'serviceRollbackOk' => (($rollbackResult['ok'] ?? false) === true),
@@ -474,7 +495,7 @@ function applyExclusiveModuleState(array $modules, ?string $selected, ?int $traf
     }
 
     if ($resetDistressBaseline && !resetDistressAutotuneBaseline()) {
-        $rollbackResult = switchExclusiveModuleState($modules, $previousSelected);
+        $rollbackResult = restoreModuleStateSet($modules, $previousActiveModules);
         releaseDistressAutotuneLock($lockHandle);
         return [
             'ok' => false,
@@ -486,7 +507,7 @@ function applyExclusiveModuleState(array $modules, ?string $selected, ?int $traf
     if ($selected !== null && $trafficPercent !== null) {
         $limitResult = setTrafficLimit($trafficPercent);
         if (($limitResult['ok'] ?? false) !== true) {
-            $serviceRollbackResult = switchExclusiveModuleState($modules, $previousSelected);
+            $serviceRollbackResult = restoreModuleStateSet($modules, $previousActiveModules);
             $trafficRollbackOk = true;
             if ($previousTrafficState !== null) {
                 $trafficRollbackResult = setTrafficLimit((int)$previousTrafficState['percent']);
@@ -590,14 +611,85 @@ function serviceIsActive(string $module): bool
     return $code === 0;
 }
 
-function getActiveModule(array $modules): ?string
+function waitForServiceInactive(string $module, int $attempts = 25, int $sleepMicroseconds = 200000): bool
 {
+    for ($attempt = 0; $attempt < $attempts; $attempt++) {
+        if (!serviceIsActive($module)) {
+            return true;
+        }
+        usleep($sleepMicroseconds);
+    }
+
+    return !serviceIsActive($module);
+}
+
+function getActiveModules(array $modules): array
+{
+    $active = [];
     foreach ($modules as $module) {
         if (serviceIsActive($module)) {
-            return $module;
+            $active[] = $module;
         }
     }
-    return null;
+    return $active;
+}
+
+function sameModuleSet(array $left, array $right): bool
+{
+    $left = array_values(array_unique(array_filter($left, 'is_string')));
+    $right = array_values(array_unique(array_filter($right, 'is_string')));
+    sort($left);
+    sort($right);
+    return $left === $right;
+}
+
+function restoreModuleStateSet(array $modules, array $selectedModules): array
+{
+    runCommand('systemctl daemon-reload', $reloadCode);
+    if ($reloadCode !== 0) {
+        return ['ok' => false, 'error' => 'daemon_reload_failed'];
+    }
+
+    $selectedSet = [];
+    foreach ($selectedModules as $module) {
+        if (is_string($module) && in_array($module, $modules, true)) {
+            $selectedSet[$module] = true;
+        }
+    }
+
+    foreach ($modules as $module) {
+        $service = escapeshellarg($module . '.service');
+        if (isset($selectedSet[$module])) {
+            runCommand("systemctl start $service", $code);
+        } else {
+            runCommand("systemctl stop $service", $code);
+            if ($code === 0 && !waitForServiceInactive($module)) {
+                return ['ok' => false, 'error' => 'service_stop_verification_failed'];
+            }
+        }
+        if ($code !== 0) {
+            return ['ok' => false, 'error' => 'service_switch_failed'];
+        }
+    }
+
+    $actualActive = getActiveModules($modules);
+    $expectedActive = array_keys($selectedSet);
+    if (!sameModuleSet($actualActive, $expectedActive)) {
+        return [
+            'ok' => false,
+            'error' => 'service_state_verification_failed',
+            'expectedActive' => $expectedActive,
+            'actualActive' => $actualActive,
+        ];
+    }
+
+    return ['ok' => true];
+}
+
+function getActiveModule(array $modules): ?string
+{
+    $active = getActiveModules($modules);
+    return count($active) === 1 ? $active[0] : null;
 }
 
 function getServiceLogsRaw(string $module, int $lines): string
@@ -736,7 +828,8 @@ function serviceRestart(string $module): array
 
 function statusSnapshot(array $modules, int $lines): array
 {
-    $activeModule = getActiveModule($modules);
+    $activeModules = getActiveModules($modules);
+    $activeModule = count($activeModules) === 1 ? $activeModules[0] : null;
     $logs = '';
     $logSource = null;
     $logPath = null;
@@ -749,6 +842,8 @@ function statusSnapshot(array $modules, int $lines): array
     return [
         'ok' => true,
         'activeModule' => $activeModule,
+        'activeModules' => $activeModules,
+        'multipleActiveModules' => count($activeModules) > 1,
         'commonLogs' => $logs,
         'logSource' => $logSource,
         'logPath' => $logPath,
