@@ -1,1 +1,5 @@
 .idea
+var/*
+!var/.gitkeep
+!var/state/
+!var/state/.gitkeep

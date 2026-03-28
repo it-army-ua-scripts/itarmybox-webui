@@ -139,6 +139,12 @@ function centiDbmToDbmString(int $centiDbm): string
 
 function persistWifiTxPowerState(int $centiDbm): bool
 {
+    ensureWebuiVarLayout();
+    migrateLegacyFileIfNeeded(WIFI_TXPOWER_LEGACY_STATE_FILE, WIFI_TXPOWER_STATE_FILE);
+    if (!ensureParentDirectoryExists(WIFI_TXPOWER_STATE_FILE)) {
+        return false;
+    }
+
     $payload = json_encode([
         'centiDbm' => $centiDbm,
         'dbm' => centiDbmToDbmString($centiDbm),

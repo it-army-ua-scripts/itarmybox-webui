@@ -7,19 +7,25 @@ const SCHEDULE_END_MARKER = '# ITARMYBOX-SCHEDULE-END';
 const MAX_SCHEDULE_ENTRIES = 2;
 const SCHEDULE_MANUAL_OVERRIDE_FILE = '/tmp/itarmybox-schedule-manual-override';
 const TRAFFIC_LIMIT_STATE_FILE = '/tmp/itarmybox-traffic-limit.json';
-const ROOT_HELPER_SCRIPT_PATH = '/var/www/html/itarmybox-webui/root_helper.php';
+const ROOT_HELPER_WEBUI_DIR = '/var/www/html/itarmybox-webui';
+const ROOT_HELPER_VAR_DIR = ROOT_HELPER_WEBUI_DIR . '/var';
+const ROOT_HELPER_STATE_DIR = ROOT_HELPER_VAR_DIR . '/state';
+const ROOT_HELPER_SCRIPT_PATH = ROOT_HELPER_WEBUI_DIR . '/root_helper.php';
 const WIFI_TXPOWER_MIN_CENTIDBM = 100;
 const WIFI_TXPOWER_MAX_CENTIDBM = 3100;
 const WIFI_TXPOWER_DEFAULT_CENTIDBM = 100;
-const WIFI_TXPOWER_STATE_FILE = '/opt/itarmy/wifi-txpower.json';
-const WIFI_TXPOWER_SERVICE_PATH = '/var/www/html/itarmybox-webui/systemd/itarmybox-wifi-txpower.service';
+const WIFI_TXPOWER_STATE_FILE = ROOT_HELPER_STATE_DIR . '/wifi-txpower.json';
+const WIFI_TXPOWER_LEGACY_STATE_FILE = '/opt/itarmy/wifi-txpower.json';
+const WIFI_TXPOWER_SERVICE_PATH = ROOT_HELPER_WEBUI_DIR . '/systemd/itarmybox-wifi-txpower.service';
 const WIFI_AP_INTERFACE = 'wlan0';
 const WIFI_AP_DEFAULT_NAME = 'Artline';
 const HOSTAPD_CONFIG_PATH = '/etc/hostapd/hostapd.conf';
 const HOSTAPD_SERVICE_NAME = 'hostapd.service';
-const ROOT_HELPER_INSTALL_SCRIPT = '/var/www/html/itarmybox-webui/systemd/install-root-helper.sh';
+const ROOT_HELPER_INSTALL_SCRIPT = ROOT_HELPER_WEBUI_DIR . '/systemd/install-root-helper.sh';
 const VNSTAT_INTERFACE = 'eth0';
-const UPDATE_SCRIPT_PATH = '/var/www/html/itarmybox-webui/update.sh';
+const UPDATE_SCRIPT_PATH = ROOT_HELPER_WEBUI_DIR . '/update.sh';
+const DISTRESS_AUTOTUNE_LEGACY_STATE_FILE = '/opt/itarmy/distress-autotune.json';
+const ROOT_HELPER_SERVICE_DIR = '/opt/itarmy/services';
 
 require_once __DIR__ . '/root_helper/vnstat.php';
 require_once __DIR__ . '/root_helper/time_sync.php';
@@ -82,6 +88,45 @@ function findExecutable(array $paths): ?string
 function findServiceBinary(): ?string
 {
     return findExecutable(['/usr/sbin/service', '/usr/bin/service', '/sbin/service', '/bin/service']);
+}
+
+function ensureDirectoryExists(string $path): bool
+{
+    if ($path === '') {
+        return false;
+    }
+    if (is_dir($path)) {
+        return true;
+    }
+    return @mkdir($path, 0775, true) || is_dir($path);
+}
+
+function ensureParentDirectoryExists(string $path): bool
+{
+    return ensureDirectoryExists(dirname($path));
+}
+
+function migrateLegacyFileIfNeeded(string $legacyPath, string $targetPath): bool
+{
+    if (is_file($targetPath)) {
+        return true;
+    }
+    if (!is_file($legacyPath)) {
+        return false;
+    }
+    $content = @file_get_contents($legacyPath);
+    if (!is_string($content)) {
+        return false;
+    }
+    if (!ensureParentDirectoryExists($targetPath)) {
+        return false;
+    }
+    return @file_put_contents($targetPath, $content) !== false;
+}
+
+function ensureWebuiVarLayout(): bool
+{
+    return ensureDirectoryExists(ROOT_HELPER_STATE_DIR);
 }
 
 function repairRootHelperAccess(): bool
@@ -905,7 +950,7 @@ function serviceInfo(string $module): array
 
 function readServiceExecStart(string $module): ?string
 {
-    $serviceFile = '/opt/itarmy/services/' . $module . '.service';
+    $serviceFile = ROOT_HELPER_SERVICE_DIR . '/' . $module . '.service';
     if (!is_readable($serviceFile)) {
         return null;
     }
@@ -928,7 +973,7 @@ function updateServiceExecStart(string $module, string $execStartLine): bool
     if (!str_starts_with($execStartLine, 'ExecStart=')) {
         return false;
     }
-    $serviceFile = '/opt/itarmy/services/' . $module . '.service';
+    $serviceFile = ROOT_HELPER_SERVICE_DIR . '/' . $module . '.service';
     $content = @file_get_contents($serviceFile);
     if (!is_string($content) || $content === '') {
         return false;

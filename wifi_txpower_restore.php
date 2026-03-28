@@ -2,7 +2,8 @@
 
 declare(strict_types=1);
 
-const WIFI_TXPOWER_STATE_FILE = '/opt/itarmy/wifi-txpower.json';
+const WIFI_TXPOWER_STATE_FILE = '/var/www/html/itarmybox-webui/var/state/wifi-txpower.json';
+const WIFI_TXPOWER_LEGACY_STATE_FILE = '/opt/itarmy/wifi-txpower.json';
 const WIFI_AP_INTERFACE = 'wlan0';
 const WIFI_TXPOWER_MIN_CENTIDBM = 100;
 const WIFI_TXPOWER_MAX_CENTIDBM = 3100;
@@ -25,6 +26,9 @@ function findIwBinary(): ?string
 function readDesiredTxPower(): ?array
 {
     $raw = @file_get_contents(WIFI_TXPOWER_STATE_FILE);
+    if (!is_string($raw) || trim($raw) === '') {
+        $raw = @file_get_contents(WIFI_TXPOWER_LEGACY_STATE_FILE);
+    }
     if (!is_string($raw) || trim($raw) === '') {
         return null;
     }
