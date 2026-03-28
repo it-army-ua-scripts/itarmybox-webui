@@ -29,6 +29,7 @@ const DISTRESS_AUTOTUNE_BPS_DROP_RATIO = 0.95;
 const DISTRESS_AUTOTUNE_BPS_DROP_RESTORE_RATIO = 0.97;
 const DISTRESS_AUTOTUNE_BPS_SETTLE_CYCLES = 0;
 const DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED = 2;
+const DISTRESS_AUTOTUNE_DROP_WINDOWS_REQUIRED = 4;
 const DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE = 'coarse';
 const DISTRESS_AUTOTUNE_SEARCH_PHASE_REFINE = 'refine';
 const DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD = 'hold';
@@ -360,8 +361,9 @@ function normalizeDistressProbeWindowBps($values): array
         }
     }
 
-    if (count($normalized) > DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED) {
-        $normalized = array_slice($normalized, -DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED);
+    $maxWindows = max(DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED, DISTRESS_AUTOTUNE_DROP_WINDOWS_REQUIRED);
+    if (count($normalized) > $maxWindows) {
+        $normalized = array_slice($normalized, -$maxWindows);
     }
 
     return $normalized;
@@ -400,8 +402,9 @@ function appendDistressProbeWindow(array &$state, float $bpsMbps, int $sampleAt)
 
     $windows = normalizeDistressProbeWindowBps($state['probeWindowBps'] ?? []);
     $windows[] = $bpsMbps;
-    if (count($windows) > DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED) {
-        $windows = array_slice($windows, -DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED);
+    $maxWindows = max(DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED, DISTRESS_AUTOTUNE_DROP_WINDOWS_REQUIRED);
+    if (count($windows) > $maxWindows) {
+        $windows = array_slice($windows, -$maxWindows);
     }
 
     $state['probeWindowBps'] = $windows;
@@ -414,11 +417,17 @@ function getDistressProbeWindowCount(array $state): int
     return count(normalizeDistressProbeWindowBps($state['probeWindowBps'] ?? []));
 }
 
-function calculateDistressProbeScore(array $state): ?float
+function calculateDistressProbeScore(array $state, ?int $requiredWindows = null): ?float
 {
+    $required = $requiredWindows ?? DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED;
+    $required = max(1, $required);
     $windows = normalizeDistressProbeWindowBps($state['probeWindowBps'] ?? []);
-    if (count($windows) < DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED) {
+    if (count($windows) < $required) {
         return null;
+    }
+
+    if (count($windows) > $required) {
+        $windows = array_slice($windows, -$required);
     }
 
     sort($windows, SORT_NUMERIC);
@@ -744,7 +753,7 @@ function calculateDistressExplorationTargetConcurrency(int $currentConcurrency, 
     if ($loadAverage >= $largeIncreaseThreshold) {
         return adjustDistressConcurrencyByPercent($currentConcurrency, 12);
     }
-    return adjustDistressConcurrencyByPercent($currentConcurrency, 50);
+    return adjustDistressConcurrencyByPercent($currentConcurrency, 100);
 }
 
 function isWithinDistressBpsDeadZone(float $currentBpsMbps, float $bestBpsMbps): bool
@@ -1169,14 +1178,19 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
         $windowAdded = appendDistressProbeWindow($state, $evaluatedBpsMbps, $probeRunEndedAt);
         $probeWindowCount = getDistressProbeWindowCount($state);
         $probeScoreMbps = calculateDistressProbeScore($state);
+        $dropProbeScoreMbps = calculateDistressProbeScore($state, DISTRESS_AUTOTUNE_DROP_WINDOWS_REQUIRED);
+        $dropWindowReady = $dropProbeScoreMbps !== null;
 
         distressAutotuneDebugLog('probe_window', [
             'currentConcurrency' => $currentConcurrency,
             'windowAdded' => $windowAdded,
             'probeWindowCount' => $probeWindowCount,
             'windowsRequired' => DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED,
+            'dropWindowsRequired' => DISTRESS_AUTOTUNE_DROP_WINDOWS_REQUIRED,
             'evaluatedBpsMbps' => $evaluatedBpsMbps,
             'probeScoreMbps' => $probeScoreMbps,
+            'dropProbeScoreMbps' => $dropProbeScoreMbps,
+            'dropWindowReady' => $dropWindowReady,
             'runEndedAt' => $bpsMetrics['runEndedAt'] ?? null,
             'searchPhase' => $state['searchPhase'] ?? DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE,
         ]);
@@ -1218,8 +1232,9 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
                 $bestBpsMbps !== null &&
                 $bestBpsConcurrency !== null &&
                 $currentConcurrency > $bestBpsConcurrency &&
-                !isWithinDistressBpsDeadZone($probeScoreMbps, $bestBpsMbps) &&
-                $probeScoreMbps < $bestBpsMbps
+                $dropWindowReady &&
+                !isWithinDistressBpsDeadZone($dropProbeScoreMbps, $bestBpsMbps) &&
+                $dropProbeScoreMbps < $bestBpsMbps
             ) {
                 $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_REFINE;
                 $state['refineLowConcurrency'] = $bestBpsConcurrency;
@@ -1231,6 +1246,13 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
                 } else {
                     $targetConcurrency = $midpoint;
                 }
+            } elseif (
+                $bestBpsMbps !== null &&
+                $bestBpsConcurrency !== null &&
+                $currentConcurrency > $bestBpsConcurrency &&
+                !$dropWindowReady
+            ) {
+                $targetConcurrency = $currentConcurrency;
             } elseif ($explorationTargetConcurrency > $currentConcurrency) {
                 $targetConcurrency = $explorationTargetConcurrency;
             } else {
