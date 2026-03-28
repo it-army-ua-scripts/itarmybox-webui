@@ -738,7 +738,7 @@ function calculateDistressExplorationTargetConcurrency(int $currentConcurrency, 
     if ($loadAverage >= $largeIncreaseThreshold) {
         return adjustDistressConcurrencyByPercent($currentConcurrency, 12);
     }
-    return adjustDistressConcurrencyByPercent($currentConcurrency, 24);
+    return adjustDistressConcurrencyByPercent($currentConcurrency, 50);
 }
 
 function isWithinDistressBpsDeadZone(float $currentBpsMbps, float $bestBpsMbps): bool

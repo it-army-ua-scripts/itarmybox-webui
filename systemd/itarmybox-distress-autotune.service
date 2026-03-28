@@ -5,4 +5,5 @@ Wants=itarmybox-root-helper.socket
 
 [Service]
 Type=oneshot
+ExecStartPre=/usr/bin/env php /var/www/html/itarmybox-webui/distress_bps_collect.php
 ExecStart=/usr/bin/env php /var/www/html/itarmybox-webui/distress_autotune_tick.php
