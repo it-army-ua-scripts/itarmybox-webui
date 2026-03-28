@@ -30,6 +30,7 @@ const DISTRESS_AUTOTUNE_BPS_DROP_RESTORE_RATIO = 0.97;
 const DISTRESS_AUTOTUNE_BPS_SETTLE_CYCLES = 0;
 const DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED = 2;
 const DISTRESS_AUTOTUNE_DROP_WINDOWS_REQUIRED = 4;
+const DISTRESS_AUTOTUNE_CONFIRMED_BEST_WINDOWS_REQUIRED = 4;
 const DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE = 'coarse';
 const DISTRESS_AUTOTUNE_SEARCH_PHASE_REFINE = 'refine';
 const DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD = 'hold';
@@ -229,6 +230,8 @@ function readDistressAutotuneState(): array
         'lastBpsMbps' => null,
         'bestBpsMbps' => null,
         'bestBpsConcurrency' => null,
+        'confirmedBestBpsMbps' => null,
+        'confirmedBestBpsConcurrency' => null,
         'lastTargetCount' => null,
         'lastBpsCycleId' => null,
         'bpsSettleCyclesRemaining' => 0,
@@ -271,6 +274,10 @@ function readDistressAutotuneState(): array
             ? (float)$data['bestBpsMbps']
             : null,
         'bestBpsConcurrency' => normalizeDistressConcurrency($data['bestBpsConcurrency'] ?? null),
+        'confirmedBestBpsMbps' => isset($data['confirmedBestBpsMbps']) && is_numeric($data['confirmedBestBpsMbps'])
+            ? (float)$data['confirmedBestBpsMbps']
+            : null,
+        'confirmedBestBpsConcurrency' => normalizeDistressConcurrency($data['confirmedBestBpsConcurrency'] ?? null),
         'lastTargetCount' => isset($data['lastTargetCount']) && is_numeric($data['lastTargetCount'])
             ? max(0, (int)$data['lastTargetCount'])
             : null,
@@ -314,6 +321,10 @@ function writeDistressAutotuneState(array $state): bool
             ? (float)$state['bestBpsMbps']
             : null,
         'bestBpsConcurrency' => normalizeDistressConcurrency($state['bestBpsConcurrency'] ?? null),
+        'confirmedBestBpsMbps' => isset($state['confirmedBestBpsMbps']) && is_numeric($state['confirmedBestBpsMbps'])
+            ? (float)$state['confirmedBestBpsMbps']
+            : null,
+        'confirmedBestBpsConcurrency' => normalizeDistressConcurrency($state['confirmedBestBpsConcurrency'] ?? null),
         'lastTargetCount' => isset($state['lastTargetCount']) && is_numeric($state['lastTargetCount'])
             ? max(0, (int)$state['lastTargetCount'])
             : null,
@@ -494,6 +505,8 @@ function resetDistressAutotuneBaseline(): bool
     $state['lastBpsMbps'] = null;
     $state['bestBpsMbps'] = null;
     $state['bestBpsConcurrency'] = null;
+    $state['confirmedBestBpsMbps'] = null;
+    $state['confirmedBestBpsConcurrency'] = null;
     $state['lastTargetCount'] = null;
     $state['lastBpsCycleId'] = null;
     $state['bpsSettleCyclesRemaining'] = 0;
@@ -561,6 +574,8 @@ function getDistressAutotuneStatus(): array
         'lastBpsMbps' => $state['lastBpsMbps'] ?? null,
         'bestBpsMbps' => $state['bestBpsMbps'] ?? null,
         'bestBpsConcurrency' => $state['bestBpsConcurrency'] ?? null,
+        'confirmedBestBpsMbps' => $state['confirmedBestBpsMbps'] ?? null,
+        'confirmedBestBpsConcurrency' => $state['confirmedBestBpsConcurrency'] ?? null,
         'lastTargetCount' => $state['lastTargetCount'] ?? null,
         'lastBpsCycleId' => $state['lastBpsCycleId'] ?? null,
         'bpsSettleCyclesRemaining' => (int)($state['bpsSettleCyclesRemaining'] ?? 0),
@@ -600,6 +615,8 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
     $state['lastBpsMbps'] = null;
     $state['bestBpsMbps'] = null;
     $state['bestBpsConcurrency'] = null;
+    $state['confirmedBestBpsMbps'] = null;
+    $state['confirmedBestBpsConcurrency'] = null;
     $state['lastTargetCount'] = null;
     $state['lastBpsCycleId'] = null;
     $state['bpsSettleCyclesRemaining'] = 0;
@@ -1004,6 +1021,8 @@ function resetDistressAutotuneBpsCycle(array &$state): void
     $state['lastBpsMbps'] = null;
     $state['bestBpsMbps'] = null;
     $state['bestBpsConcurrency'] = null;
+    $state['confirmedBestBpsMbps'] = null;
+    $state['confirmedBestBpsConcurrency'] = null;
     $state['lastBpsCycleId'] = null;
     $state['bpsSettleCyclesRemaining'] = 0;
     resetDistressProbeState($state, DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE);
@@ -1208,6 +1227,10 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
 
         $bestBpsMbps = isset($state['bestBpsMbps']) && is_numeric($state['bestBpsMbps']) ? (float)$state['bestBpsMbps'] : null;
         $bestBpsConcurrency = normalizeDistressConcurrency($state['bestBpsConcurrency'] ?? null);
+        $confirmedBestBpsMbps = isset($state['confirmedBestBpsMbps']) && is_numeric($state['confirmedBestBpsMbps'])
+            ? (float)$state['confirmedBestBpsMbps']
+            : null;
+        $confirmedBestBpsConcurrency = normalizeDistressConcurrency($state['confirmedBestBpsConcurrency'] ?? null);
         if (
             $bestBpsMbps === null ||
             $bestBpsMbps <= 0.0 ||
@@ -1225,31 +1248,56 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
             ]);
         }
 
+        $confirmedProbeScoreMbps = calculateDistressProbeScore($state, DISTRESS_AUTOTUNE_CONFIRMED_BEST_WINDOWS_REQUIRED);
+        if (
+            $confirmedProbeScoreMbps !== null &&
+            $currentConcurrency === $bestBpsConcurrency &&
+            (
+                $confirmedBestBpsMbps === null ||
+                $confirmedBestBpsConcurrency === null ||
+                $currentConcurrency === $confirmedBestBpsConcurrency ||
+                $confirmedProbeScoreMbps >= ($confirmedBestBpsMbps * DISTRESS_AUTOTUNE_BPS_BEST_IMPROVEMENT_RATIO)
+            )
+        ) {
+            $state['confirmedBestBpsMbps'] = $confirmedProbeScoreMbps;
+            $state['confirmedBestBpsConcurrency'] = $currentConcurrency;
+            $confirmedBestBpsMbps = $confirmedProbeScoreMbps;
+            $confirmedBestBpsConcurrency = $currentConcurrency;
+            distressAutotuneDebugLog('bps_confirmed_best', [
+                'confirmedBestBpsMbps' => $confirmedBestBpsMbps,
+                'confirmedBestBpsConcurrency' => $confirmedBestBpsConcurrency,
+                'windowsRequired' => DISTRESS_AUTOTUNE_CONFIRMED_BEST_WINDOWS_REQUIRED,
+            ]);
+        }
+
+        $decisionBestBpsMbps = $confirmedBestBpsMbps ?? $bestBpsMbps;
+        $decisionBestBpsConcurrency = $confirmedBestBpsConcurrency ?? $bestBpsConcurrency;
+
         $searchPhase = normalizeDistressSearchPhase($state['searchPhase'] ?? null);
         $targetConcurrency = $currentConcurrency;
         if ($searchPhase === DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE) {
             if (
-                $bestBpsMbps !== null &&
-                $bestBpsConcurrency !== null &&
-                $currentConcurrency > $bestBpsConcurrency &&
+                $decisionBestBpsMbps !== null &&
+                $decisionBestBpsConcurrency !== null &&
+                $currentConcurrency > $decisionBestBpsConcurrency &&
                 $dropWindowReady &&
-                !isWithinDistressBpsDeadZone($dropProbeScoreMbps, $bestBpsMbps) &&
-                $dropProbeScoreMbps < $bestBpsMbps
+                !isWithinDistressBpsDeadZone($dropProbeScoreMbps, $decisionBestBpsMbps) &&
+                $dropProbeScoreMbps < $decisionBestBpsMbps
             ) {
                 $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_REFINE;
-                $state['refineLowConcurrency'] = $bestBpsConcurrency;
+                $state['refineLowConcurrency'] = $decisionBestBpsConcurrency;
                 $state['refineHighConcurrency'] = $currentConcurrency;
-                $midpoint = calculateDistressRefineMidpoint($bestBpsConcurrency, $currentConcurrency);
+                $midpoint = calculateDistressRefineMidpoint($decisionBestBpsConcurrency, $currentConcurrency);
                 if ($midpoint === null) {
                     $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD;
-                    $targetConcurrency = $bestBpsConcurrency;
+                    $targetConcurrency = $decisionBestBpsConcurrency;
                 } else {
                     $targetConcurrency = $midpoint;
                 }
             } elseif (
-                $bestBpsMbps !== null &&
-                $bestBpsConcurrency !== null &&
-                $currentConcurrency > $bestBpsConcurrency &&
+                $decisionBestBpsMbps !== null &&
+                $decisionBestBpsConcurrency !== null &&
+                $currentConcurrency > $decisionBestBpsConcurrency &&
                 !$dropWindowReady
             ) {
                 $targetConcurrency = $currentConcurrency;
@@ -1257,42 +1305,42 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
                 $targetConcurrency = $explorationTargetConcurrency;
             } else {
                 $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD;
-                $targetConcurrency = $bestBpsConcurrency ?? $currentConcurrency;
+                $targetConcurrency = $decisionBestBpsConcurrency ?? $currentConcurrency;
             }
         } elseif ($searchPhase === DISTRESS_AUTOTUNE_SEARCH_PHASE_REFINE) {
             $refineLowConcurrency = normalizeDistressConcurrency($state['refineLowConcurrency'] ?? null);
             $refineHighConcurrency = normalizeDistressConcurrency($state['refineHighConcurrency'] ?? null);
             if ($refineLowConcurrency === null || $refineHighConcurrency === null) {
                 $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD;
-                $targetConcurrency = $bestBpsConcurrency ?? $currentConcurrency;
+                $targetConcurrency = $decisionBestBpsConcurrency ?? $currentConcurrency;
             } else {
-                if ($currentConcurrency > $bestBpsConcurrency) {
-                    if (isWithinDistressBpsDeadZone($probeScoreMbps, $bestBpsMbps ?? $probeScoreMbps)) {
+                if ($currentConcurrency > ($decisionBestBpsConcurrency ?? $currentConcurrency)) {
+                    if (isWithinDistressBpsDeadZone($probeScoreMbps, $decisionBestBpsMbps ?? $probeScoreMbps)) {
                         $state['refineLowConcurrency'] = $currentConcurrency;
                     } else {
                         $state['refineHighConcurrency'] = $currentConcurrency;
                     }
                 }
 
-                $refineLowConcurrency = normalizeDistressConcurrency($state['refineLowConcurrency'] ?? null) ?? $bestBpsConcurrency ?? $currentConcurrency;
+                $refineLowConcurrency = normalizeDistressConcurrency($state['refineLowConcurrency'] ?? null) ?? $decisionBestBpsConcurrency ?? $currentConcurrency;
                 $refineHighConcurrency = normalizeDistressConcurrency($state['refineHighConcurrency'] ?? null) ?? $currentConcurrency;
                 $midpoint = calculateDistressRefineMidpoint($refineLowConcurrency, $refineHighConcurrency);
                 if ($midpoint === null) {
                     $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD;
-                    $targetConcurrency = $bestBpsConcurrency ?? $currentConcurrency;
+                    $targetConcurrency = $decisionBestBpsConcurrency ?? $currentConcurrency;
                 } else {
                     $targetConcurrency = $midpoint;
                 }
             }
         } else {
-            $targetConcurrency = $bestBpsConcurrency ?? $currentConcurrency;
+            $targetConcurrency = $decisionBestBpsConcurrency ?? $currentConcurrency;
         }
 
         if (
-            $bestBpsMbps !== null &&
-            $bestBpsConcurrency !== null &&
-            $targetConcurrency > $bestBpsConcurrency &&
-            isWithinDistressBpsDeadZone($probeScoreMbps, $bestBpsMbps)
+            $decisionBestBpsMbps !== null &&
+            $decisionBestBpsConcurrency !== null &&
+            $targetConcurrency > $decisionBestBpsConcurrency &&
+            isWithinDistressBpsDeadZone($probeScoreMbps, $decisionBestBpsMbps)
         ) {
             $targetConcurrency = $currentConcurrency;
         }
@@ -1313,6 +1361,8 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
             'probeScoreMbps' => $probeScoreMbps,
             'bestBpsMbps' => $state['bestBpsMbps'] ?? null,
             'bestBpsConcurrency' => $state['bestBpsConcurrency'] ?? null,
+            'confirmedBestBpsMbps' => $state['confirmedBestBpsMbps'] ?? null,
+            'confirmedBestBpsConcurrency' => $state['confirmedBestBpsConcurrency'] ?? null,
             'searchPhase' => $state['searchPhase'] ?? DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE,
             'probeWindowCount' => getDistressProbeWindowCount($state),
             'currentCycleId' => $currentCycleId,
