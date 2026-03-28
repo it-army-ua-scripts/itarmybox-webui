@@ -435,7 +435,8 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
 
     $previousConfigConcurrency = getDistressConfigConcurrency();
     $previousState = readDistressAutotuneState();
-    if (!setDistressConfigConcurrency($concurrency)) {
+    $configChanged = $previousConfigConcurrency !== $concurrency;
+    if ($configChanged && !setDistressConfigConcurrency($concurrency)) {
         releaseDistressAutotuneLock($lockHandle);
         return ['ok' => false, 'error' => 'distress_concurrency_write_failed'];
     }
@@ -453,7 +454,7 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
     $state['lastBpsCycleId'] = null;
     $state['bpsSettleCyclesRemaining'] = 0;
     if (!writeDistressAutotuneState($state)) {
-        $rollbackConfigOk = setDistressConfigConcurrency($previousConfigConcurrency);
+        $rollbackConfigOk = !$configChanged || setDistressConfigConcurrency($previousConfigConcurrency);
         releaseDistressAutotuneLock($lockHandle);
         return [
             'ok' => false,
