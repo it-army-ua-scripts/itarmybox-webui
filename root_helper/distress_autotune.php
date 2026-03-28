@@ -22,6 +22,7 @@ const DISTRESS_AUTOTUNE_RAM_RECOVERY_PERCENT = 15.0;
 const DISTRESS_AUTOTUNE_COOLDOWN_SECONDS = 300;
 const DISTRESS_AUTOTUNE_BPS_STATE_FILE = ROOT_HELPER_STATE_DIR . '/distress-bps.json';
 const DISTRESS_AUTOTUNE_BPS_BEST_IMPROVEMENT_RATIO = 1.01;
+const DISTRESS_AUTOTUNE_BPS_DEAD_ZONE_RATIO = 0.04;
 const DISTRESS_AUTOTUNE_BPS_HOLD_RATIO = 0.985;
 const DISTRESS_AUTOTUNE_BPS_DROP_RATIO = 0.95;
 const DISTRESS_AUTOTUNE_BPS_DROP_RESTORE_RATIO = 0.97;
@@ -481,13 +482,11 @@ function adjustDistressConcurrencyForRamFloor(int $currentConcurrency, float $ra
     return max(DISTRESS_AUTOTUNE_MIN_CONCURRENCY, min($target, $currentConcurrency));
 }
 
-function calculateDistressTargetConcurrency(int $currentConcurrency, float $loadAverage, float $ramFreePercent): int
+function calculateDistressSafetyTargetConcurrency(int $currentConcurrency, float $loadAverage, float $ramFreePercent): int
 {
     $targetLoad = getDistressAutotuneTargetLoad();
     $deadZoneLower = getDistressAutotuneDeadZoneLower($targetLoad);
     $deadZoneUpper = getDistressAutotuneDeadZoneUpper($targetLoad);
-    $mediumIncreaseThreshold = getDistressAutotuneMediumIncreaseThreshold($targetLoad);
-    $largeIncreaseThreshold = getDistressAutotuneLargeIncreaseThreshold($targetLoad);
 
     if ($ramFreePercent < DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT) {
         return adjustDistressConcurrencyForRamFloor($currentConcurrency, $ramFreePercent);
@@ -504,13 +503,66 @@ function calculateDistressTargetConcurrency(int $currentConcurrency, float $load
     if ($loadAverage >= $deadZoneLower) {
         return $currentConcurrency;
     }
+    return $currentConcurrency;
+}
+
+function calculateDistressExplorationTargetConcurrency(int $currentConcurrency, float $loadAverage, float $ramFreePercent): int
+{
+    $targetLoad = getDistressAutotuneTargetLoad();
+    $mediumIncreaseThreshold = getDistressAutotuneMediumIncreaseThreshold($targetLoad);
+    $largeIncreaseThreshold = getDistressAutotuneLargeIncreaseThreshold($targetLoad);
+
+    if ($ramFreePercent < DISTRESS_AUTOTUNE_RAM_RECOVERY_PERCENT) {
+        return $currentConcurrency;
+    }
     if ($loadAverage >= $mediumIncreaseThreshold) {
-        return adjustDistressConcurrencyByPercent($currentConcurrency, 12);
+        return adjustDistressConcurrencyByPercent($currentConcurrency, 8);
     }
     if ($loadAverage >= $largeIncreaseThreshold) {
-        return adjustDistressConcurrencyByPercent($currentConcurrency, 18);
+        return adjustDistressConcurrencyByPercent($currentConcurrency, 12);
     }
-    return adjustDistressConcurrencyByPercent($currentConcurrency, 24);
+    return adjustDistressConcurrencyByPercent($currentConcurrency, 16);
+}
+
+function isWithinDistressBpsDeadZone(float $currentBpsMbps, float $bestBpsMbps): bool
+{
+    if ($bestBpsMbps <= 0.0) {
+        return false;
+    }
+
+    $ratioDelta = abs($currentBpsMbps - $bestBpsMbps) / $bestBpsMbps;
+    return $ratioDelta <= DISTRESS_AUTOTUNE_BPS_DEAD_ZONE_RATIO;
+}
+
+function applyDistressBpsStabilityTarget(
+    int $currentConcurrency,
+    int $explorationTargetConcurrency,
+    ?float $currentBpsMbps,
+    ?float $bestBpsMbps,
+    ?int $bestBpsConcurrency
+): int {
+    if (
+        $currentBpsMbps === null ||
+        $bestBpsMbps === null ||
+        $bestBpsMbps <= 0.0 ||
+        $bestBpsConcurrency === null
+    ) {
+        return $explorationTargetConcurrency;
+    }
+
+    if (isWithinDistressBpsDeadZone($currentBpsMbps, $bestBpsMbps)) {
+        return $currentConcurrency;
+    }
+
+    if ($currentConcurrency > $bestBpsConcurrency && $currentBpsMbps < $bestBpsMbps) {
+        return max($bestBpsConcurrency, adjustDistressConcurrencyByPercent($currentConcurrency, -12));
+    }
+
+    if ($currentConcurrency < $bestBpsConcurrency && $currentBpsMbps < $bestBpsMbps) {
+        return min($bestBpsConcurrency, max($currentConcurrency, $explorationTargetConcurrency));
+    }
+
+    return $explorationTargetConcurrency;
 }
 
 function readDistressBpsState(): array
@@ -793,8 +845,11 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
         return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'cooldown'];
     }
 
-    $targetConcurrency = calculateDistressTargetConcurrency($currentConcurrency, $load, $freeRam);
-    $targetConcurrency = applyDistressBpsAutotuneGuard(
+    $targetConcurrency = calculateDistressSafetyTargetConcurrency($currentConcurrency, $load, $freeRam);
+    if ($targetConcurrency >= $currentConcurrency) {
+        $targetConcurrency = calculateDistressExplorationTargetConcurrency($currentConcurrency, $load, $freeRam);
+    }
+    $targetConcurrency = applyDistressBpsStabilityTarget(
         $currentConcurrency,
         $targetConcurrency,
         $evaluatedBpsMbps,
