@@ -10,6 +10,7 @@ const DISTRESS_BPS_SAMPLE_LIMIT = 6;
 const DISTRESS_BPS_LOG_LINES = 240;
 const DISTRESS_BPS_STALE_AFTER_SECONDS = 900;
 const DISTRESS_BPS_MIN_SAMPLES = 3;
+const DISTRESS_BPS_WARMUP_AFTER_START_SECONDS = 60;
 
 function writeDistressBpsDebugLog(string $event, array $context = []): void
 {
@@ -96,6 +97,19 @@ function parseDistressLoadedTargetCountFromLogLine(string $line): ?int
     return max(0, (int)$matches[1]);
 }
 
+function parseDistressStartedConcurrencyFromLogLine(string $line): ?int
+{
+    if (!isLikelyDistressLogLine($line)) {
+        return null;
+    }
+
+    if (preg_match('/\bstarted with concurrency:\s*(\d+)\b/i', $line, $matches) !== 1) {
+        return null;
+    }
+
+    return max(0, (int)$matches[1]);
+}
+
 function parseDistressLogTimestamp(string $line): ?int
 {
     if (!isLikelyDistressLogLine($line)) {
@@ -134,6 +148,9 @@ function buildDistressBpsStatePayload(string $logs): array
     $latestTargetCountAt = null;
     $cycleStartedAt = null;
     $cycleId = null;
+    $runStartedAt = null;
+    $runWarmupUntil = null;
+    $startedConcurrency = null;
 
     $lines = preg_split('/\r\n|\r|\n/', trim($logs));
     if (!is_array($lines)) {
@@ -143,15 +160,26 @@ function buildDistressBpsStatePayload(string $logs): array
     foreach ($lines as $line) {
         $timestamp = parseDistressLogTimestamp((string)$line);
 
+        $startedConcurrencyCandidate = parseDistressStartedConcurrencyFromLogLine((string)$line);
+        if ($startedConcurrencyCandidate !== null && $timestamp !== null) {
+            $runStartedAt = $timestamp;
+            $runWarmupUntil = $timestamp + DISTRESS_BPS_WARMUP_AFTER_START_SECONDS;
+            $startedConcurrency = $startedConcurrencyCandidate;
+            $samples = [];
+        }
+
         $targetCount = parseDistressLoadedTargetCountFromLogLine((string)$line);
         if ($targetCount !== null) {
+            if ($latestTargetCount === null || $targetCount !== $latestTargetCount) {
+                $cycleStartedAt = $timestamp;
+                $cycleId = 'targets:' . $targetCount;
+                $samples = [];
+            } elseif ($cycleId === null) {
+                $cycleId = 'targets:' . $targetCount;
+            }
+
             $latestTargetCount = $targetCount;
             $latestTargetCountAt = $timestamp;
-            $cycleStartedAt = $timestamp;
-            $cycleId = $timestamp !== null
-                ? ('targets:' . $targetCount . '@' . $timestamp)
-                : ('targets:' . $targetCount);
-            $samples = [];
         }
 
         $bpsMbps = parseDistressBpsMbpsFromLogLine((string)$line);
@@ -160,6 +188,9 @@ function buildDistressBpsStatePayload(string $logs): array
         }
 
         if ($cycleStartedAt !== null && $timestamp < $cycleStartedAt) {
+            continue;
+        }
+        if ($runWarmupUntil !== null && $timestamp < $runWarmupUntil) {
             continue;
         }
 
@@ -201,6 +232,9 @@ function buildDistressBpsStatePayload(string $logs): array
         'latestTargetCountAt' => $latestTargetCountAt,
         'cycleId' => $cycleId,
         'cycleStartedAt' => $cycleStartedAt,
+        'runStartedAt' => $runStartedAt,
+        'runWarmupUntil' => $runWarmupUntil,
+        'startedConcurrency' => $startedConcurrency,
         'hasFreshSamples' => $sampleCount > 0 && $latestSampleAt !== null,
         'samples' => $samples,
     ];
@@ -214,6 +248,9 @@ function buildDistressBpsStatePayload(string $logs): array
         'latestTargetCount' => $latestTargetCount,
         'cycleId' => $cycleId,
         'cycleStartedAt' => $cycleStartedAt,
+        'runStartedAt' => $runStartedAt,
+        'runWarmupUntil' => $runWarmupUntil,
+        'startedConcurrency' => $startedConcurrency,
         'hasFreshSamples' => $payload['hasFreshSamples'],
     ]);
 

@@ -42,8 +42,10 @@ if [ "$SKIP_ROOT_HELPER_SOCKET_REFRESH" != "1" ]; then
 else
   echo "Skipping root helper socket refresh for this run."
 fi
-systemctl enable --now itarmybox-distress-bps-collector.timer
-systemctl enable --now itarmybox-distress-autotune.timer
+systemctl enable itarmybox-distress-bps-collector.timer
+systemctl restart itarmybox-distress-bps-collector.timer
+systemctl enable itarmybox-distress-autotune.timer
+systemctl restart itarmybox-distress-autotune.timer
 systemctl enable itarmybox-wifi-txpower.service
 
 cleanup_legacy_webui_files
