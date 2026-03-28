@@ -207,8 +207,8 @@ Check these first:
   - timezone `Europe/Kyiv` with NTP ensure
   - update branch `main`
   - browser theme preference and desired home traffic slider value cleared from `localStorage`
-- Distress autotune no longer uses a fixed target load of `4.2`; it now derives target load from the weighted CPU capacity of the target `4x Cortex-A73 + 2x Cortex-A53` system, keeping roughly one CPU core equivalent in reserve for the system and aiming below full saturation.
-- Distress autotune now starts from `2048`, caps at `30720`, keeps a RAM safety window of `10%..15%`, and increases concurrency a bit faster when the system has headroom.
+- Distress autotune now starts from `2048`, caps at `30720`, and uses PSI-based backpressure instead of `load average`: CPU PSI drives growth/hold/reduction, while memory and I/O PSI `some/full avg10` act as stronger stall signals.
+- The autotune tick now reads `/proc/pressure/cpu`, `/proc/pressure/memory`, and `/proc/pressure/io`; UI/helper code should treat PSI as the source of truth for runtime pressure reporting.
 - Distress autotune state should be reasoned about as three separate values:
   - `desiredConcurrency` in autotune state
   - `configConcurrency` from `ExecStart`
