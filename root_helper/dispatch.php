@@ -177,11 +177,7 @@ function dispatchRootHelperAction(string $action, array $request, array $modules
         case 'distress_autotune_set':
             return setDistressAutotuneMode($request['enabled'] ?? null, $request['concurrency'] ?? null);
         case 'distress_autotune_tick':
-            return distressAutotuneTick(
-                $request['cpuPressure'] ?? null,
-                $request['memoryPressure'] ?? null,
-                $request['ioPressure'] ?? null
-            );
+            return distressAutotuneTick($request['loadAverage'] ?? null, $request['ramFreePercent'] ?? null);
         case 'service_logs':
             $lines = (int)($request['lines'] ?? 80);
             $module = rootHelperValidateModule($request['module'] ?? null, $modules);

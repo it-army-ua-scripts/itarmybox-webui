@@ -143,20 +143,20 @@ function getDistressAutotuneSettings(): array
         'cooldownSeconds' => (int)($response['cooldownSeconds'] ?? 300),
         'cooldownRemaining' => (int)($response['cooldownRemaining'] ?? 0),
         'statusKey' => (string)($response['statusKey'] ?? 'distress_autotune_status_active'),
-        'lastCpuPsiSomeAvg10' => isset($response['lastCpuPsiSomeAvg10']) && is_numeric($response['lastCpuPsiSomeAvg10'])
-            ? (float)$response['lastCpuPsiSomeAvg10']
+        'targetLoad' => (float)($response['targetLoad'] ?? 1.0),
+        'cpuCount' => (int)($response['cpuCount'] ?? 1),
+        'cpuEffectiveCapacity' => isset($response['cpuEffectiveCapacity']) && is_numeric($response['cpuEffectiveCapacity'])
+            ? (float)$response['cpuEffectiveCapacity']
+            : 1.0,
+        'systemCpuReserve' => isset($response['systemCpuReserve']) && is_numeric($response['systemCpuReserve'])
+            ? (float)$response['systemCpuReserve']
+            : 1.0,
+        'minFreeRamPercent' => (float)($response['minFreeRamPercent'] ?? 10.0),
+        'lastLoadAverage' => isset($response['lastLoadAverage']) && is_numeric($response['lastLoadAverage'])
+            ? (float)$response['lastLoadAverage']
             : null,
-        'lastMemoryPsiSomeAvg10' => isset($response['lastMemoryPsiSomeAvg10']) && is_numeric($response['lastMemoryPsiSomeAvg10'])
-            ? (float)$response['lastMemoryPsiSomeAvg10']
-            : null,
-        'lastMemoryPsiFullAvg10' => isset($response['lastMemoryPsiFullAvg10']) && is_numeric($response['lastMemoryPsiFullAvg10'])
-            ? (float)$response['lastMemoryPsiFullAvg10']
-            : null,
-        'lastIoPsiSomeAvg10' => isset($response['lastIoPsiSomeAvg10']) && is_numeric($response['lastIoPsiSomeAvg10'])
-            ? (float)$response['lastIoPsiSomeAvg10']
-            : null,
-        'lastIoPsiFullAvg10' => isset($response['lastIoPsiFullAvg10']) && is_numeric($response['lastIoPsiFullAvg10'])
-            ? (float)$response['lastIoPsiFullAvg10']
+        'lastRamFreePercent' => isset($response['lastRamFreePercent']) && is_numeric($response['lastRamFreePercent'])
+            ? (float)$response['lastRamFreePercent']
             : null,
     ];
 }

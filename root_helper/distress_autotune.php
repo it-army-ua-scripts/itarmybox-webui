@@ -9,24 +9,17 @@ const DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY = 2048;
 const DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY = 4096;
 const DISTRESS_AUTOTUNE_MIN_CONCURRENCY = 64;
 const DISTRESS_AUTOTUNE_MAX_CONCURRENCY = 30720;
+const DISTRESS_AUTOTUNE_BIG_CORE_COUNT = 4;
+const DISTRESS_AUTOTUNE_BIG_CORE_WEIGHT = 1.0;
+const DISTRESS_AUTOTUNE_LITTLE_CORE_COUNT = 2;
+const DISTRESS_AUTOTUNE_LITTLE_CORE_WEIGHT = 0.6;
+const DISTRESS_AUTOTUNE_SYSTEM_CPU_RESERVE = 1.0;
+const DISTRESS_AUTOTUNE_CPU_TARGET_UTILIZATION = 0.85;
+const DISTRESS_AUTOTUNE_TARGET_LOAD_MIN = 1.0;
+const DISTRESS_AUTOTUNE_DEAD_ZONE_HALF_WIDTH = 0.4;
+const DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT = 10.0;
+const DISTRESS_AUTOTUNE_RAM_RECOVERY_PERCENT = 15.0;
 const DISTRESS_AUTOTUNE_COOLDOWN_SECONDS = 300;
-const DISTRESS_AUTOTUNE_CPU_PSI_HOLD_THRESHOLD = 8.0;
-const DISTRESS_AUTOTUNE_CPU_PSI_REDUCE_THRESHOLD = 16.0;
-const DISTRESS_AUTOTUNE_CPU_PSI_CRITICAL_THRESHOLD = 25.0;
-const DISTRESS_AUTOTUNE_CPU_PSI_MEDIUM_INCREASE_THRESHOLD = 3.0;
-const DISTRESS_AUTOTUNE_CPU_PSI_LARGE_INCREASE_THRESHOLD = 1.2;
-const DISTRESS_AUTOTUNE_MEMORY_PSI_SOME_HOLD_THRESHOLD = 2.0;
-const DISTRESS_AUTOTUNE_MEMORY_PSI_SOME_REDUCE_THRESHOLD = 4.0;
-const DISTRESS_AUTOTUNE_MEMORY_PSI_SOME_CRITICAL_THRESHOLD = 8.0;
-const DISTRESS_AUTOTUNE_MEMORY_PSI_FULL_HOLD_THRESHOLD = 0.3;
-const DISTRESS_AUTOTUNE_MEMORY_PSI_FULL_REDUCE_THRESHOLD = 0.8;
-const DISTRESS_AUTOTUNE_MEMORY_PSI_FULL_CRITICAL_THRESHOLD = 1.5;
-const DISTRESS_AUTOTUNE_IO_PSI_SOME_HOLD_THRESHOLD = 3.0;
-const DISTRESS_AUTOTUNE_IO_PSI_SOME_REDUCE_THRESHOLD = 6.0;
-const DISTRESS_AUTOTUNE_IO_PSI_SOME_CRITICAL_THRESHOLD = 10.0;
-const DISTRESS_AUTOTUNE_IO_PSI_FULL_HOLD_THRESHOLD = 0.3;
-const DISTRESS_AUTOTUNE_IO_PSI_FULL_REDUCE_THRESHOLD = 0.8;
-const DISTRESS_AUTOTUNE_IO_PSI_FULL_CRITICAL_THRESHOLD = 1.5;
 
 function ensureDistressAutotuneTimerInstalled(): bool
 {
@@ -60,34 +53,61 @@ function normalizeDistressConcurrency($value): ?int
     return min(DISTRESS_AUTOTUNE_MAX_CONCURRENCY, $concurrency);
 }
 
-function normalizeDistressPsiMetric($value): ?float
+function getDistressAutotuneCpuCount(): int
 {
-    if (!is_numeric($value)) {
-        return null;
+    $cpuCount = 0;
+
+    $rawCpuInfo = @file_get_contents('/proc/cpuinfo');
+    if (is_string($rawCpuInfo) && $rawCpuInfo !== '') {
+        if (preg_match_all('/^processor\s*:/mi', $rawCpuInfo, $matches) > 0) {
+            $cpuCount = count($matches[0]);
+        }
     }
 
-    return max(0.0, min(100.0, (float)$value));
+    if ($cpuCount <= 0) {
+        $nproc = trim(runCommand('/usr/bin/env nproc', $code));
+        if ($code === 0 && preg_match('/^\d+$/', $nproc) === 1) {
+            $cpuCount = (int)$nproc;
+        }
+    }
+
+    return max(1, $cpuCount);
 }
 
-function normalizeDistressPsiSnapshot($snapshot, bool $fullOptional = false): ?array
+function getDistressAutotuneTargetLoad(): float
 {
-    if (!is_array($snapshot)) {
-        return null;
-    }
+    $effectiveCpuCapacity =
+        (DISTRESS_AUTOTUNE_BIG_CORE_COUNT * DISTRESS_AUTOTUNE_BIG_CORE_WEIGHT) +
+        (DISTRESS_AUTOTUNE_LITTLE_CORE_COUNT * DISTRESS_AUTOTUNE_LITTLE_CORE_WEIGHT);
+    $usableLoad = max(
+        DISTRESS_AUTOTUNE_TARGET_LOAD_MIN,
+        $effectiveCpuCapacity - DISTRESS_AUTOTUNE_SYSTEM_CPU_RESERVE
+    );
 
-    $someAvg10 = normalizeDistressPsiMetric($snapshot['someAvg10'] ?? null);
-    $fullAvg10 = normalizeDistressPsiMetric($snapshot['fullAvg10'] ?? null);
-    if ($someAvg10 === null) {
-        return null;
-    }
-    if (!$fullOptional && $fullAvg10 === null) {
-        return null;
-    }
+    return max(
+        DISTRESS_AUTOTUNE_TARGET_LOAD_MIN,
+        $usableLoad * DISTRESS_AUTOTUNE_CPU_TARGET_UTILIZATION
+    );
+}
 
-    return [
-        'someAvg10' => $someAvg10,
-        'fullAvg10' => $fullAvg10,
-    ];
+function getDistressAutotuneDeadZoneLower(float $targetLoad): float
+{
+    return max(0.7, $targetLoad - DISTRESS_AUTOTUNE_DEAD_ZONE_HALF_WIDTH);
+}
+
+function getDistressAutotuneDeadZoneUpper(float $targetLoad): float
+{
+    return $targetLoad + DISTRESS_AUTOTUNE_DEAD_ZONE_HALF_WIDTH;
+}
+
+function getDistressAutotuneMediumIncreaseThreshold(float $targetLoad): float
+{
+    return max(0.8, $targetLoad - 1.2);
+}
+
+function getDistressAutotuneLargeIncreaseThreshold(float $targetLoad): float
+{
+    return max(0.5, $targetLoad - 3.2);
 }
 
 function getDistressConfigConcurrency(): int
@@ -164,11 +184,8 @@ function readDistressAutotuneState(): array
         'enabled' => true,
         'desiredConcurrency' => DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
         'lastAdjustedAt' => 0,
-        'lastCpuPsiSomeAvg10' => null,
-        'lastMemoryPsiSomeAvg10' => null,
-        'lastMemoryPsiFullAvg10' => null,
-        'lastIoPsiSomeAvg10' => null,
-        'lastIoPsiFullAvg10' => null,
+        'lastLoadAverage' => null,
+        'lastRamFreePercent' => null,
     ];
 
     $raw = @file_get_contents(DISTRESS_AUTOTUNE_STATE_FILE);
@@ -189,11 +206,12 @@ function readDistressAutotuneState(): array
         'enabled' => ($data['enabled'] ?? true) === true,
         'desiredConcurrency' => $desiredConcurrency,
         'lastAdjustedAt' => $lastAdjustedAt,
-        'lastCpuPsiSomeAvg10' => normalizeDistressPsiMetric($data['lastCpuPsiSomeAvg10'] ?? null),
-        'lastMemoryPsiSomeAvg10' => normalizeDistressPsiMetric($data['lastMemoryPsiSomeAvg10'] ?? null),
-        'lastMemoryPsiFullAvg10' => normalizeDistressPsiMetric($data['lastMemoryPsiFullAvg10'] ?? null),
-        'lastIoPsiSomeAvg10' => normalizeDistressPsiMetric($data['lastIoPsiSomeAvg10'] ?? null),
-        'lastIoPsiFullAvg10' => normalizeDistressPsiMetric($data['lastIoPsiFullAvg10'] ?? null),
+        'lastLoadAverage' => isset($data['lastLoadAverage']) && is_numeric($data['lastLoadAverage'])
+            ? (float)$data['lastLoadAverage']
+            : null,
+        'lastRamFreePercent' => isset($data['lastRamFreePercent']) && is_numeric($data['lastRamFreePercent'])
+            ? (float)$data['lastRamFreePercent']
+            : null,
     ];
 }
 
@@ -203,11 +221,12 @@ function writeDistressAutotuneState(array $state): bool
         'enabled' => ($state['enabled'] ?? false) === true,
         'desiredConcurrency' => (int)($state['desiredConcurrency'] ?? DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY),
         'lastAdjustedAt' => (int)($state['lastAdjustedAt'] ?? 0),
-        'lastCpuPsiSomeAvg10' => normalizeDistressPsiMetric($state['lastCpuPsiSomeAvg10'] ?? null),
-        'lastMemoryPsiSomeAvg10' => normalizeDistressPsiMetric($state['lastMemoryPsiSomeAvg10'] ?? null),
-        'lastMemoryPsiFullAvg10' => normalizeDistressPsiMetric($state['lastMemoryPsiFullAvg10'] ?? null),
-        'lastIoPsiSomeAvg10' => normalizeDistressPsiMetric($state['lastIoPsiSomeAvg10'] ?? null),
-        'lastIoPsiFullAvg10' => normalizeDistressPsiMetric($state['lastIoPsiFullAvg10'] ?? null),
+        'lastLoadAverage' => isset($state['lastLoadAverage']) && is_numeric($state['lastLoadAverage'])
+            ? (float)$state['lastLoadAverage']
+            : null,
+        'lastRamFreePercent' => isset($state['lastRamFreePercent']) && is_numeric($state['lastRamFreePercent'])
+            ? (float)$state['lastRamFreePercent']
+            : null,
     ], JSON_UNESCAPED_SLASHES);
 
     return is_string($payload) && @file_put_contents(DISTRESS_AUTOTUNE_STATE_FILE, $payload) !== false;
@@ -248,11 +267,8 @@ function resetDistressAutotuneBaseline(): bool
 
     $state['desiredConcurrency'] = DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY;
     $state['lastAdjustedAt'] = 0;
-    $state['lastCpuPsiSomeAvg10'] = null;
-    $state['lastMemoryPsiSomeAvg10'] = null;
-    $state['lastMemoryPsiFullAvg10'] = null;
-    $state['lastIoPsiSomeAvg10'] = null;
-    $state['lastIoPsiFullAvg10'] = null;
+    $state['lastLoadAverage'] = null;
+    $state['lastRamFreePercent'] = null;
     if (writeDistressAutotuneState($state)) {
         return true;
     }
@@ -264,6 +280,7 @@ function resetDistressAutotuneBaseline(): bool
 function getDistressAutotuneStatus(): array
 {
     $state = readDistressAutotuneState();
+    $targetLoad = getDistressAutotuneTargetLoad();
     $desiredConcurrency = (int)($state['desiredConcurrency'] ?? DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY);
     $configConcurrency = getDistressConfigConcurrency();
     if ($configConcurrency !== $desiredConcurrency) {
@@ -297,15 +314,21 @@ function getDistressAutotuneStatus(): array
         'liveAppliedConcurrency' => $liveAppliedConcurrency,
         'currentConcurrency' => $configConcurrency,
         'defaultConcurrency' => DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
+        'targetLoad' => $targetLoad,
+        'cpuCount' => getDistressAutotuneCpuCount(),
+        'cpuEffectiveCapacity' => (
+            DISTRESS_AUTOTUNE_BIG_CORE_COUNT * DISTRESS_AUTOTUNE_BIG_CORE_WEIGHT
+        ) + (
+            DISTRESS_AUTOTUNE_LITTLE_CORE_COUNT * DISTRESS_AUTOTUNE_LITTLE_CORE_WEIGHT
+        ),
+        'systemCpuReserve' => DISTRESS_AUTOTUNE_SYSTEM_CPU_RESERVE,
+        'minFreeRamPercent' => DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT,
         'cooldownSeconds' => DISTRESS_AUTOTUNE_COOLDOWN_SECONDS,
         'cooldownRemaining' => $cooldownRemaining,
         'statusKey' => $statusKey,
         'lastAdjustedAt' => (int)($state['lastAdjustedAt'] ?? 0),
-        'lastCpuPsiSomeAvg10' => $state['lastCpuPsiSomeAvg10'] ?? null,
-        'lastMemoryPsiSomeAvg10' => $state['lastMemoryPsiSomeAvg10'] ?? null,
-        'lastMemoryPsiFullAvg10' => $state['lastMemoryPsiFullAvg10'] ?? null,
-        'lastIoPsiSomeAvg10' => $state['lastIoPsiSomeAvg10'] ?? null,
-        'lastIoPsiFullAvg10' => $state['lastIoPsiFullAvg10'] ?? null,
+        'lastLoadAverage' => $state['lastLoadAverage'] ?? null,
+        'lastRamFreePercent' => $state['lastRamFreePercent'] ?? null,
     ];
 }
 
@@ -336,11 +359,8 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
     $state['enabled'] = $enabled;
     $state['desiredConcurrency'] = $concurrency;
     $state['lastAdjustedAt'] = 0;
-    $state['lastCpuPsiSomeAvg10'] = null;
-    $state['lastMemoryPsiSomeAvg10'] = null;
-    $state['lastMemoryPsiFullAvg10'] = null;
-    $state['lastIoPsiSomeAvg10'] = null;
-    $state['lastIoPsiFullAvg10'] = null;
+    $state['lastLoadAverage'] = null;
+    $state['lastRamFreePercent'] = null;
     if (!writeDistressAutotuneState($state)) {
         $rollbackConfigOk = setDistressConfigConcurrency($previousConfigConcurrency);
         releaseDistressAutotuneLock($lockHandle);
@@ -370,67 +390,67 @@ function adjustDistressConcurrencyByPercent(int $currentConcurrency, int $percen
     return roundDistressConcurrency($next);
 }
 
-function calculateDistressTargetConcurrency(int $currentConcurrency, array $cpuPressure, array $memoryPressure, array $ioPressure): int
+function adjustDistressConcurrencyForRamFloor(int $currentConcurrency, float $ramFreePercent): int
 {
-    $cpuSome = (float)$cpuPressure['someAvg10'];
-    $memorySome = (float)$memoryPressure['someAvg10'];
-    $memoryFull = (float)($memoryPressure['fullAvg10'] ?? 0.0);
-    $ioSome = (float)$ioPressure['someAvg10'];
-    $ioFull = (float)($ioPressure['fullAvg10'] ?? 0.0);
-
-    if (
-        $cpuSome >= DISTRESS_AUTOTUNE_CPU_PSI_CRITICAL_THRESHOLD
-        || $memorySome >= DISTRESS_AUTOTUNE_MEMORY_PSI_SOME_CRITICAL_THRESHOLD
-        || $memoryFull >= DISTRESS_AUTOTUNE_MEMORY_PSI_FULL_CRITICAL_THRESHOLD
-        || $ioSome >= DISTRESS_AUTOTUNE_IO_PSI_SOME_CRITICAL_THRESHOLD
-        || $ioFull >= DISTRESS_AUTOTUNE_IO_PSI_FULL_CRITICAL_THRESHOLD
-    ) {
-        return adjustDistressConcurrencyByPercent($currentConcurrency, -20);
-    }
-
-    if (
-        $cpuSome >= DISTRESS_AUTOTUNE_CPU_PSI_REDUCE_THRESHOLD
-        || $memorySome >= DISTRESS_AUTOTUNE_MEMORY_PSI_SOME_REDUCE_THRESHOLD
-        || $memoryFull >= DISTRESS_AUTOTUNE_MEMORY_PSI_FULL_REDUCE_THRESHOLD
-        || $ioSome >= DISTRESS_AUTOTUNE_IO_PSI_SOME_REDUCE_THRESHOLD
-        || $ioFull >= DISTRESS_AUTOTUNE_IO_PSI_FULL_REDUCE_THRESHOLD
-    ) {
-        return adjustDistressConcurrencyByPercent($currentConcurrency, -10);
-    }
-
-    if (
-        $cpuSome >= DISTRESS_AUTOTUNE_CPU_PSI_HOLD_THRESHOLD
-        || $memorySome >= DISTRESS_AUTOTUNE_MEMORY_PSI_SOME_HOLD_THRESHOLD
-        || $memoryFull >= DISTRESS_AUTOTUNE_MEMORY_PSI_FULL_HOLD_THRESHOLD
-        || $ioSome >= DISTRESS_AUTOTUNE_IO_PSI_SOME_HOLD_THRESHOLD
-        || $ioFull >= DISTRESS_AUTOTUNE_IO_PSI_FULL_HOLD_THRESHOLD
-    ) {
+    if ($ramFreePercent >= DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT) {
         return $currentConcurrency;
     }
 
-    if ($cpuSome >= DISTRESS_AUTOTUNE_CPU_PSI_MEDIUM_INCREASE_THRESHOLD) {
-        return adjustDistressConcurrencyByPercent($currentConcurrency, 12);
-    }
-    if ($cpuSome >= DISTRESS_AUTOTUNE_CPU_PSI_LARGE_INCREASE_THRESHOLD) {
-        return adjustDistressConcurrencyByPercent($currentConcurrency, 18);
+    if ($ramFreePercent <= 0.0) {
+        return DISTRESS_AUTOTUNE_MIN_CONCURRENCY;
     }
 
+    $deficitRatio = (DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT - $ramFreePercent) / DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT;
+    $percentDrop = (int)ceil($deficitRatio * 20.0);
+    $percentDrop = max(5, min(20, $percentDrop));
+
+    $target = adjustDistressConcurrencyByPercent($currentConcurrency, -$percentDrop);
+    if ($target >= $currentConcurrency) {
+        $target = roundDistressConcurrency($currentConcurrency - 64);
+    }
+
+    return max(DISTRESS_AUTOTUNE_MIN_CONCURRENCY, min($target, $currentConcurrency));
+}
+
+function calculateDistressTargetConcurrency(int $currentConcurrency, float $loadAverage, float $ramFreePercent): int
+{
+    $targetLoad = getDistressAutotuneTargetLoad();
+    $deadZoneLower = getDistressAutotuneDeadZoneLower($targetLoad);
+    $deadZoneUpper = getDistressAutotuneDeadZoneUpper($targetLoad);
+    $mediumIncreaseThreshold = getDistressAutotuneMediumIncreaseThreshold($targetLoad);
+    $largeIncreaseThreshold = getDistressAutotuneLargeIncreaseThreshold($targetLoad);
+
+    if ($ramFreePercent < DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT) {
+        return adjustDistressConcurrencyForRamFloor($currentConcurrency, $ramFreePercent);
+    }
+    if ($ramFreePercent < DISTRESS_AUTOTUNE_RAM_RECOVERY_PERCENT) {
+        return $currentConcurrency;
+    }
+    if ($loadAverage > $deadZoneUpper) {
+        return adjustDistressConcurrencyByPercent($currentConcurrency, -20);
+    }
+    if ($loadAverage > $targetLoad) {
+        return adjustDistressConcurrencyByPercent($currentConcurrency, -10);
+    }
+    if ($loadAverage >= $deadZoneLower) {
+        return $currentConcurrency;
+    }
+    if ($loadAverage >= $mediumIncreaseThreshold) {
+        return adjustDistressConcurrencyByPercent($currentConcurrency, 12);
+    }
+    if ($loadAverage >= $largeIncreaseThreshold) {
+        return adjustDistressConcurrencyByPercent($currentConcurrency, 18);
+    }
     return adjustDistressConcurrencyByPercent($currentConcurrency, 24);
 }
 
-function distressAutotuneTick($cpuPressure, $memoryPressure, $ioPressure): array
+function distressAutotuneTick($loadAverage, $ramFreePercent): array
 {
-    $cpuPressureNormalized = normalizeDistressPsiSnapshot($cpuPressure, true);
-    if ($cpuPressureNormalized === null) {
-        return ['ok' => false, 'error' => 'invalid_cpu_pressure'];
+    if (!is_numeric($loadAverage)) {
+        return ['ok' => false, 'error' => 'invalid_load_average'];
     }
-    $memoryPressureNormalized = normalizeDistressPsiSnapshot($memoryPressure);
-    if ($memoryPressureNormalized === null) {
-        return ['ok' => false, 'error' => 'invalid_memory_pressure'];
-    }
-    $ioPressureNormalized = normalizeDistressPsiSnapshot($ioPressure);
-    if ($ioPressureNormalized === null) {
-        return ['ok' => false, 'error' => 'invalid_io_pressure'];
+    if (!is_numeric($ramFreePercent)) {
+        return ['ok' => false, 'error' => 'invalid_ram_free_percent'];
     }
 
     $lockHandle = acquireDistressAutotuneLock();
@@ -438,6 +458,8 @@ function distressAutotuneTick($cpuPressure, $memoryPressure, $ioPressure): array
         return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
     }
 
+    $load = max(0.0, (float)$loadAverage);
+    $freeRam = max(0.0, min(100.0, (float)$ramFreePercent));
     $state = readDistressAutotuneState();
     if (($state['enabled'] ?? false) !== true) {
         releaseDistressAutotuneLock($lockHandle);
@@ -454,11 +476,8 @@ function distressAutotuneTick($cpuPressure, $memoryPressure, $ioPressure): array
     $currentConcurrency = $liveAppliedConcurrency ?? $configConcurrency;
     $previousDesiredConcurrency = (int)($state['desiredConcurrency'] ?? $configConcurrency);
     $state['desiredConcurrency'] = $configConcurrency;
-    $state['lastCpuPsiSomeAvg10'] = $cpuPressureNormalized['someAvg10'];
-    $state['lastMemoryPsiSomeAvg10'] = $memoryPressureNormalized['someAvg10'];
-    $state['lastMemoryPsiFullAvg10'] = $memoryPressureNormalized['fullAvg10'];
-    $state['lastIoPsiSomeAvg10'] = $ioPressureNormalized['someAvg10'];
-    $state['lastIoPsiFullAvg10'] = $ioPressureNormalized['fullAvg10'];
+    $state['lastLoadAverage'] = $load;
+    $state['lastRamFreePercent'] = $freeRam;
     $now = time();
     if (($now - (int)($state['lastAdjustedAt'] ?? 0)) < DISTRESS_AUTOTUNE_COOLDOWN_SECONDS) {
         writeDistressAutotuneState($state);
@@ -466,12 +485,7 @@ function distressAutotuneTick($cpuPressure, $memoryPressure, $ioPressure): array
         return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'cooldown'];
     }
 
-    $targetConcurrency = calculateDistressTargetConcurrency(
-        $currentConcurrency,
-        $cpuPressureNormalized,
-        $memoryPressureNormalized,
-        $ioPressureNormalized
-    );
+    $targetConcurrency = calculateDistressTargetConcurrency($currentConcurrency, $load, $freeRam);
 
     if ($targetConcurrency === $currentConcurrency) {
         writeDistressAutotuneState($state);
@@ -522,8 +536,7 @@ function distressAutotuneTick($cpuPressure, $memoryPressure, $ioPressure): array
     return getDistressAutotuneStatus() + [
         'changed' => true,
         'previousConcurrency' => $currentConcurrency,
-        'cpuPressure' => $cpuPressureNormalized,
-        'memoryPressure' => $memoryPressureNormalized,
-        'ioPressure' => $ioPressureNormalized,
+        'loadAverage' => $load,
+        'ramFreePercent' => $freeRam,
     ];
 }

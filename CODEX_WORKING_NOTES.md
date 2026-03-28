@@ -207,8 +207,8 @@ Check these first:
   - timezone `Europe/Kyiv` with NTP ensure
   - update branch `main`
   - browser theme preference and desired home traffic slider value cleared from `localStorage`
-- Distress autotune now starts from `2048`, caps at `30720`, and uses PSI-based backpressure instead of `load average`: CPU PSI drives growth/hold/reduction, while memory and I/O PSI `some/full avg10` act as stronger stall signals.
-- The autotune tick now reads `/proc/pressure/cpu`, `/proc/pressure/memory`, and `/proc/pressure/io`; UI/helper code should treat PSI as the source of truth for runtime pressure reporting.
+- Distress autotune on the real box is back to the tuned `load average + RAM` model because the deployed kernel has `# CONFIG_PSI is not set` and does not expose `/proc/pressure/*`.
+- The tuned target remains based on the confirmed hardware `2x Cortex-A53 + 4x Cortex-A73` with about one CPU-core equivalent left in reserve, plus a RAM safety window of `10%..15%`.
 - Distress autotune state should be reasoned about as three separate values:
   - `desiredConcurrency` in autotune state
   - `configConcurrency` from `ExecStart`

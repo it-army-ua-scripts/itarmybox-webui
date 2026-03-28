@@ -12,27 +12,16 @@
     $distressAutotuneStatusText = $distressAutotuneStatusKey === 'distress_autotune_status_cooldown'
         ? t($distressAutotuneStatusKey, ['seconds' => (string)($distressAutotune['cooldownRemaining'] ?? 0)])
         : t($distressAutotuneStatusKey);
-$distressLastCpuPsiText = isset($distressAutotune['lastCpuPsiSomeAvg10']) && is_numeric($distressAutotune['lastCpuPsiSomeAvg10'])
-    ? t('distress_autotune_last_cpu_psi', [
-        'value' => number_format((float)$distressAutotune['lastCpuPsiSomeAvg10'], 2, '.', ''),
+$distressLastLoadText = isset($distressAutotune['lastLoadAverage']) && is_numeric($distressAutotune['lastLoadAverage'])
+    ? t('distress_autotune_last_load', [
+        'value' => number_format((float)$distressAutotune['lastLoadAverage'], 2, '.', ''),
+        'target' => number_format((float)($distressAutotune['targetLoad'] ?? 1.0), 2, '.', ''),
     ])
     : null;
-$distressLastMemoryPsiText = (
-    isset($distressAutotune['lastMemoryPsiSomeAvg10']) && is_numeric($distressAutotune['lastMemoryPsiSomeAvg10'])
-    && isset($distressAutotune['lastMemoryPsiFullAvg10']) && is_numeric($distressAutotune['lastMemoryPsiFullAvg10'])
-)
-    ? t('distress_autotune_last_memory_psi', [
-        'some' => number_format((float)$distressAutotune['lastMemoryPsiSomeAvg10'], 2, '.', ''),
-        'full' => number_format((float)$distressAutotune['lastMemoryPsiFullAvg10'], 2, '.', ''),
-    ])
-    : null;
-$distressLastIoPsiText = (
-    isset($distressAutotune['lastIoPsiSomeAvg10']) && is_numeric($distressAutotune['lastIoPsiSomeAvg10'])
-    && isset($distressAutotune['lastIoPsiFullAvg10']) && is_numeric($distressAutotune['lastIoPsiFullAvg10'])
-)
-    ? t('distress_autotune_last_io_psi', [
-        'some' => number_format((float)$distressAutotune['lastIoPsiSomeAvg10'], 2, '.', ''),
-        'full' => number_format((float)$distressAutotune['lastIoPsiFullAvg10'], 2, '.', ''),
+$distressLastRamText = isset($distressAutotune['lastRamFreePercent']) && is_numeric($distressAutotune['lastRamFreePercent'])
+    ? t('distress_autotune_last_ram_free', [
+        'value' => number_format((float)$distressAutotune['lastRamFreePercent'], 1, '.', ''),
+        'target' => number_format((float)($distressAutotune['minFreeRamPercent'] ?? 10.0), 1, '.', ''),
     ])
     : null;
     $distressUseMyIp = (int)($currentAdjustableParams['use-my-ip'] ?? 0);
@@ -58,14 +47,11 @@ $distressLastIoPsiText = (
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_desired_value', ['value' => (string)$distressDesiredConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_config_value', ['value' => (string)$distressConfigConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_live_value', ['value' => $distressLiveAppliedConcurrency !== null ? (string)$distressLiveAppliedConcurrency : t('status_unavailable_short')]), ENT_QUOTES, 'UTF-8') ?></div>
-        <?php if ($distressLastCpuPsiText !== null): ?>
-            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastCpuPsiText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php if ($distressLastLoadText !== null): ?>
+            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastLoadText, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
-        <?php if ($distressLastMemoryPsiText !== null): ?>
-            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastMemoryPsiText, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php endif; ?>
-        <?php if ($distressLastIoPsiText !== null): ?>
-            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastIoPsiText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php if ($distressLastRamText !== null): ?>
+            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastRamText, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
     </div>
     <div class="form-group">
