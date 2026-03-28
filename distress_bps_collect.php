@@ -13,7 +13,8 @@ const DISTRESS_BPS_LOG_READ_BYTES = 4194304;
 const DISTRESS_BPS_STALE_AFTER_SECONDS = 900;
 const DISTRESS_BPS_MIN_SAMPLES = 3;
 const DISTRESS_BPS_WARMUP_AFTER_START_SECONDS = 60;
-const DISTRESS_BPS_AVERAGING_WINDOW_SECONDS = 240;
+const DISTRESS_BPS_RUN_CORE_MAX_SECONDS = 240;
+const DISTRESS_BPS_RUN_TAIL_IGNORE_SECONDS = 60;
 
 function writeDistressBpsDebugLog(string $event, array $context = []): void
 {
@@ -207,16 +208,106 @@ function readDistressLogs(int $fallbackLines): string
     return (string)($response['logs'] ?? '');
 }
 
+function createDistressRun(
+    int $startedAt,
+    int $startedConcurrency,
+    ?int $targetCount,
+    ?int $targetCountAt
+): array {
+    return [
+        'startedAt' => $startedAt,
+        'endedAt' => null,
+        'startedConcurrency' => $startedConcurrency,
+        'targetCount' => $targetCount,
+        'targetCountAt' => $targetCountAt,
+        'cycleId' => $targetCount !== null ? 'targets:' . $targetCount : null,
+        'samples' => [],
+    ];
+}
+
+function finalizeDistressRun(array &$runs, ?array $run, ?int $endedAt): void
+{
+    if ($run === null) {
+        return;
+    }
+
+    if ($endedAt !== null && $endedAt > (int)$run['startedAt']) {
+        $run['endedAt'] = $endedAt;
+    }
+
+    $runs[] = $run;
+}
+
+function scoreDistressRun(array $run): ?array
+{
+    $startedAt = isset($run['startedAt']) && is_numeric($run['startedAt']) ? (int)$run['startedAt'] : null;
+    $endedAt = isset($run['endedAt']) && is_numeric($run['endedAt']) ? (int)$run['endedAt'] : null;
+    $samples = isset($run['samples']) && is_array($run['samples']) ? $run['samples'] : [];
+    if ($startedAt === null || $endedAt === null || $endedAt <= $startedAt || $samples === []) {
+        return null;
+    }
+
+    $durationSeconds = $endedAt - $startedAt;
+    $scoreWindowStartAt = $startedAt + DISTRESS_BPS_WARMUP_AFTER_START_SECONDS;
+    $scoreWindowEndOffset = min(
+        DISTRESS_BPS_RUN_CORE_MAX_SECONDS,
+        $durationSeconds - DISTRESS_BPS_RUN_TAIL_IGNORE_SECONDS
+    );
+    if ($scoreWindowEndOffset <= DISTRESS_BPS_WARMUP_AFTER_START_SECONDS) {
+        return null;
+    }
+
+    $scoreWindowEndAt = $startedAt + $scoreWindowEndOffset;
+    $scoredSamples = array_values(array_filter(
+        $samples,
+        static fn(array $sample): bool => isset($sample['capturedAt'], $sample['bpsMbps'])
+            && is_numeric($sample['capturedAt'])
+            && is_numeric($sample['bpsMbps'])
+            && (int)$sample['capturedAt'] >= $scoreWindowStartAt
+            && (int)$sample['capturedAt'] < $scoreWindowEndAt
+    ));
+
+    if (count($scoredSamples) < DISTRESS_BPS_MIN_SAMPLES) {
+        return null;
+    }
+
+    $sum = 0.0;
+    foreach ($scoredSamples as $sample) {
+        $sum += (float)$sample['bpsMbps'];
+    }
+
+    $latestSample = $scoredSamples[count($scoredSamples) - 1];
+    return [
+        'movingAverageMbps' => $sum / count($scoredSamples),
+        'latestBpsMbps' => (float)$latestSample['bpsMbps'],
+        'latestSampleAt' => (int)$latestSample['capturedAt'],
+        'sampleCount' => count($scoredSamples),
+        'samples' => $scoredSamples,
+        'scoreMethod' => 'completed_run_core_average',
+        'scoreWindowStartedAt' => $scoreWindowStartAt,
+        'scoreWindowEndedAt' => $scoreWindowEndAt,
+        'scoredRunStartedAt' => $startedAt,
+        'scoredRunEndedAt' => $endedAt,
+        'scoredRunDurationSeconds' => $durationSeconds,
+        'startedConcurrency' => isset($run['startedConcurrency']) && is_numeric($run['startedConcurrency'])
+            ? (int)$run['startedConcurrency']
+            : null,
+        'targetCount' => isset($run['targetCount']) && is_numeric($run['targetCount'])
+            ? (int)$run['targetCount']
+            : null,
+        'targetCountAt' => isset($run['targetCountAt']) && is_numeric($run['targetCountAt'])
+            ? (int)$run['targetCountAt']
+            : null,
+        'cycleId' => isset($run['cycleId']) && is_string($run['cycleId']) ? $run['cycleId'] : null,
+    ];
+}
+
 function buildDistressBpsStatePayload(string $logs): array
 {
-    $samples = [];
     $latestTargetCount = null;
     $latestTargetCountAt = null;
-    $cycleStartedAt = null;
-    $cycleId = null;
-    $runStartedAt = null;
-    $runWarmupUntil = null;
-    $startedConcurrency = null;
+    $currentRun = null;
+    $runs = [];
 
     $lines = preg_split('/\r\n|\r|\n/', trim($logs));
     if (!is_array($lines)) {
@@ -228,22 +319,17 @@ function buildDistressBpsStatePayload(string $logs): array
 
         $startedConcurrencyCandidate = parseDistressStartedConcurrencyFromLogLine((string)$line);
         if ($startedConcurrencyCandidate !== null && $timestamp !== null) {
-            $runStartedAt = $timestamp;
-            $runWarmupUntil = $timestamp + DISTRESS_BPS_WARMUP_AFTER_START_SECONDS;
-            $startedConcurrency = $startedConcurrencyCandidate;
-            $samples = [];
+            finalizeDistressRun($runs, $currentRun, $timestamp);
+            $currentRun = createDistressRun(
+                $timestamp,
+                $startedConcurrencyCandidate,
+                $latestTargetCount,
+                $latestTargetCountAt
+            );
         }
 
         $targetCount = parseDistressLoadedTargetCountFromLogLine((string)$line);
         if ($targetCount !== null) {
-            if ($latestTargetCount === null || $targetCount !== $latestTargetCount) {
-                $cycleStartedAt = $timestamp;
-                $cycleId = 'targets:' . $targetCount;
-                $samples = [];
-            } elseif ($cycleId === null) {
-                $cycleId = 'targets:' . $targetCount;
-            }
-
             $latestTargetCount = $targetCount;
             $latestTargetCountAt = $timestamp;
         }
@@ -253,45 +339,46 @@ function buildDistressBpsStatePayload(string $logs): array
             continue;
         }
 
-        if ($cycleStartedAt !== null && $timestamp < $cycleStartedAt) {
+        if ($currentRun === null) {
             continue;
         }
-        if ($runWarmupUntil !== null && $timestamp < $runWarmupUntil) {
+        $runStartedAt = (int)$currentRun['startedAt'];
+        if ($timestamp < ($runStartedAt + DISTRESS_BPS_WARMUP_AFTER_START_SECONDS)) {
             continue;
         }
 
-        $samples[] = [
+        $currentRun['samples'][] = [
             'capturedAt' => $timestamp,
             'bpsMbps' => $bpsMbps,
         ];
     }
 
-    if ($samples !== []) {
-        $latestSampleAt = (int)$samples[count($samples) - 1]['capturedAt'];
-        $windowStartedAt = $latestSampleAt - DISTRESS_BPS_AVERAGING_WINDOW_SECONDS;
-        $samples = array_values(array_filter(
-            $samples,
-            static fn(array $sample): bool => (int)$sample['capturedAt'] >= $windowStartedAt
-        ));
+    if ($currentRun !== null) {
+        finalizeDistressRun($runs, $currentRun, null);
     }
 
+    $completedRuns = array_values(array_filter(
+        $runs,
+        static fn(array $run): bool => isset($run['endedAt']) && is_numeric($run['endedAt'])
+    ));
+
+    $latestScoredRun = null;
+    for ($idx = count($completedRuns) - 1; $idx >= 0; $idx--) {
+        $scored = scoreDistressRun($completedRuns[$idx]);
+        if ($scored !== null) {
+            $latestScoredRun = $scored;
+            break;
+        }
+    }
+
+    $sampleCount = $latestScoredRun['sampleCount'] ?? 0;
+    $movingAverageMbps = $latestScoredRun['movingAverageMbps'] ?? null;
+    $latestBpsMbps = $latestScoredRun['latestBpsMbps'] ?? null;
+    $latestSampleAt = $latestScoredRun['latestSampleAt'] ?? null;
+    $samples = $latestScoredRun['samples'] ?? [];
     if (count($samples) > DISTRESS_BPS_SAMPLE_LIMIT) {
         $samples = array_slice($samples, -DISTRESS_BPS_SAMPLE_LIMIT);
-    }
-
-    $sampleCount = count($samples);
-    $movingAverageMbps = null;
-    $latestBpsMbps = null;
-    $latestSampleAt = null;
-    if ($sampleCount > 0) {
-        $sum = 0.0;
-        foreach ($samples as $sample) {
-            $sum += (float)$sample['bpsMbps'];
-        }
-        $movingAverageMbps = $sum / $sampleCount;
-        $latestSample = $samples[$sampleCount - 1];
-        $latestBpsMbps = (float)$latestSample['bpsMbps'];
-        $latestSampleAt = (int)$latestSample['capturedAt'];
+        $sampleCount = count($samples);
     }
 
     $payload = [
@@ -299,35 +386,44 @@ function buildDistressBpsStatePayload(string $logs): array
         'staleAfterSeconds' => DISTRESS_BPS_STALE_AFTER_SECONDS,
         'minSamples' => DISTRESS_BPS_MIN_SAMPLES,
         'sampleLimit' => DISTRESS_BPS_SAMPLE_LIMIT,
-        'averagingWindowSeconds' => DISTRESS_BPS_AVERAGING_WINDOW_SECONDS,
+        'scoreMethod' => $latestScoredRun['scoreMethod'] ?? 'completed_run_core_average',
+        'runCoreMaxSeconds' => DISTRESS_BPS_RUN_CORE_MAX_SECONDS,
+        'runTailIgnoreSeconds' => DISTRESS_BPS_RUN_TAIL_IGNORE_SECONDS,
         'sampleCount' => $sampleCount,
         'movingAverageMbps' => $movingAverageMbps,
         'latestBpsMbps' => $latestBpsMbps,
         'latestSampleAt' => $latestSampleAt,
         'latestTargetCount' => $latestTargetCount,
         'latestTargetCountAt' => $latestTargetCountAt,
-        'cycleId' => $cycleId,
-        'cycleStartedAt' => $cycleStartedAt,
-        'runStartedAt' => $runStartedAt,
-        'runWarmupUntil' => $runWarmupUntil,
-        'startedConcurrency' => $startedConcurrency,
-        'hasFreshSamples' => $sampleCount > 0 && $latestSampleAt !== null,
+        'cycleId' => $latestScoredRun['cycleId'] ?? ($latestTargetCount !== null ? 'targets:' . $latestTargetCount : null),
+        'cycleStartedAt' => $latestScoredRun['scoredRunStartedAt'] ?? null,
+        'runStartedAt' => $latestScoredRun['scoredRunStartedAt'] ?? null,
+        'runEndedAt' => $latestScoredRun['scoredRunEndedAt'] ?? null,
+        'runWarmupUntil' => isset($latestScoredRun['scoredRunStartedAt']) ? ((int)$latestScoredRun['scoredRunStartedAt'] + DISTRESS_BPS_WARMUP_AFTER_START_SECONDS) : null,
+        'startedConcurrency' => $latestScoredRun['startedConcurrency'] ?? null,
+        'scoreWindowStartedAt' => $latestScoredRun['scoreWindowStartedAt'] ?? null,
+        'scoreWindowEndedAt' => $latestScoredRun['scoreWindowEndedAt'] ?? null,
+        'scoredRunDurationSeconds' => $latestScoredRun['scoredRunDurationSeconds'] ?? null,
+        'completedRunCount' => count($completedRuns),
+        'hasFreshSamples' => $sampleCount >= DISTRESS_BPS_MIN_SAMPLES && $latestSampleAt !== null,
         'samples' => $samples,
     ];
 
     writeDistressBpsDebugLog('collector_payload', [
         'logLines' => count($lines),
+        'completedRunCount' => count($completedRuns),
         'sampleCount' => $sampleCount,
-        'averagingWindowSeconds' => DISTRESS_BPS_AVERAGING_WINDOW_SECONDS,
         'movingAverageMbps' => $movingAverageMbps,
         'latestBpsMbps' => $latestBpsMbps,
         'latestSampleAt' => $latestSampleAt,
         'latestTargetCount' => $latestTargetCount,
-        'cycleId' => $cycleId,
-        'cycleStartedAt' => $cycleStartedAt,
-        'runStartedAt' => $runStartedAt,
-        'runWarmupUntil' => $runWarmupUntil,
-        'startedConcurrency' => $startedConcurrency,
+        'cycleId' => $payload['cycleId'],
+        'runStartedAt' => $payload['runStartedAt'],
+        'runEndedAt' => $payload['runEndedAt'],
+        'scoreWindowStartedAt' => $payload['scoreWindowStartedAt'],
+        'scoreWindowEndedAt' => $payload['scoreWindowEndedAt'],
+        'startedConcurrency' => $payload['startedConcurrency'],
+        'scoreMethod' => $payload['scoreMethod'],
         'hasFreshSamples' => $payload['hasFreshSamples'],
     ]);
 

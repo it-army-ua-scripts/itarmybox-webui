@@ -27,8 +27,8 @@ const DISTRESS_AUTOTUNE_BPS_DEAD_ZONE_RATIO = 0.04;
 const DISTRESS_AUTOTUNE_BPS_HOLD_RATIO = 0.985;
 const DISTRESS_AUTOTUNE_BPS_DROP_RATIO = 0.95;
 const DISTRESS_AUTOTUNE_BPS_DROP_RESTORE_RATIO = 0.97;
-const DISTRESS_AUTOTUNE_BPS_SETTLE_CYCLES = 1;
-const DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED = 1;
+const DISTRESS_AUTOTUNE_BPS_SETTLE_CYCLES = 0;
+const DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED = 2;
 const DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE = 'coarse';
 const DISTRESS_AUTOTUNE_SEARCH_PHASE_REFINE = 'refine';
 const DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD = 'hold';
@@ -422,7 +422,13 @@ function calculateDistressProbeScore(array $state): ?float
     }
 
     sort($windows, SORT_NUMERIC);
-    return $windows[(int)floor(count($windows) / 2)];
+    $count = count($windows);
+    $middle = (int)floor($count / 2);
+    if (($count % 2) === 1) {
+        return $windows[$middle];
+    }
+
+    return ($windows[$middle - 1] + $windows[$middle]) / 2.0;
 }
 
 function calculateDistressRefineMidpoint(int $lowerConcurrency, int $upperConcurrency): ?int
@@ -908,6 +914,18 @@ function getDistressFreshBpsMetrics(int $now): ?array
         'cycleStartedAt' => isset($bpsState['cycleStartedAt']) && is_numeric($bpsState['cycleStartedAt'])
             ? (int)$bpsState['cycleStartedAt']
             : null,
+        'startedConcurrency' => isset($bpsState['startedConcurrency']) && is_numeric($bpsState['startedConcurrency'])
+            ? max(DISTRESS_AUTOTUNE_MIN_CONCURRENCY, (int)$bpsState['startedConcurrency'])
+            : null,
+        'runStartedAt' => isset($bpsState['runStartedAt']) && is_numeric($bpsState['runStartedAt'])
+            ? (int)$bpsState['runStartedAt']
+            : null,
+        'runEndedAt' => isset($bpsState['runEndedAt']) && is_numeric($bpsState['runEndedAt'])
+            ? (int)$bpsState['runEndedAt']
+            : null,
+        'scoreMethod' => isset($bpsState['scoreMethod']) && is_string($bpsState['scoreMethod']) && $bpsState['scoreMethod'] !== ''
+            ? $bpsState['scoreMethod']
+            : null,
     ];
 }
 
@@ -1125,11 +1143,30 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
             return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'bps_unavailable'];
         }
 
+        $bpsConcurrency = isset($bpsMetrics['startedConcurrency']) && is_numeric($bpsMetrics['startedConcurrency'])
+            ? max(DISTRESS_AUTOTUNE_MIN_CONCURRENCY, (int)$bpsMetrics['startedConcurrency'])
+            : null;
+        if ($bpsConcurrency !== null && $bpsConcurrency !== $currentConcurrency) {
+            $state['lastBpsMbps'] = null;
+            distressAutotuneDebugLog('tick_hold_bps_concurrency_mismatch', [
+                'currentConcurrency' => $currentConcurrency,
+                'bpsConcurrency' => $bpsConcurrency,
+                'runStartedAt' => $bpsMetrics['runStartedAt'] ?? null,
+                'runEndedAt' => $bpsMetrics['runEndedAt'] ?? null,
+                'scoreMethod' => $bpsMetrics['scoreMethod'] ?? null,
+            ]);
+            writeDistressAutotuneState($state);
+            releaseDistressAutotuneLock($lockHandle);
+            return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'bps_concurrency_mismatch'];
+        }
+
         ensureDistressProbeForCurrentConcurrency($state, $currentConcurrency);
         $evaluatedBpsMbps = (float)$bpsMetrics['movingAverageMbps'];
         $state['lastBpsMbps'] = $evaluatedBpsMbps;
-        $latestSampleAt = (int)($bpsMetrics['latestSampleAt'] ?? 0);
-        $windowAdded = appendDistressProbeWindow($state, $evaluatedBpsMbps, $latestSampleAt);
+        $probeRunEndedAt = isset($bpsMetrics['runEndedAt']) && is_numeric($bpsMetrics['runEndedAt'])
+            ? (int)$bpsMetrics['runEndedAt']
+            : (int)($bpsMetrics['latestSampleAt'] ?? 0);
+        $windowAdded = appendDistressProbeWindow($state, $evaluatedBpsMbps, $probeRunEndedAt);
         $probeWindowCount = getDistressProbeWindowCount($state);
         $probeScoreMbps = calculateDistressProbeScore($state);
 
@@ -1140,6 +1177,7 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
             'windowsRequired' => DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED,
             'evaluatedBpsMbps' => $evaluatedBpsMbps,
             'probeScoreMbps' => $probeScoreMbps,
+            'runEndedAt' => $bpsMetrics['runEndedAt'] ?? null,
             'searchPhase' => $state['searchPhase'] ?? DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE,
         ]);
 
