@@ -668,6 +668,18 @@ function serviceIsActive(string $module): bool
     return $code === 0;
 }
 
+function getServiceMainPid(string $module): ?int
+{
+    $service = escapeshellarg($module . '.service');
+    $pidRaw = trim(runCommand("systemctl show -p MainPID --value $service", $code));
+    if ($code !== 0 || preg_match('/^\d+$/', $pidRaw) !== 1) {
+        return null;
+    }
+
+    $pid = (int)$pidRaw;
+    return $pid > 0 ? $pid : null;
+}
+
 function waitForServiceInactive(string $module, int $attempts = 25, int $sleepMicroseconds = 200000): bool
 {
     for ($attempt = 0; $attempt < $attempts; $attempt++) {
@@ -678,6 +690,47 @@ function waitForServiceInactive(string $module, int $attempts = 25, int $sleepMi
     }
 
     return !serviceIsActive($module);
+}
+
+function waitForServiceActive(string $module, int $attempts = 25, int $sleepMicroseconds = 200000): bool
+{
+    for ($attempt = 0; $attempt < $attempts; $attempt++) {
+        if (serviceIsActive($module)) {
+            return true;
+        }
+        usleep($sleepMicroseconds);
+    }
+
+    return serviceIsActive($module);
+}
+
+function verifyServiceExecStartOptionValue(string $module, string $option, string $expectedValue): bool
+{
+    $pid = getServiceMainPid($module);
+    if ($pid === null || $pid <= 0) {
+        return false;
+    }
+
+    $cmdlineRaw = @file_get_contents('/proc/' . $pid . '/cmdline');
+    if (!is_string($cmdlineRaw) || $cmdlineRaw === '') {
+        return false;
+    }
+
+    $tokens = preg_split('/\0+/', rtrim($cmdlineRaw, "\0"));
+    if (!is_array($tokens) || $tokens === []) {
+        return false;
+    }
+
+    foreach ($tokens as $idx => $token) {
+        if ($token !== '--' . $option) {
+            continue;
+        }
+
+        $next = $tokens[$idx + 1] ?? null;
+        return is_string($next) && trim($next) === $expectedValue;
+    }
+
+    return false;
 }
 
 function getActiveModules(array $modules): array
@@ -871,6 +924,11 @@ function serviceRestart(string $module): array
     if (!serviceIsActive($module)) {
         return ['ok' => true, 'restarted' => false];
     }
+
+    $previousPid = getServiceMainPid($module);
+    $expectedExecStart = readServiceExecStart($module);
+    $expectedConcurrency = $module === 'distress' ? getExecStartOptionValue((string)$expectedExecStart, 'concurrency') : null;
+
     runCommand('systemctl daemon-reload', $reloadCode);
     if ($reloadCode !== 0) {
         return ['ok' => false, 'error' => 'daemon_reload_failed'];
@@ -880,7 +938,38 @@ function serviceRestart(string $module): array
     if ($restartCode !== 0) {
         return ['ok' => false, 'error' => 'service_restart_failed'];
     }
-    return ['ok' => true, 'restarted' => true];
+
+    if (!waitForServiceActive($module)) {
+        return ['ok' => false, 'error' => 'service_restart_activation_failed'];
+    }
+
+    $currentPid = getServiceMainPid($module);
+    if ($previousPid !== null && $currentPid !== null && $currentPid === $previousPid) {
+        return [
+            'ok' => false,
+            'error' => 'service_restart_pid_unchanged',
+            'previousPid' => $previousPid,
+            'currentPid' => $currentPid,
+        ];
+    }
+
+    if ($module === 'distress' && is_string($expectedConcurrency) && $expectedConcurrency !== '') {
+        if (!verifyServiceExecStartOptionValue($module, 'concurrency', $expectedConcurrency)) {
+            return [
+                'ok' => false,
+                'error' => 'service_restart_concurrency_mismatch',
+                'expectedConcurrency' => $expectedConcurrency,
+                'currentPid' => $currentPid,
+            ];
+        }
+    }
+
+    return [
+        'ok' => true,
+        'restarted' => true,
+        'previousPid' => $previousPid,
+        'currentPid' => $currentPid,
+    ];
 }
 
 function statusSnapshot(array $modules, int $lines): array

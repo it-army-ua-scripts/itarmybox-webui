@@ -6,8 +6,10 @@ require_once __DIR__ . '/lib/root_helper_client.php';
 
 const DISTRESS_BPS_STATE_FILE = __DIR__ . '/var/state/distress-bps.json';
 const DISTRESS_BPS_DEBUG_LOG_FILE = __DIR__ . '/var/log/distress-bps-collector-debug.log';
+const DISTRESS_BPS_LOG_FILE = '/var/log/adss.log';
 const DISTRESS_BPS_SAMPLE_LIMIT = 24;
-const DISTRESS_BPS_LOG_LINES = 480;
+const DISTRESS_BPS_LOG_FALLBACK_LINES = 4000;
+const DISTRESS_BPS_LOG_READ_BYTES = 4194304;
 const DISTRESS_BPS_STALE_AFTER_SECONDS = 900;
 const DISTRESS_BPS_MIN_SAMPLES = 3;
 const DISTRESS_BPS_WARMUP_AFTER_START_SECONDS = 60;
@@ -125,20 +127,83 @@ function parseDistressLogTimestamp(string $line): ?int
     return $timestamp === false ? null : (int)$timestamp;
 }
 
-function readDistressLogs(int $lines): string
+function readTailBytesFromFile(string $path, int $bytes): string
 {
+    if ($bytes <= 0 || !is_readable($path)) {
+        return '';
+    }
+
+    $handle = @fopen($path, 'rb');
+    if ($handle === false) {
+        return '';
+    }
+
+    if (@fseek($handle, 0, SEEK_END) !== 0) {
+        fclose($handle);
+        return '';
+    }
+
+    $fileSize = @ftell($handle);
+    if (!is_int($fileSize) || $fileSize < 0) {
+        fclose($handle);
+        return '';
+    }
+
+    $offset = max(0, $fileSize - $bytes);
+    if (@fseek($handle, $offset, SEEK_SET) !== 0) {
+        fclose($handle);
+        return '';
+    }
+
+    $content = stream_get_contents($handle);
+    fclose($handle);
+
+    if (!is_string($content)) {
+        return '';
+    }
+
+    if ($offset > 0) {
+        $newlinePos = strpos($content, "\n");
+        if ($newlinePos !== false) {
+            $content = substr($content, $newlinePos + 1);
+        }
+    }
+
+    return $content;
+}
+
+function readDistressLogs(int $fallbackLines): string
+{
+    $fileLogs = readTailBytesFromFile(DISTRESS_BPS_LOG_FILE, DISTRESS_BPS_LOG_READ_BYTES);
+    if (trim($fileLogs) !== '') {
+        writeDistressBpsDebugLog('collector_log_source', [
+            'source' => 'file',
+            'path' => DISTRESS_BPS_LOG_FILE,
+            'readBytes' => DISTRESS_BPS_LOG_READ_BYTES,
+        ]);
+        return $fileLogs;
+    }
+
     $config = require __DIR__ . '/config/config.php';
     $response = root_helper_request([
         'action' => 'service_logs',
         'modules' => $config['daemonNames'],
         'module' => 'distress',
-        'lines' => $lines,
+        'lines' => $fallbackLines,
     ]);
 
     if (($response['ok'] ?? false) !== true) {
+        writeDistressBpsDebugLog('collector_log_source', [
+            'source' => 'fallback_failed',
+            'fallbackLines' => $fallbackLines,
+        ]);
         return '';
     }
 
+    writeDistressBpsDebugLog('collector_log_source', [
+        'source' => 'root_helper_fallback',
+        'fallbackLines' => $fallbackLines,
+    ]);
     return (string)($response['logs'] ?? '');
 }
 
@@ -288,7 +353,7 @@ function writeDistressBpsState(array $payload): bool
     return @rename($tmpFile, DISTRESS_BPS_STATE_FILE);
 }
 
-$logs = readDistressLogs(DISTRESS_BPS_LOG_LINES);
+$logs = readDistressLogs(DISTRESS_BPS_LOG_FALLBACK_LINES);
 $payload = buildDistressBpsStatePayload($logs);
 
 $ok = writeDistressBpsState($payload);
