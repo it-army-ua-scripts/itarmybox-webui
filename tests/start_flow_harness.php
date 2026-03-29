@@ -11,7 +11,6 @@ $GLOBALS['startHarness'] = [
     'configString' => 'ExecStart=/usr/bin/distress --concurrency 2048',
     'updateServiceFileOk' => true,
     'rootHelperResponse' => ['ok' => true],
-    'autotuneSettings' => ['ok' => true, 'enabled' => true],
 ];
 
 function root_helper_request(array $payload): array
@@ -34,11 +33,6 @@ function updateServiceFile(string $serviceName, array $updatedConfigParams): boo
     return ($GLOBALS['startHarness']['updateServiceFileOk'] ?? false) === true;
 }
 
-function getDistressAutotuneSettings(): array
-{
-    return $GLOBALS['startHarness']['autotuneSettings'] ?? ['ok' => false, 'enabled' => false];
-}
-
 require_once __DIR__ . '/../lib/start_helpers.php';
 
 function start_harness_reset(): void
@@ -47,7 +41,6 @@ function start_harness_reset(): void
         'configString' => 'ExecStart=/usr/bin/distress --concurrency 2048',
         'updateServiceFileOk' => true,
         'rootHelperResponse' => ['ok' => true],
-        'autotuneSettings' => ['ok' => true, 'enabled' => true],
     ];
 
     @unlink(DISTRESS_START_TASK_FILE);
@@ -87,12 +80,11 @@ function start_harness_test_manual_launch_returns_success_when_execstart_read_is
     start_harness_assert(($result['messageKey'] ?? '') === 'start_requested', 'manual launch should report start_requested when root helper accepts activation');
 }
 
-function start_harness_test_auto_launch_detection_tracks_saved_autotune_mode(): void
+function start_harness_test_distress_always_uses_background_worker(): void
 {
     start_harness_reset();
-    start_harness_assert(is_distress_auto_start('distress') === true, 'distress auto start should be detected when autotune is enabled');
-    $GLOBALS['startHarness']['autotuneSettings'] = ['ok' => true, 'enabled' => false];
-    start_harness_assert(is_distress_auto_start('distress') === false, 'distress auto start should be false when manual mode is saved');
+    start_harness_assert(start_uses_background_worker('distress') === true, 'distress should always use the background worker flow');
+    start_harness_assert(start_uses_background_worker('mhddos') === false, 'mhddos should keep the direct start flow');
 }
 
 function start_harness_test_start_task_state_roundtrip(): void
@@ -111,7 +103,7 @@ $tests = [
     'manual_launch_returns_success_when_root_helper_accepts' => 'start_harness_test_manual_launch_returns_success_when_root_helper_accepts',
     'manual_launch_ignores_service_file_update_failures' => 'start_harness_test_manual_launch_ignores_service_file_update_failures',
     'manual_launch_succeeds_when_execstart_read_is_unavailable' => 'start_harness_test_manual_launch_returns_success_when_execstart_read_is_unavailable',
-    'auto_launch_detection_tracks_saved_autotune_mode' => 'start_harness_test_auto_launch_detection_tracks_saved_autotune_mode',
+    'distress_always_uses_background_worker' => 'start_harness_test_distress_always_uses_background_worker',
     'start_task_state_roundtrip' => 'start_harness_test_start_task_state_roundtrip',
 ];
 

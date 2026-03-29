@@ -6,10 +6,6 @@ if (!function_exists('root_helper_request')) {
 if (!function_exists('getConfigStringFromServiceFile') || !function_exists('updateServiceFile')) {
     require_once __DIR__ . '/tool_helpers.php';
 }
-if (!function_exists('getDistressAutotuneSettings')) {
-    require_once __DIR__ . '/tool_distress_helpers.php';
-}
-
 const DISTRESS_START_TASK_FILE = __DIR__ . '/../var/state/distress-start-task.json';
 const START_DEBUG_LOG_FILE = __DIR__ . '/../var/log/start-debug.log';
 const START_DEBUG_STATE_LOG_FILE = __DIR__ . '/../var/state/start-debug.log';
@@ -166,14 +162,9 @@ function start_module_request(string $daemon, array $config): array
     ];
 }
 
-function is_distress_auto_start(string $daemon): bool
+function start_uses_background_worker(string $daemon): bool
 {
-    if ($daemon !== 'distress') {
-        return false;
-    }
-
-    $autotuneSettings = getDistressAutotuneSettings();
-    return (($autotuneSettings['ok'] ?? false) === true) && (($autotuneSettings['enabled'] ?? false) === true);
+    return $daemon === 'distress';
 }
 
 function find_php_cli_for_background_start(): ?string
@@ -193,11 +184,12 @@ function find_php_cli_for_background_start(): ?string
     return null;
 }
 
-function spawn_distress_start_worker(): bool
+function spawn_start_worker(string $daemon): bool
 {
     $phpCli = find_php_cli_for_background_start();
     if ($phpCli === null) {
         write_start_debug_log('spawn_worker_failed', [
+            'daemon' => $daemon,
             'reason' => 'php_cli_not_found',
         ]);
         return false;
@@ -206,19 +198,22 @@ function spawn_distress_start_worker(): bool
     $workerPath = realpath(__DIR__ . '/../start_worker.php');
     if (!is_string($workerPath) || $workerPath === '') {
         write_start_debug_log('spawn_worker_failed', [
+            'daemon' => $daemon,
             'reason' => 'worker_path_not_found',
         ]);
         return false;
     }
 
     $command = sprintf(
-        'nohup %s %s distress > /dev/null 2>&1 &',
+        'nohup %s %s %s > /dev/null 2>&1 &',
         escapeshellarg($phpCli),
-        escapeshellarg($workerPath)
+        escapeshellarg($workerPath),
+        escapeshellarg($daemon)
     );
 
     @exec('/bin/sh -c ' . escapeshellarg($command), $output, $code);
     write_start_debug_log('spawn_worker_result', [
+        'daemon' => $daemon,
         'phpCli' => $phpCli,
         'workerPath' => $workerPath,
         'code' => $code,

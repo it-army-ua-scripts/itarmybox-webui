@@ -174,6 +174,14 @@ function render_distress_start_progress_page(string $daemon): void
 <?php
 }
 
+function render_async_start_progress_page(string $daemon): void
+{
+    if ($daemon === 'distress') {
+        render_distress_start_progress_page($daemon);
+        return;
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $daemon = (string)($_POST['daemon'] ?? ($_GET['daemon'] ?? ''));
     write_start_debug_log('start_php_post_received', [
@@ -184,9 +192,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'source' => (string)($_GET['source'] ?? ''),
     ]);
     if (in_array($daemon, $config['daemonNames'], true)) {
-        if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
+        if (isset($_GET['ajax']) && $_GET['ajax'] === '1' && start_uses_background_worker($daemon)) {
             header('Content-Type: application/json; charset=UTF-8');
-            if (!reset_start_task_state($daemon) || !spawn_distress_start_worker()) {
+            if (!reset_start_task_state($daemon) || !spawn_start_worker($daemon)) {
                 write_start_debug_log('start_php_ajax_bootstrap_failed', [
                     'daemon' => $daemon,
                     'state' => read_start_task_state(),
@@ -205,8 +213,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        if (is_distress_auto_start($daemon)) {
-            render_distress_start_progress_page($daemon);
+        if (start_uses_background_worker($daemon)) {
+            render_async_start_progress_page($daemon);
             exit;
         }
 
@@ -232,6 +240,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $daemon = (string)($_GET['daemon'] ?? '');
     $source = (string)($_GET['source'] ?? '');
     if ($daemon !== '' && in_array($daemon, $config['daemonNames'], true)) {
+        if (start_uses_background_worker($daemon)) {
+            write_start_debug_log('start_php_get_progress_page', [
+                'daemon' => $daemon,
+                'source' => $source,
+                'getKeys' => array_keys($_GET),
+            ]);
+            render_async_start_progress_page($daemon);
+            exit;
+        }
+
         write_start_debug_log('start_php_get_fallback_received', [
             'daemon' => $daemon,
             'source' => $source,
