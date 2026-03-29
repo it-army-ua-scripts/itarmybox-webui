@@ -295,6 +295,15 @@ function harness_test_manual_mode_disables_timers(): void
     harness_assert(($GLOBALS['distressHarness']['timersEnabled'] ?? true) === false, 'manual autotune mode should disable related timers');
 }
 
+function harness_test_manual_mode_skips_missing_timers(): void
+{
+    harness_reset_runtime();
+    $GLOBALS['distressHarness']['timerInstalled'] = false;
+
+    $result = setDistressAutotuneMode(false, 2048);
+    harness_assert(($result['ok'] ?? false) === true, 'manual autotune mode should still save when timers are already missing');
+}
+
 function harness_test_auto_mode_enables_timers(): void
 {
     harness_reset_runtime();
@@ -824,6 +833,7 @@ $tests = [
     'state_write_roundtrip' => 'harness_test_state_write_roundtrip',
     'manual_mode_without_timer' => 'harness_test_manual_mode_without_timer',
     'manual_mode_disables_timers' => 'harness_test_manual_mode_disables_timers',
+    'manual_mode_skips_missing_timers' => 'harness_test_manual_mode_skips_missing_timers',
     'auto_mode_enables_timers' => 'harness_test_auto_mode_enables_timers',
     'auto_mode_requires_timer' => 'harness_test_auto_mode_requires_timer',
     'tick_manual_skips_without_writing_state' => 'harness_test_tick_manual_skips_without_writing_state',

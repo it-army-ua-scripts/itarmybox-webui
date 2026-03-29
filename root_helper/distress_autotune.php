@@ -106,6 +106,14 @@ function syncDistressAutotuneTimerState(bool $enabled): bool
     ];
 
     foreach ($timers as $timer) {
+        if (!$enabled && !isSystemdUnitKnown($timer)) {
+            distressAutotuneDebugLog('timer_state_sync_skipped_missing', [
+                'timer' => $timer,
+                'enabled' => false,
+            ]);
+            continue;
+        }
+
         $command = $enabled ? 'enable --now ' : 'disable --now ';
         runCommand(escapeshellarg($systemctl) . ' ' . $command . escapeshellarg($timer), $code);
         if ($code !== 0) {
