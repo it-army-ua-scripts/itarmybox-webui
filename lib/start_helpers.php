@@ -12,19 +12,17 @@ if (!function_exists('getDistressAutotuneSettings')) {
 
 const DISTRESS_START_TASK_FILE = __DIR__ . '/../var/state/distress-start-task.json';
 const START_DEBUG_LOG_FILE = __DIR__ . '/../var/log/start-debug.log';
+const START_DEBUG_STATE_LOG_FILE = __DIR__ . '/../var/state/start-debug.log';
+const START_DEBUG_TMP_LOG_FILE = '/tmp/itarmybox-start-debug.log';
 
-function ensure_start_debug_directory(): bool
+function ensure_start_debug_directory(string $filePath = START_DEBUG_LOG_FILE): bool
 {
-    $dir = dirname(START_DEBUG_LOG_FILE);
+    $dir = dirname($filePath);
     return is_dir($dir) || @mkdir($dir, 0775, true) || is_dir($dir);
 }
 
 function write_start_debug_log(string $event, array $context = []): void
 {
-    if (!ensure_start_debug_directory()) {
-        return;
-    }
-
     $payload = [
         'ts' => date('c'),
         'event' => $event,
@@ -35,7 +33,12 @@ function write_start_debug_log(string $event, array $context = []): void
         return;
     }
 
-    @file_put_contents(START_DEBUG_LOG_FILE, $line . PHP_EOL, FILE_APPEND);
+    foreach ([START_DEBUG_LOG_FILE, START_DEBUG_STATE_LOG_FILE, START_DEBUG_TMP_LOG_FILE] as $target) {
+        if (!ensure_start_debug_directory($target)) {
+            continue;
+        }
+        @file_put_contents($target, $line . PHP_EOL, FILE_APPEND);
+    }
 }
 
 function ensure_start_task_directory(): bool

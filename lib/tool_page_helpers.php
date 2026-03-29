@@ -5,7 +5,8 @@ require_once __DIR__ . '/tool_helpers.php';
 
 function render_module_action_form(string $path, string $daemonName, string $label): string
 {
-    return '<div class="menu"><form method="post" action="' . htmlspecialchars(url_with_lang($path), ENT_QUOTES, 'UTF-8') . '">'
+    $actionUrl = url_with_lang($path . '?daemon=' . rawurlencode($daemonName) . '&source=tool_action');
+    return '<div class="menu"><form method="post" action="' . htmlspecialchars($actionUrl, ENT_QUOTES, 'UTF-8') . '">'
         . '<input type="hidden" name="daemon" value="' . htmlspecialchars($daemonName, ENT_QUOTES, 'UTF-8') . '">'
         . '<button type="submit">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</button>'
         . '</form></div>';

@@ -175,11 +175,13 @@ function render_distress_start_progress_page(string $daemon): void
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $daemon = (string)($_POST['daemon'] ?? '');
+    $daemon = (string)($_POST['daemon'] ?? ($_GET['daemon'] ?? ''));
     write_start_debug_log('start_php_post_received', [
         'daemon' => $daemon,
         'ajax' => isset($_GET['ajax']) && $_GET['ajax'] === '1',
         'postKeys' => array_keys($_POST),
+        'getKeys' => array_keys($_GET),
+        'source' => (string)($_GET['source'] ?? ''),
     ]);
     if (in_array($daemon, $config['daemonNames'], true)) {
         if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
@@ -224,6 +226,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'daemon' => $daemon,
         'allowed' => array_values((array)$config['daemonNames']),
     ]);
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    $daemon = (string)($_GET['daemon'] ?? '');
+    $source = (string)($_GET['source'] ?? '');
+    if ($daemon !== '' && in_array($daemon, $config['daemonNames'], true) && in_array($source, ['tool_action', 'status_action'], true)) {
+        write_start_debug_log('start_php_get_fallback_received', [
+            'daemon' => $daemon,
+            'source' => $source,
+            'getKeys' => array_keys($_GET),
+        ]);
+
+        $result = start_module_request($daemon, $config);
+        write_start_debug_log('start_php_get_fallback_result', [
+            'daemon' => $daemon,
+            'source' => $source,
+            'result' => $result,
+        ]);
+        $messageKey = (string)($result['messageKey'] ?? 'start_failed');
+        $messageOk = (($result['ok'] ?? false) === true);
+        $target = '/status.php?msg=' . rawurlencode($messageKey) . '&ok=' . ($messageOk ? '1' : '0');
+        header('Location: ' . url_with_lang($target));
+        exit;
+    }
 }
 
 if (isset($_GET['ajax']) && $_GET['ajax'] === '1' && isset($_GET['status']) && $_GET['status'] === '1') {

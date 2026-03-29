@@ -68,7 +68,10 @@
     function createActionForm(path, module, label) {
         const form = document.createElement("form");
         form.method = "post";
-        form.action = path + "?lang=" + encodeURIComponent(config.lang || "uk");
+        form.action = path
+            + "?daemon=" + encodeURIComponent(module)
+            + "&source=status_action"
+            + "&lang=" + encodeURIComponent(config.lang || "uk");
 
         const daemonInput = document.createElement("input");
         daemonInput.type = "hidden";
