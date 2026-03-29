@@ -770,16 +770,26 @@ function findCurlBinary(): ?string
 function measureDistressUploadCapWithPhpCurl(string $url, int $bytes, int $timeoutSeconds): ?float
 {
     if (!function_exists('curl_init')) {
+        distressAutotuneDebugLog('upload_cap_php_curl_unavailable', [
+            'url' => $url,
+        ]);
         return null;
     }
 
     $payload = str_repeat('A', $bytes);
     if ($payload === '') {
+        distressAutotuneDebugLog('upload_cap_php_curl_empty_payload', [
+            'url' => $url,
+            'bytes' => $bytes,
+        ]);
         return null;
     }
 
     $ch = curl_init($url);
     if ($ch === false) {
+        distressAutotuneDebugLog('upload_cap_php_curl_init_failed', [
+            'url' => $url,
+        ]);
         return null;
     }
 
@@ -797,9 +807,21 @@ function measureDistressUploadCapWithPhpCurl(string $url, int $bytes, int $timeo
     $result = curl_exec($ch);
     $durationSeconds = microtime(true) - $startedAt;
     $httpCode = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $curlErrno = curl_errno($ch);
+    $curlError = curl_error($ch);
     curl_close($ch);
 
     if ($result === false || $durationSeconds <= 0.0 || $httpCode < 200 || $httpCode >= 400) {
+        distressAutotuneDebugLog('upload_cap_php_curl_failed', [
+            'url' => $url,
+            'bytes' => $bytes,
+            'timeoutSeconds' => $timeoutSeconds,
+            'durationSeconds' => round($durationSeconds, 3),
+            'httpCode' => $httpCode,
+            'curlErrno' => $curlErrno,
+            'curlError' => $curlError,
+            'resultFalse' => ($result === false),
+        ]);
         return null;
     }
 
@@ -810,6 +832,9 @@ function measureDistressUploadCapWithCurlBinary(string $url, int $bytes, int $ti
 {
     $curlBinary = findCurlBinary();
     if ($curlBinary === null) {
+        distressAutotuneDebugLog('upload_cap_curl_binary_missing', [
+            'url' => $url,
+        ]);
         return null;
     }
 
@@ -822,11 +847,26 @@ function measureDistressUploadCapWithCurlBinary(string $url, int $bytes, int $ti
     );
     $output = trim(runCommand($command, $code));
     if ($code !== 0 || !is_numeric($output)) {
+        distressAutotuneDebugLog('upload_cap_curl_binary_failed', [
+            'url' => $url,
+            'bytes' => $byteCount,
+            'timeoutSeconds' => $timeoutSeconds,
+            'curlBinary' => $curlBinary,
+            'exitCode' => $code,
+            'output' => $output,
+        ]);
         return null;
     }
 
     $durationSeconds = (float)$output;
     if ($durationSeconds <= 0.0) {
+        distressAutotuneDebugLog('upload_cap_curl_binary_invalid_duration', [
+            'url' => $url,
+            'bytes' => $byteCount,
+            'timeoutSeconds' => $timeoutSeconds,
+            'curlBinary' => $curlBinary,
+            'durationSeconds' => $durationSeconds,
+        ]);
         return null;
     }
 
@@ -967,7 +1007,15 @@ function prepareDistressUploadCapBeforeStart(bool $forceRefresh = false): bool
     }
 
     if (shouldRefreshDistressUploadCapOnStart($state, $forceRefresh)) {
-        refreshDistressUploadCap($state);
+        $measuredMbps = refreshDistressUploadCap($state);
+        if ($measuredMbps === null) {
+            distressAutotuneDebugLog('upload_cap_measure_skipped_before_start', [
+                'forceRefresh' => $forceRefresh,
+                'hasPreviousUploadCap' => isset($state['uploadCapMbps']) && is_numeric($state['uploadCapMbps']) && (float)$state['uploadCapMbps'] > 0.0,
+            ]);
+            releaseDistressAutotuneLock($lockHandle);
+            return true;
+        }
         if (!writeDistressAutotuneState($state)) {
             distressAutotuneDebugLog('upload_cap_state_write_failed_before_start');
             releaseDistressAutotuneLock($lockHandle);
@@ -1006,12 +1054,13 @@ function prepareDistressUploadCapForServiceStart(): bool
 
     if (shouldRefreshDistressUploadCapOnStart($state, $forceRefresh)) {
         if (refreshDistressUploadCap($state) === null) {
-            distressAutotuneDebugLog('upload_cap_measure_failed_before_service_start', [
+            distressAutotuneDebugLog('upload_cap_measure_skipped_before_service_start', [
                 'forceRefresh' => $forceRefresh,
                 'bootId' => $bootId,
+                'hasPreviousUploadCap' => isset($state['uploadCapMbps']) && is_numeric($state['uploadCapMbps']) && (float)$state['uploadCapMbps'] > 0.0,
             ]);
             releaseDistressAutotuneLock($lockHandle);
-            return false;
+            return true;
         }
     }
 
@@ -1313,7 +1362,10 @@ function syncDistressBpsCycleState(array &$state, ?array $bpsMetrics): array
             'latestTargetCount' => $latestTargetCount,
         ]);
         resetDistressAutotuneBpsCycle($state);
-        refreshDistressUploadCap($state);
+        distressAutotuneDebugLog('upload_cap_refresh_skipped_while_service_active', [
+            'reason' => 'bps_cycle_reset',
+            'serviceActive' => true,
+        ]);
     }
 
     if ($latestTargetCount !== null) {
@@ -1502,14 +1554,20 @@ function determineDistressSearchTarget(
 
 function resetDistressAutotuneBpsCycle(array &$state): void
 {
+    $previousUploadCapMbps = $state['uploadCapMbps'] ?? null;
+    $previousUploadCapMeasuredAt = $state['uploadCapMeasuredAt'] ?? null;
     $state['lastAdjustedAt'] = 0;
     $state['lastBpsMbps'] = null;
     $state['bestBpsMbps'] = null;
     $state['bestBpsConcurrency'] = null;
     $state['confirmedBestBpsMbps'] = null;
     $state['confirmedBestBpsConcurrency'] = null;
-    $state['uploadCapMbps'] = null;
-    $state['uploadCapMeasuredAt'] = null;
+    $state['uploadCapMbps'] = (is_numeric($previousUploadCapMbps) && (float)$previousUploadCapMbps > 0.0)
+        ? (float)$previousUploadCapMbps
+        : null;
+    $state['uploadCapMeasuredAt'] = (is_numeric($previousUploadCapMeasuredAt) && (int)$previousUploadCapMeasuredAt > 0)
+        ? (int)$previousUploadCapMeasuredAt
+        : null;
     $state['lastBpsCycleId'] = null;
     $state['bpsSettleCyclesRemaining'] = 0;
     resetDistressProbeState($state, DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE);

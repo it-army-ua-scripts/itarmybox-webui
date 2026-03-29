@@ -629,7 +629,7 @@ function harness_test_scheduler_start_forces_upload_cap_refresh(): void
     harness_assert((int)$GLOBALS['distressHarness']['uploadCapMeasureCount'] === 1, 'scheduler start should force upload cap re-measurement');
 }
 
-function harness_test_target_set_change_refreshes_upload_cap(): void
+function harness_test_target_set_change_does_not_refresh_upload_cap_while_active(): void
 {
     harness_reset_runtime();
     $state = [
@@ -645,8 +645,9 @@ function harness_test_target_set_change_refreshes_upload_cap(): void
     ]);
 
     harness_assert(($cycle['currentCycleId'] ?? '') === 'cycle-b', 'cycle state should expose the new cycle id');
-    harness_assert((int)$GLOBALS['distressHarness']['uploadCapMeasureCount'] === 1, 'target set change should re-measure upload cap');
-    harness_assert(abs((float)($state['uploadCapMbps'] ?? 0.0) - 123.45) < 0.0001, 'state should be updated with the refreshed upload cap');
+    harness_assert((int)$GLOBALS['distressHarness']['uploadCapMeasureCount'] === 0, 'target set change should not re-measure upload cap while distress is active');
+    harness_assert(abs((float)($state['uploadCapMbps'] ?? 0.0) - 111.0) < 0.0001, 'existing upload cap should remain until the next successful measurement');
+    harness_assert((int)($state['uploadCapMeasuredAt'] ?? 0) > 0, 'upload cap timestamp should remain until the next successful measurement');
 }
 
 function harness_test_service_start_autostart_forces_upload_cap_refresh_once_per_boot(): void
@@ -718,7 +719,7 @@ $tests = [
     'settle_counter_allows_bps_evaluation_when_zero' => 'harness_test_settle_counter_allows_bps_evaluation_when_zero',
     'manual_second_start_does_not_refresh_upload_cap' => 'harness_test_manual_second_start_does_not_refresh_upload_cap',
     'scheduler_start_forces_upload_cap_refresh' => 'harness_test_scheduler_start_forces_upload_cap_refresh',
-    'target_set_change_refreshes_upload_cap' => 'harness_test_target_set_change_refreshes_upload_cap',
+    'target_set_change_does_not_refresh_upload_cap_while_active' => 'harness_test_target_set_change_does_not_refresh_upload_cap_while_active',
     'service_start_autostart_forces_upload_cap_refresh_once_per_boot' => 'harness_test_service_start_autostart_forces_upload_cap_refresh_once_per_boot',
     'service_start_skip_marker_prevents_duplicate_refresh_after_manual_start' => 'harness_test_service_start_skip_marker_prevents_duplicate_refresh_after_manual_start',
 ];
