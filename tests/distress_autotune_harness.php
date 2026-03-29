@@ -19,8 +19,11 @@ define('DISTRESS_AUTOTUNE_LOCK_FILE', $runtimeRoot . '/distress-autotune.lock');
 
 $GLOBALS['distressHarness'] = [
     'timerInstalled' => true,
+    'knownUnits' => null,
     'repairSucceeds' => true,
     'timersEnabled' => true,
+    'enableTimersShouldFail' => false,
+    'disableTimersShouldFail' => false,
     'serviceActive' => false,
     'activeModules' => [],
     'servicePid' => null,
@@ -42,6 +45,10 @@ function writeDebugLogLine(string $filePath, string $message): void
 
 function isSystemdUnitKnown(string $unitName): bool
 {
+    $knownUnits = $GLOBALS['distressHarness']['knownUnits'] ?? null;
+    if (is_array($knownUnits)) {
+        return ($knownUnits[$unitName] ?? false) === true;
+    }
     return ($GLOBALS['distressHarness']['timerInstalled'] ?? false) === true;
 }
 
@@ -52,6 +59,14 @@ function repairRootHelperAccess(): bool
     }
 
     $GLOBALS['distressHarness']['timerInstalled'] = true;
+    $knownUnits = $GLOBALS['distressHarness']['knownUnits'] ?? null;
+    if (is_array($knownUnits)) {
+        $GLOBALS['distressHarness']['knownUnits'] = [
+            DISTRESS_AUTOTUNE_TIMER_NAME => true,
+            DISTRESS_AUTOTUNE_SAFETY_TIMER_NAME => true,
+            DISTRESS_BPS_COLLECTOR_TIMER_NAME => true,
+        ];
+    }
     return true;
 }
 
@@ -109,12 +124,25 @@ function runCommand(string $command, ?int &$exitCode = null): string
     }
 
     if (str_contains($command, 'enable --now')) {
+        if (($h['enableTimersShouldFail'] ?? false) === true) {
+            $exitCode = 1;
+            return '';
+        }
         $h['timerInstalled'] = true;
         $h['timersEnabled'] = true;
+        if (is_array($h['knownUnits'] ?? null)) {
+            foreach ([DISTRESS_AUTOTUNE_TIMER_NAME, DISTRESS_AUTOTUNE_SAFETY_TIMER_NAME, DISTRESS_BPS_COLLECTOR_TIMER_NAME] as $timerName) {
+                $h['knownUnits'][$timerName] = true;
+            }
+        }
         return '';
     }
 
     if (str_contains($command, 'disable --now')) {
+        if (($h['disableTimersShouldFail'] ?? false) === true) {
+            $exitCode = 1;
+            return '';
+        }
         $h['timersEnabled'] = false;
         return '';
     }
@@ -231,8 +259,11 @@ function harness_reset_runtime(): void
 {
     $GLOBALS['distressHarness'] = [
         'timerInstalled' => true,
+        'knownUnits' => null,
         'repairSucceeds' => true,
         'timersEnabled' => true,
+        'enableTimersShouldFail' => false,
+        'disableTimersShouldFail' => false,
         'serviceActive' => false,
         'activeModules' => [],
         'servicePid' => null,
@@ -304,6 +335,15 @@ function harness_test_manual_mode_skips_missing_timers(): void
     harness_assert(($result['ok'] ?? false) === true, 'manual autotune mode should still save when timers are already missing');
 }
 
+function harness_test_manual_mode_ignores_timer_disable_failure(): void
+{
+    harness_reset_runtime();
+    $GLOBALS['distressHarness']['disableTimersShouldFail'] = true;
+
+    $result = setDistressAutotuneMode(false, 2048);
+    harness_assert(($result['ok'] ?? false) === true, 'manual autotune mode should still save when timer disable fails');
+}
+
 function harness_test_auto_mode_enables_timers(): void
 {
     harness_reset_runtime();
@@ -311,6 +351,46 @@ function harness_test_auto_mode_enables_timers(): void
     $result = setDistressAutotuneMode(true, 2048);
     harness_assert(($result['ok'] ?? false) === true, 'auto autotune mode should be saved successfully');
     harness_assert(($GLOBALS['distressHarness']['timersEnabled'] ?? false) === true, 'auto autotune mode should enable related timers');
+}
+
+function harness_test_auto_mode_requires_all_timers(): void
+{
+    harness_reset_runtime();
+    $GLOBALS['distressHarness']['knownUnits'] = [
+        DISTRESS_AUTOTUNE_TIMER_NAME => true,
+        DISTRESS_AUTOTUNE_SAFETY_TIMER_NAME => false,
+        DISTRESS_BPS_COLLECTOR_TIMER_NAME => false,
+    ];
+    $GLOBALS['distressHarness']['repairSucceeds'] = false;
+
+    $result = setDistressAutotuneMode(true, 4096);
+    harness_assert(($result['ok'] ?? false) === false, 'auto mode should fail when not all timers are available');
+    harness_assert(($result['error'] ?? '') === 'distress_autotune_timer_install_failed', 'auto mode should report timer install failure when auxiliary timers are missing');
+}
+
+function harness_test_manual_settings_save_ignores_timer_disable_failure(): void
+{
+    harness_reset_runtime();
+    $GLOBALS['distressHarness']['disableTimersShouldFail'] = true;
+
+    $result = saveDistressSettings('ExecStart=/usr/bin/distress --concurrency 4096', false, 4096);
+    harness_assert(($result['ok'] ?? false) === true, 'manual settings save should still succeed when timer disable fails');
+    harness_assert(($result['enabled'] ?? true) === false, 'manual settings save should keep manual mode');
+}
+
+function harness_test_auto_settings_save_requires_all_timers(): void
+{
+    harness_reset_runtime();
+    $GLOBALS['distressHarness']['knownUnits'] = [
+        DISTRESS_AUTOTUNE_TIMER_NAME => true,
+        DISTRESS_AUTOTUNE_SAFETY_TIMER_NAME => false,
+        DISTRESS_BPS_COLLECTOR_TIMER_NAME => false,
+    ];
+    $GLOBALS['distressHarness']['repairSucceeds'] = false;
+
+    $result = saveDistressSettings('ExecStart=/usr/bin/distress --concurrency 2048', true, 2048);
+    harness_assert(($result['ok'] ?? false) === false, 'auto settings save should fail when not all timers are available');
+    harness_assert(($result['error'] ?? '') === 'distress_autotune_timer_install_failed', 'auto settings save should report timer install failure');
 }
 
 function harness_test_auto_mode_requires_timer(): void
@@ -834,8 +914,12 @@ $tests = [
     'manual_mode_without_timer' => 'harness_test_manual_mode_without_timer',
     'manual_mode_disables_timers' => 'harness_test_manual_mode_disables_timers',
     'manual_mode_skips_missing_timers' => 'harness_test_manual_mode_skips_missing_timers',
+    'manual_mode_ignores_timer_disable_failure' => 'harness_test_manual_mode_ignores_timer_disable_failure',
     'auto_mode_enables_timers' => 'harness_test_auto_mode_enables_timers',
+    'auto_mode_requires_all_timers' => 'harness_test_auto_mode_requires_all_timers',
     'auto_mode_requires_timer' => 'harness_test_auto_mode_requires_timer',
+    'manual_settings_save_ignores_timer_disable_failure' => 'harness_test_manual_settings_save_ignores_timer_disable_failure',
+    'auto_settings_save_requires_all_timers' => 'harness_test_auto_settings_save_requires_all_timers',
     'tick_manual_skips_without_writing_state' => 'harness_test_tick_manual_skips_without_writing_state',
     'tick_inactive_skips_without_writing_state' => 'harness_test_tick_inactive_skips_without_writing_state',
     'tick_inactive_does_not_require_lock' => 'harness_test_tick_inactive_does_not_require_lock',

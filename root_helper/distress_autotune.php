@@ -73,9 +73,26 @@ function distressAutotuneDebugLog(string $event, array $context = []): void
     writeDebugLogLine(DISTRESS_AUTOTUNE_DEBUG_LOG_FILE, implode(' ', $parts));
 }
 
-function ensureDistressAutotuneTimerInstalled(): bool
+function distressAutotuneTimerNames(): array
 {
-    if (isSystemdUnitKnown(DISTRESS_AUTOTUNE_TIMER_NAME)) {
+    return [
+        DISTRESS_AUTOTUNE_TIMER_NAME,
+        DISTRESS_AUTOTUNE_SAFETY_TIMER_NAME,
+        DISTRESS_BPS_COLLECTOR_TIMER_NAME,
+    ];
+}
+
+function ensureDistressAutotuneTimersInstalled(): bool
+{
+    $timers = distressAutotuneTimerNames();
+    $allKnown = true;
+    foreach ($timers as $timer) {
+        if (!isSystemdUnitKnown($timer)) {
+            $allKnown = false;
+            break;
+        }
+    }
+    if ($allKnown) {
         return true;
     }
 
@@ -86,10 +103,18 @@ function ensureDistressAutotuneTimerInstalled(): bool
     $systemctl = findSystemctl();
     if ($systemctl !== null) {
         runCommand(escapeshellarg($systemctl) . ' daemon-reload', $reloadCode);
-        runCommand(escapeshellarg($systemctl) . ' enable --now ' . escapeshellarg(DISTRESS_AUTOTUNE_TIMER_NAME), $enableCode);
     }
 
-    return isSystemdUnitKnown(DISTRESS_AUTOTUNE_TIMER_NAME);
+    foreach ($timers as $timer) {
+        if (!isSystemdUnitKnown($timer)) {
+            distressAutotuneDebugLog('timer_install_missing_after_repair', [
+                'timer' => $timer,
+            ]);
+            return false;
+        }
+    }
+
+    return true;
 }
 
 function syncDistressAutotuneTimerState(bool $enabled): bool
@@ -99,13 +124,17 @@ function syncDistressAutotuneTimerState(bool $enabled): bool
         return false;
     }
 
-    $timers = [
-        DISTRESS_AUTOTUNE_TIMER_NAME,
-        DISTRESS_AUTOTUNE_SAFETY_TIMER_NAME,
-        DISTRESS_BPS_COLLECTOR_TIMER_NAME,
-    ];
+    $timers = distressAutotuneTimerNames();
 
     foreach ($timers as $timer) {
+        if ($enabled && !isSystemdUnitKnown($timer)) {
+            distressAutotuneDebugLog('timer_state_sync_missing_before_enable', [
+                'timer' => $timer,
+                'enabled' => true,
+            ]);
+            return false;
+        }
+
         if (!$enabled && !isSystemdUnitKnown($timer)) {
             distressAutotuneDebugLog('timer_state_sync_skipped_missing', [
                 'timer' => $timer,
@@ -117,6 +146,14 @@ function syncDistressAutotuneTimerState(bool $enabled): bool
         $command = $enabled ? 'enable --now ' : 'disable --now ';
         runCommand(escapeshellarg($systemctl) . ' ' . $command . escapeshellarg($timer), $code);
         if ($code !== 0) {
+            if (!$enabled && !isSystemdUnitKnown($timer)) {
+                distressAutotuneDebugLog('timer_state_sync_skipped_missing_after_disable_failure', [
+                    'timer' => $timer,
+                    'enabled' => false,
+                    'exitCode' => $code,
+                ]);
+                continue;
+            }
             distressAutotuneDebugLog('timer_state_sync_failed', [
                 'timer' => $timer,
                 'enabled' => $enabled,
@@ -986,7 +1023,7 @@ function measureDistressUploadCapManually(): array
 function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
 {
     $enabled = normalizeDistressAutotuneEnabled($enabledValue);
-    if ($enabled && !ensureDistressAutotuneTimerInstalled()) {
+    if ($enabled && !ensureDistressAutotuneTimersInstalled()) {
         return distressAutotuneError('distress_autotune_timer_install_failed');
     }
 
@@ -1021,6 +1058,14 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
     }
 
     if (!syncDistressAutotuneTimerState($enabled)) {
+        if (!$enabled) {
+            distressAutotuneDebugLog('timer_state_sync_failed_ignored_manual', [
+                'operation' => 'set_mode',
+                'concurrency' => $concurrency,
+            ]);
+            releaseDistressAutotuneLock($lockHandle);
+            return getDistressAutotuneStatus();
+        }
         $rollbackConfigOk = !$configChanged || setDistressConfigConcurrency($previousConfigConcurrency);
         writeDistressAutotuneState($previousState);
         releaseDistressAutotuneLock($lockHandle);
@@ -1036,7 +1081,7 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
 function saveDistressSettings(string $execStartLine, $enabledValue, $concurrencyValue): array
 {
     $enabled = normalizeDistressAutotuneEnabled($enabledValue);
-    if ($enabled && !ensureDistressAutotuneTimerInstalled()) {
+    if ($enabled && !ensureDistressAutotuneTimersInstalled()) {
         return distressAutotuneError('distress_autotune_timer_install_failed');
     }
 
@@ -1078,6 +1123,14 @@ function saveDistressSettings(string $execStartLine, $enabledValue, $concurrency
     }
 
     if (!syncDistressAutotuneTimerState($enabled)) {
+        if (!$enabled) {
+            distressAutotuneDebugLog('timer_state_sync_failed_ignored_manual', [
+                'operation' => 'save_settings',
+                'concurrency' => $concurrency,
+            ]);
+            releaseDistressAutotuneLock($lockHandle);
+            return getDistressAutotuneStatus();
+        }
         $rollbackConfigOk = !$configChanged || updateServiceExecStart('distress', $previousExecStart);
         writeDistressAutotuneState($previousState);
         releaseDistressAutotuneLock($lockHandle);
