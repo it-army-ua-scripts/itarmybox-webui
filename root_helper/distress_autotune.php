@@ -11,8 +11,8 @@ const DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY = 4096;
 const DISTRESS_AUTOTUNE_MIN_CONCURRENCY = 64;
 const DISTRESS_AUTOTUNE_MAX_CONCURRENCY = 30720;
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_URL = 'https://speed.cloudflare.com/__up';
-const DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES = 4194304;
-const DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT = 2;
+const DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES = 67108864;
+const DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT = 3;
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_TIMEOUT_SECONDS = 15;
 const DISTRESS_AUTOTUNE_BIG_CORE_COUNT = 4;
 const DISTRESS_AUTOTUNE_BIG_CORE_WEIGHT = 1.0;
@@ -825,14 +825,21 @@ function measureDistressCloudflareUploadCap(): ?float
         return null;
     }
 
-    rsort($samples, SORT_NUMERIC);
-    $measuredMbps = $samples[0];
+    sort($samples, SORT_NUMERIC);
+    $sampleCount = count($samples);
+    $middle = (int)floor($sampleCount / 2);
+    if (($sampleCount % 2) === 1) {
+        $measuredMbps = $samples[$middle];
+    } else {
+        $measuredMbps = ($samples[$middle - 1] + $samples[$middle]) / 2.0;
+    }
     distressAutotuneDebugLog('upload_cap_measured', [
         'url' => DISTRESS_AUTOTUNE_UPLOAD_CAP_URL,
         'sampleBytes' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES,
         'sampleCount' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
         'samplesMbps' => $samples,
         'measuredMbps' => $measuredMbps,
+        'aggregation' => 'median',
     ]);
 
     return $measuredMbps;
