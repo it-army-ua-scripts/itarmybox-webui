@@ -54,7 +54,7 @@ $daemonName = $_GET['daemon'] ?? '';
                 echo render_module_action_form('/stop.php', $daemonName, t('stop'));
             } else {
                 echo htmlspecialchars(t('module_not_running', ['module' => $daemonName]), ENT_QUOTES, 'UTF-8');
-                echo render_module_action_form('/start.php', $daemonName, t('start'));
+                echo render_module_action_link('/start.php', $daemonName, t('start'));
             }
 
             $statusText = trim((string)($info['statusText'] ?? ''));

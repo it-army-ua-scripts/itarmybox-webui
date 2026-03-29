@@ -87,6 +87,16 @@
         return form;
     }
 
+    function createActionLink(path, module, label) {
+        const anchor = document.createElement("a");
+        anchor.href = path
+            + "?daemon=" + encodeURIComponent(module)
+            + "&source=status_action"
+            + "&lang=" + encodeURIComponent(config.lang || "uk");
+        anchor.textContent = label;
+        return anchor;
+    }
+
     function renderActiveModuleActions(activeModuleName, selectedModuleName) {
         activeModuleActionsEl.innerHTML = "";
         if (activeModuleName) {
@@ -95,7 +105,7 @@
         }
 
         if (selectedModuleName) {
-            activeModuleActionsEl.appendChild(createActionForm("/start.php", selectedModuleName, config.text.start));
+            activeModuleActionsEl.appendChild(createActionLink("/start.php", selectedModuleName, config.text.start));
         }
     }
 

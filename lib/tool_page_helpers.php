@@ -12,6 +12,14 @@ function render_module_action_form(string $path, string $daemonName, string $lab
         . '</form></div>';
 }
 
+function render_module_action_link(string $path, string $daemonName, string $label, string $source = 'tool_action'): string
+{
+    $href = url_with_lang($path . '?daemon=' . rawurlencode($daemonName) . '&source=' . rawurlencode($source));
+    return '<div class="menu"><a href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '">'
+        . htmlspecialchars($label, ENT_QUOTES, 'UTF-8')
+        . '</a></div>';
+}
+
 function build_tool_url(string $daemonName, array $params = []): string
 {
     $query = array_merge(['daemon' => $daemonName], $params);

@@ -231,7 +231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $daemon = (string)($_GET['daemon'] ?? '');
     $source = (string)($_GET['source'] ?? '');
-    if ($daemon !== '' && in_array($daemon, $config['daemonNames'], true) && in_array($source, ['tool_action', 'status_action'], true)) {
+    if ($daemon !== '' && in_array($daemon, $config['daemonNames'], true)) {
         write_start_debug_log('start_php_get_fallback_received', [
             'daemon' => $daemon,
             'source' => $source,
