@@ -518,6 +518,11 @@ function switchExclusiveModuleState(array $modules, ?string $selected, bool $for
         if ($code !== 0) {
             return ['ok' => false, 'error' => 'service_switch_failed'];
         }
+        $startAttempts = $selected === 'distress' ? 180 : 25;
+        $startSleepMicroseconds = $selected === 'distress' ? 500000 : 200000;
+        if (!waitForServiceActive($selected, $startAttempts, $startSleepMicroseconds)) {
+            return ['ok' => false, 'error' => 'service_start_verification_failed'];
+        }
     }
 
     $expectedActive = $selected !== null ? [$selected] : [];

@@ -1,8 +1,14 @@
 <?php
 
-require_once __DIR__ . '/root_helper_client.php';
-require_once __DIR__ . '/tool_helpers.php';
-require_once __DIR__ . '/tool_distress_helpers.php';
+if (!function_exists('root_helper_request')) {
+    require_once __DIR__ . '/root_helper_client.php';
+}
+if (!function_exists('getConfigStringFromServiceFile') || !function_exists('updateServiceFile')) {
+    require_once __DIR__ . '/tool_helpers.php';
+}
+if (!function_exists('getDistressAutotuneSettings')) {
+    require_once __DIR__ . '/tool_distress_helpers.php';
+}
 
 const DISTRESS_START_TASK_FILE = __DIR__ . '/../var/state/distress-start-task.json';
 
