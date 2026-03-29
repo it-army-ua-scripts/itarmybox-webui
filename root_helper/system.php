@@ -132,6 +132,18 @@ function collectSystemHealthSnapshot(array $modules): array
     $memoryPsi = readSystemHealthPsiResource('memory');
     $ioPsi = readSystemHealthPsiResource('io');
     $activeModules = function_exists('getActiveModules') ? getActiveModules($modules) : [];
+    $activeModulePids = [];
+    if (function_exists('getServiceMainPid')) {
+        foreach ($activeModules as $module) {
+            if (!is_string($module) || $module === '') {
+                continue;
+            }
+            $pid = getServiceMainPid($module);
+            if ($pid !== null) {
+                $activeModulePids[$module] = $pid;
+            }
+        }
+    }
 
     return [
         'uptimeSeconds' => readSystemHealthUptimeSeconds(),
@@ -151,6 +163,7 @@ function collectSystemHealthSnapshot(array $modules): array
         'ioPsiFullAvg10' => $ioPsi['fullAvg10'],
         'thermalZones' => readSystemHealthThermalZones(),
         'activeModules' => $activeModules,
+        'activeModulePids' => $activeModulePids,
         'distressPid' => in_array('distress', $activeModules, true) ? getServiceMainPid('distress') : null,
     ];
 }
