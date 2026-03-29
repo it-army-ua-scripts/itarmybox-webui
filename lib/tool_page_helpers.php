@@ -84,7 +84,7 @@ function tool_handle_post(array $config, string $daemonName, array $post, bool $
         $allowedParamKeys = array_flip($config['adjustableParams'][$daemonName] ?? []);
         $paramsToSave = array_intersect_key($post, $allowedParamKeys);
         if ($daemonName === 'distress') {
-            $paramsToSave['distress-concurrency-mode'] = $post['distress-concurrency-mode'] ?? 'auto';
+            $paramsToSave['distress-concurrency-mode'] = $post['distress-concurrency-mode'] ?? 'manual';
             $distressValidation = normalizeAndValidateDistressPostParams($paramsToSave);
             if (($distressValidation['ok'] ?? false) !== true) {
                 $saveError = (string)($distressValidation['error'] ?? 'invalid_distress_settings');

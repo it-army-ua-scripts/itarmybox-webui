@@ -148,7 +148,17 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
     </div>
     <div class="form-group">
         <label for="concurrency"><?= htmlspecialchars(t('number_task_creators'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="text" id="concurrency" name="concurrency" value="<?= htmlspecialchars($distressConcurrencyValue, ENT_QUOTES, 'UTF-8') ?>" placeholder="<?= htmlspecialchars($distressConcurrencyMode === 'auto' ? '2048' : t('placeholder_digits_default_4096'), ENT_QUOTES, 'UTF-8') ?>" pattern="\d+" inputmode="numeric">
+        <input
+            type="number"
+            id="concurrency"
+            name="concurrency"
+            min="64"
+            max="<?= DISTRESS_MAX_CONCURRENCY ?>"
+            step="64"
+            value="<?= htmlspecialchars($distressConcurrencyValue, ENT_QUOTES, 'UTF-8') ?>"
+            placeholder="<?= htmlspecialchars($distressConcurrencyMode === 'auto' ? '2048' : t('placeholder_digits_default_4096'), ENT_QUOTES, 'UTF-8') ?>"
+            inputmode="numeric"
+        >
     </div>
     <div class="form-group">
         <label for="use-my-ip"><?= htmlspecialchars(t('percentage_personal_ip'), ENT_QUOTES, 'UTF-8') ?></label>
@@ -284,7 +294,8 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
                 return;
             }
             const autoMode = concurrencyModeEl.value === "auto";
-            concurrencyEl.disabled = autoMode;
+            concurrencyEl.readOnly = autoMode;
+            concurrencyEl.setAttribute("aria-disabled", autoMode ? "true" : "false");
             if (autotunePanelEl) {
                 autotunePanelEl.hidden = !autoMode;
             }

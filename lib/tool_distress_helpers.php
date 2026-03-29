@@ -1,6 +1,8 @@
 <?php
 
-require_once __DIR__ . '/root_helper_client.php';
+if (!function_exists('root_helper_request')) {
+    require_once __DIR__ . '/root_helper_client.php';
+}
 
 const DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY = 2048;
 const DISTRESS_MANUAL_DEFAULT_CONCURRENCY = 4096;
@@ -30,7 +32,7 @@ function normalizeAndValidateDistressPostParams(array $params): array
 {
     $normalized = $params;
 
-    $concurrencyModeRaw = strtolower(trim((string)($params['distress-concurrency-mode'] ?? 'auto')));
+    $concurrencyModeRaw = strtolower(trim((string)($params['distress-concurrency-mode'] ?? 'manual')));
     if (!in_array($concurrencyModeRaw, ['auto', 'manual'], true)) {
         return ['ok' => false, 'error' => 'invalid_concurrency_mode'];
     }
