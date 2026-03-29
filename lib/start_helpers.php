@@ -6,7 +6,6 @@ if (!function_exists('root_helper_request')) {
 if (!function_exists('getConfigStringFromServiceFile') || !function_exists('updateServiceFile')) {
     require_once __DIR__ . '/tool_helpers.php';
 }
-const DISTRESS_START_TASK_FILE = __DIR__ . '/../var/state/distress-start-task.json';
 const START_DEBUG_LOG_FILE = __DIR__ . '/../var/log/start-debug.log';
 const START_DEBUG_STATE_LOG_FILE = __DIR__ . '/../var/state/start-debug.log';
 const START_DEBUG_TMP_LOG_FILE = '/tmp/itarmybox-start-debug.log';
@@ -37,105 +36,6 @@ function write_start_debug_log(string $event, array $context = []): void
     }
 }
 
-function ensure_start_task_directory(): bool
-{
-    $dir = dirname(DISTRESS_START_TASK_FILE);
-    return is_dir($dir) || @mkdir($dir, 0775, true) || is_dir($dir);
-}
-
-function read_start_task_state(): array
-{
-    $raw = @file_get_contents(DISTRESS_START_TASK_FILE);
-    if (!is_string($raw) || trim($raw) === '') {
-        return [
-            'status' => 'idle',
-            'daemon' => null,
-            'messageKey' => null,
-            'error' => null,
-            'startedAt' => null,
-            'finishedAt' => null,
-        ];
-    }
-
-    $data = json_decode($raw, true);
-    if (!is_array($data)) {
-        return [
-            'status' => 'idle',
-            'daemon' => null,
-            'messageKey' => null,
-            'error' => null,
-            'startedAt' => null,
-            'finishedAt' => null,
-        ];
-    }
-
-    return $data;
-}
-
-function write_start_task_state(array $state): bool
-{
-    if (!ensure_start_task_directory()) {
-        return false;
-    }
-
-    $payload = json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (!is_string($payload)) {
-        return false;
-    }
-
-    $tmpPath = DISTRESS_START_TASK_FILE . '.tmp';
-    if (@file_put_contents($tmpPath, $payload) === false) {
-        return false;
-    }
-
-    if (!@rename($tmpPath, DISTRESS_START_TASK_FILE)) {
-        @unlink($tmpPath);
-        return false;
-    }
-
-    return true;
-}
-
-function reset_start_task_state(string $daemon): bool
-{
-    $result = write_start_task_state([
-        'status' => 'pending',
-        'daemon' => $daemon,
-        'messageKey' => null,
-        'error' => null,
-        'startedAt' => time(),
-        'finishedAt' => null,
-    ]);
-
-    write_start_debug_log('start_task_reset', [
-        'daemon' => $daemon,
-        'ok' => $result,
-    ]);
-
-    return $result;
-}
-
-function complete_start_task_state(string $daemon, bool $ok, ?string $error = null): bool
-{
-    $result = write_start_task_state([
-        'status' => $ok ? 'success' : 'failed',
-        'daemon' => $daemon,
-        'messageKey' => $ok ? 'start_requested' : 'start_failed',
-        'error' => $error,
-        'startedAt' => (int)(read_start_task_state()['startedAt'] ?? time()),
-        'finishedAt' => time(),
-    ]);
-
-    write_start_debug_log('start_task_completed', [
-        'daemon' => $daemon,
-        'ok' => $ok,
-        'error' => $error,
-        'stateWriteOk' => $result,
-    ]);
-
-    return $result;
-}
-
 function start_module_request(string $daemon, array $config): array
 {
     write_start_debug_log('start_module_request_begin', [
@@ -160,64 +60,4 @@ function start_module_request(string $daemon, array $config): array
         'messageKey' => (($response['ok'] ?? false) === true) ? 'start_requested' : 'start_failed',
         'error' => $response['error'] ?? null,
     ];
-}
-
-function start_uses_background_worker(string $daemon): bool
-{
-    return $daemon === 'distress';
-}
-
-function find_php_cli_for_background_start(): ?string
-{
-    $candidates = [];
-    if (defined('PHP_BINARY') && is_string(PHP_BINARY) && PHP_BINARY !== '') {
-        $candidates[] = PHP_BINARY;
-    }
-    array_push($candidates, '/usr/bin/php', '/usr/local/bin/php', '/bin/php');
-
-    foreach ($candidates as $candidate) {
-        if (is_string($candidate) && $candidate !== '' && is_executable($candidate)) {
-            return $candidate;
-        }
-    }
-
-    return null;
-}
-
-function spawn_start_worker(string $daemon): bool
-{
-    $phpCli = find_php_cli_for_background_start();
-    if ($phpCli === null) {
-        write_start_debug_log('spawn_worker_failed', [
-            'daemon' => $daemon,
-            'reason' => 'php_cli_not_found',
-        ]);
-        return false;
-    }
-
-    $workerPath = realpath(__DIR__ . '/../start_worker.php');
-    if (!is_string($workerPath) || $workerPath === '') {
-        write_start_debug_log('spawn_worker_failed', [
-            'daemon' => $daemon,
-            'reason' => 'worker_path_not_found',
-        ]);
-        return false;
-    }
-
-    $command = sprintf(
-        'nohup %s %s %s > /dev/null 2>&1 &',
-        escapeshellarg($phpCli),
-        escapeshellarg($workerPath),
-        escapeshellarg($daemon)
-    );
-
-    @exec('/bin/sh -c ' . escapeshellarg($command), $output, $code);
-    write_start_debug_log('spawn_worker_result', [
-        'daemon' => $daemon,
-        'phpCli' => $phpCli,
-        'workerPath' => $workerPath,
-        'code' => $code,
-        'output' => $output,
-    ]);
-    return $code === 0;
 }
