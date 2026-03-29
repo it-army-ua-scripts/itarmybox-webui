@@ -800,6 +800,17 @@ h1 {
     background: #1a252f;
 }
 
+.distress-form-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.distress-form-action {
+    margin: 0;
+}
+
 .menu a.distress-start-link.is-ready {
     background: linear-gradient(180deg, #16a34a 0%, #15803d 100%);
     border-color: rgba(21, 128, 61, 0.42);
@@ -1852,6 +1863,12 @@ html[data-theme="dark"] .distress-start-gate-hint.is-ready {
 
 html[data-theme="dark"] .distress-start-gate-hint.is-blocked {
     color: #fca5a5;
+}
+
+@media (min-width: 640px) {
+    .distress-form-actions {
+        grid-template-columns: 1fr 1fr;
+    }
 }
 
 html[data-theme="dark"] .copy-bot-btn:hover {

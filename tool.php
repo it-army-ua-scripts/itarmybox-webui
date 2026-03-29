@@ -6,6 +6,59 @@ $config = require 'config/config.php';
 
 $daemonName = $_GET['daemon'] ?? '';
 $isAjaxRequest = (($_GET['ajax'] ?? '') === '1');
+
+$allowedFlashKeys = [];
+$info = [];
+$wasActiveBeforeSave = false;
+$currentAdjustableParams = [];
+
+if (in_array($daemonName, $config['daemonNames'], true)) {
+    $allowedFlashKeys = tool_allowed_flash_keys();
+    $info = tool_service_info($config['daemonNames'], $daemonName);
+    $wasActiveBeforeSave = (($info['ok'] ?? false) === true) ? (bool)($info['active'] ?? false) : false;
+
+    if (!empty($_POST)) {
+        if ($isAjaxRequest && $daemonName === 'distress' && (string)($_POST['distress-action'] ?? '') === 'measure-upload-cap') {
+            $measureResponse = measureDistressUploadCap();
+            $measureOk = (($measureResponse['ok'] ?? false) === true);
+            $flashKey = $measureOk ? 'distress_upload_cap_measure_success' : 'distress_upload_cap_measure_failed';
+            $secondaryKey = $measureOk
+                ? ''
+                : ((string)($measureResponse['error'] ?? '') === 'distress_upload_cap_measure_failed'
+                    ? ''
+                    : (string)($measureResponse['error'] ?? ''));
+            header('Content-Type: application/json; charset=UTF-8');
+            echo json_encode([
+                'ok' => $measureOk,
+                'flashKey' => $flashKey,
+                'flashText' => t($flashKey),
+                'flashClass' => $measureOk ? 'status active' : 'status inactive',
+                'secondaryKey' => $secondaryKey,
+                'secondaryText' => ($secondaryKey !== '' && in_array($secondaryKey, $allowedFlashKeys, true)) ? t($secondaryKey) : '',
+                'uploadCapStatus' => (string)($measureResponse['uploadCapStatus'] ?? 'idle'),
+                'uploadCapMbps' => isset($measureResponse['uploadCapMbps']) && is_numeric($measureResponse['uploadCapMbps'])
+                    ? (float)$measureResponse['uploadCapMbps']
+                    : null,
+                'uploadCapMeasuredAt' => isset($measureResponse['uploadCapMeasuredAt']) && is_numeric($measureResponse['uploadCapMeasuredAt'])
+                    ? (int)$measureResponse['uploadCapMeasuredAt']
+                    : null,
+                'uploadCapLastMethod' => isset($measureResponse['uploadCapLastMethod']) && is_string($measureResponse['uploadCapLastMethod'])
+                    ? $measureResponse['uploadCapLastMethod']
+                    : '',
+                'uploadCapLastError' => isset($measureResponse['uploadCapLastError']) && is_string($measureResponse['uploadCapLastError'])
+                    ? trim($measureResponse['uploadCapLastError'])
+                    : '',
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
+
+        $redirectParams = tool_handle_post($config, $daemonName, $_POST, $wasActiveBeforeSave);
+        header('Location: ' . build_tool_url($daemonName, $redirectParams));
+        exit;
+    }
+
+    $currentAdjustableParams = tool_current_adjustable_params($config, $daemonName);
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?= htmlspecialchars(app_lang(), ENT_QUOTES, 'UTF-8') ?>">
@@ -23,48 +76,6 @@ $isAjaxRequest = (($_GET['ajax'] ?? '') === '1');
     <div class="content">
         <?php
         if (in_array($daemonName, $config['daemonNames'], true)) {
-            $allowedFlashKeys = tool_allowed_flash_keys();
-            $info = tool_service_info($config['daemonNames'], $daemonName);
-            $wasActiveBeforeSave = (($info['ok'] ?? false) === true) ? (bool)($info['active'] ?? false) : false;
-            if (!empty($_POST)) {
-                if ($isAjaxRequest && $daemonName === 'distress' && (string)($_POST['distress-action'] ?? '') === 'measure-upload-cap') {
-                    $measureResponse = measureDistressUploadCap();
-                    $measureOk = (($measureResponse['ok'] ?? false) === true);
-                    $flashKey = $measureOk ? 'distress_upload_cap_measure_success' : 'distress_upload_cap_measure_failed';
-                    $secondaryKey = $measureOk
-                        ? ''
-                        : ((string)($measureResponse['error'] ?? '') === 'distress_upload_cap_measure_failed'
-                            ? ''
-                            : (string)($measureResponse['error'] ?? ''));
-                    header('Content-Type: application/json; charset=UTF-8');
-                    echo json_encode([
-                        'ok' => $measureOk,
-                        'flashKey' => $flashKey,
-                        'flashText' => t($flashKey),
-                        'flashClass' => $measureOk ? 'status active' : 'status inactive',
-                        'secondaryKey' => $secondaryKey,
-                        'secondaryText' => ($secondaryKey !== '' && in_array($secondaryKey, $allowedFlashKeys, true)) ? t($secondaryKey) : '',
-                        'uploadCapStatus' => (string)($measureResponse['uploadCapStatus'] ?? 'idle'),
-                        'uploadCapMbps' => isset($measureResponse['uploadCapMbps']) && is_numeric($measureResponse['uploadCapMbps'])
-                            ? (float)$measureResponse['uploadCapMbps']
-                            : null,
-                        'uploadCapMeasuredAt' => isset($measureResponse['uploadCapMeasuredAt']) && is_numeric($measureResponse['uploadCapMeasuredAt'])
-                            ? (int)$measureResponse['uploadCapMeasuredAt']
-                            : null,
-                        'uploadCapLastMethod' => isset($measureResponse['uploadCapLastMethod']) && is_string($measureResponse['uploadCapLastMethod'])
-                            ? $measureResponse['uploadCapLastMethod']
-                            : '',
-                        'uploadCapLastError' => isset($measureResponse['uploadCapLastError']) && is_string($measureResponse['uploadCapLastError'])
-                            ? trim($measureResponse['uploadCapLastError'])
-                            : '',
-                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                    exit;
-                }
-                $redirectParams = tool_handle_post($config, $daemonName, $_POST, $wasActiveBeforeSave);
-                header('Location: ' . build_tool_url($daemonName, $redirectParams));
-                exit;
-            }
-
             $flashKey = (string)($_GET['flash'] ?? '');
             $flashClass = ((string)($_GET['flashClass'] ?? '') === 'active') ? 'status active' : 'status inactive';
             $flashSecondaryKey = (string)($_GET['flashSecondary'] ?? '');
@@ -76,8 +87,6 @@ $isAjaxRequest = (($_GET['ajax'] ?? '') === '1');
             if (in_array($flashSecondaryKey, $allowedFlashKeys, true)) {
                 echo '<div class="form-message status inactive">' . htmlspecialchars(t($flashSecondaryKey), ENT_QUOTES, 'UTF-8') . '</div>';
             }
-
-            $currentAdjustableParams = tool_current_adjustable_params($config, $daemonName);
             $distressStartMode = 'manual';
             $distressHasUploadCapMeasurement = false;
             if ($daemonName === 'distress') {

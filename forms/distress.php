@@ -189,8 +189,10 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
         <label for="proxies-path"><?= htmlspecialchars(t('proxies_file_path'), ENT_QUOTES, 'UTF-8') ?></label>
         <input type="text" id="proxies-path" name="proxies-path" value="<?= $currentAdjustableParams['proxies-path']??"" ?>">
     </div>
-    <button class="submit-btn" type="submit" name="distress-action" value="measure-upload-cap" id="distress-measure-button"><?= htmlspecialchars(t('distress_upload_cap_measure_button'), ENT_QUOTES, 'UTF-8') ?></button>
-    <button class="submit-btn" type="submit" name="distress-action" value="save-settings"><?= htmlspecialchars(t('save'), ENT_QUOTES, 'UTF-8') ?></button>
+    <div class="distress-form-actions">
+        <button class="submit-btn distress-form-action" type="submit" name="distress-action" value="measure-upload-cap" id="distress-measure-button"><?= htmlspecialchars(t('distress_upload_cap_measure_button'), ENT_QUOTES, 'UTF-8') ?></button>
+        <button class="submit-btn distress-form-action" type="submit" name="distress-action" value="save-settings"><?= htmlspecialchars(t('save'), ENT_QUOTES, 'UTF-8') ?></button>
+    </div>
 </form>
 <div class="status-log-modal distress-measure-modal" id="distress-measure-modal" hidden>
     <div class="status-log-modal-card distress-measure-modal-card" role="dialog" aria-modal="true" aria-labelledby="distress-measure-title">
