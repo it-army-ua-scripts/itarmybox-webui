@@ -139,6 +139,8 @@ function getDistressAutotuneSettings(): array
             'uploadCapProgressAttempt' => null,
             'uploadCapProgressTotal' => 3,
             'uploadCapProgressPhase' => 'idle',
+            'uploadCapMeasureCooldownRemaining' => 0,
+            'uploadCapBlockedByActiveModules' => [],
             'uploadCapLastError' => null,
             'uploadCapLastMethod' => null,
         ];
@@ -203,6 +205,12 @@ function getDistressAutotuneSettings(): array
         'uploadCapProgressPhase' => isset($response['uploadCapProgressPhase']) && is_string($response['uploadCapProgressPhase'])
             ? $response['uploadCapProgressPhase']
             : 'idle',
+        'uploadCapMeasureCooldownRemaining' => isset($response['uploadCapMeasureCooldownRemaining']) && is_numeric($response['uploadCapMeasureCooldownRemaining'])
+            ? max(0, (int)$response['uploadCapMeasureCooldownRemaining'])
+            : 0,
+        'uploadCapBlockedByActiveModules' => isset($response['uploadCapBlockedByActiveModules']) && is_array($response['uploadCapBlockedByActiveModules'])
+            ? array_values(array_filter($response['uploadCapBlockedByActiveModules'], 'is_string'))
+            : [],
         'uploadCapLastError' => isset($response['uploadCapLastError']) && is_string($response['uploadCapLastError'])
             ? $response['uploadCapLastError']
             : null,
@@ -228,18 +236,16 @@ function saveDistressAutotuneSettings(bool $enabled, int $concurrency): bool
     return ($response['ok'] ?? false) === true;
 }
 
-function saveDistressSettings(string $execStartLine, bool $enabled, int $concurrency): bool
+function saveDistressSettings(string $execStartLine, bool $enabled, int $concurrency): array
 {
     $config = require __DIR__ . '/../config/config.php';
-    $response = root_helper_request([
+    return root_helper_request([
         'action' => 'distress_settings_set',
         'modules' => $config['daemonNames'],
         'execStart' => $execStartLine,
         'enabled' => $enabled,
         'concurrency' => $concurrency,
     ]);
-
-    return ($response['ok'] ?? false) === true;
 }
 
 function measureDistressUploadCap(): array

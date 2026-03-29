@@ -26,6 +26,9 @@
     const config = JSON.parse(configEl.textContent || "{}");
     const text = config.text || {};
     let hasMeasurement = config.hasMeasurement === true;
+    let cooldownRemaining = typeof config.cooldownRemaining === "number" ? config.cooldownRemaining : 0;
+    let blockedByActiveModules = Array.isArray(config.blockedByActiveModules) ? config.blockedByActiveModules : [];
+    let cooldownTimer = null;
 
     function formatMethod(method) {
         switch (method) {
@@ -65,6 +68,52 @@
         resultEl.hidden = false;
         resultEl.textContent = message || "";
         resultEl.className = "form-message distress-measure-result " + (ok ? "status active" : "status inactive");
+    }
+
+    function updateMeasureCooldownHint() {
+        const hintEl = document.getElementById("distress-measure-cooldown-hint");
+        const blockedHintEl = document.getElementById("distress-measure-blocked-hint");
+        if (!measureButtonEl || !hintEl || !blockedHintEl) {
+            return;
+        }
+
+        const cooldownBlocked = cooldownRemaining > 0;
+        const activeModulesBlocked = blockedByActiveModules.length > 0;
+        measureButtonEl.disabled = cooldownBlocked || activeModulesBlocked || requestInFlight;
+
+        hintEl.hidden = !cooldownBlocked;
+        if (cooldownBlocked) {
+            hintEl.textContent = (text.cooldownText || "").replace("{{seconds}}", String(cooldownRemaining));
+        } else {
+            hintEl.textContent = "";
+        }
+
+        blockedHintEl.hidden = !activeModulesBlocked;
+        blockedHintEl.textContent = activeModulesBlocked ? (text.blockedText || "") : "";
+    }
+
+    function stopCooldownTimer() {
+        if (cooldownTimer !== null) {
+            window.clearInterval(cooldownTimer);
+            cooldownTimer = null;
+        }
+    }
+
+    function startCooldownTimer() {
+        stopCooldownTimer();
+        updateMeasureCooldownHint();
+        if (cooldownRemaining <= 0) {
+            return;
+        }
+        cooldownTimer = window.setInterval(function () {
+            if (cooldownRemaining > 0) {
+                cooldownRemaining -= 1;
+                updateMeasureCooldownHint();
+            }
+            if (cooldownRemaining <= 0) {
+                stopCooldownTimer();
+            }
+        }, 1000);
     }
 
     function showModal() {
@@ -125,7 +174,16 @@
             setLine("distress-upload-cap-error-line", "", true);
         }
 
+        if (typeof payload.uploadCapMeasureCooldownRemaining === "number" && Number.isFinite(payload.uploadCapMeasureCooldownRemaining)) {
+            cooldownRemaining = Math.max(0, Math.round(payload.uploadCapMeasureCooldownRemaining));
+            startCooldownTimer();
+        }
+        if (Array.isArray(payload.uploadCapBlockedByActiveModules)) {
+            blockedByActiveModules = payload.uploadCapBlockedByActiveModules;
+        }
+
         updateStartGate();
+        updateMeasureCooldownHint();
     }
 
     function applyMeasurementProgress(payload) {
@@ -254,7 +312,7 @@
 
     async function runMeasurement() {
         requestInFlight = true;
-        measureButtonEl.disabled = true;
+        updateMeasureCooldownHint();
         resultEl.hidden = true;
         resultEl.textContent = "";
         progressBarEl.classList.remove("is-success", "is-failed");
@@ -280,7 +338,7 @@
             const payload = await response.json();
             stopProgressPolling();
             requestInFlight = false;
-            measureButtonEl.disabled = false;
+            updateMeasureCooldownHint();
 
             const ok = payload && payload.ok === true;
             progressBarEl.classList.toggle("is-success", ok);
@@ -296,7 +354,7 @@
         } catch (error) {
             stopProgressPolling();
             requestInFlight = false;
-            measureButtonEl.disabled = false;
+            updateMeasureCooldownHint();
             progressBarEl.classList.remove("is-success");
             progressBarEl.classList.add("is-failed");
             setProgress(100);
@@ -308,7 +366,7 @@
 
     measureButtonEl.addEventListener("click", function (event) {
         event.preventDefault();
-        if (!requestInFlight) {
+        if (!requestInFlight && cooldownRemaining <= 0 && blockedByActiveModules.length === 0) {
             runMeasurement();
         }
     });
@@ -333,4 +391,5 @@
     });
 
     updateStartGate();
+    startCooldownTimer();
 })();

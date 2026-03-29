@@ -16,6 +16,8 @@ const DISTRESS_AUTOTUNE_UPLOAD_CAP_URL = 'https://speed.cloudflare.com/__up';
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES = 67108864;
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT = 3;
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_TIMEOUT_SECONDS = 20;
+const DISTRESS_AUTOTUNE_UPLOAD_CAP_MANUAL_COOLDOWN_SECONDS = 300;
+const DISTRESS_UPLOAD_CAP_BLOCKING_MODULES = ['mhddos', 'distress', 'x100'];
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_IDLE = 'idle';
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_RUNNING = 'running';
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_SUCCESS = 'success';
@@ -855,12 +857,40 @@ function getDistressAutotuneStatus(): array
             ? (int)$state['uploadCapProgressTotal']
             : DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
         'uploadCapProgressPhase' => normalizeDistressUploadCapProgressPhase($state['uploadCapProgressPhase'] ?? null),
+        'uploadCapMeasureCooldownRemaining' => getDistressUploadCapMeasurementCooldownRemaining($state),
+        'uploadCapBlockedByActiveModules' => getDistressUploadCapActiveBlockingModules(),
         'uploadCapLastError' => $state['uploadCapLastError'] ?? null,
         'uploadCapLastMethod' => $state['uploadCapLastMethod'] ?? null,
         'lastTargetCount' => $state['lastTargetCount'] ?? null,
         'lastBpsCycleId' => $state['lastBpsCycleId'] ?? null,
         'bpsSettleCyclesRemaining' => (int)($state['bpsSettleCyclesRemaining'] ?? 0),
     ];
+}
+
+function getDistressUploadCapMeasurementCooldownRemaining(?array $state = null): int
+{
+    $state = is_array($state) ? $state : readDistressAutotuneState();
+    $finishedAt = isset($state['uploadCapFinishedAt']) && is_numeric($state['uploadCapFinishedAt'])
+        ? (int)$state['uploadCapFinishedAt']
+        : 0;
+    if ($finishedAt <= 0) {
+        return 0;
+    }
+
+    $remaining = ($finishedAt + DISTRESS_AUTOTUNE_UPLOAD_CAP_MANUAL_COOLDOWN_SECONDS) - time();
+    return max(0, $remaining);
+}
+
+function getDistressUploadCapActiveBlockingModules(): array
+{
+    $activeModules = [];
+    foreach (DISTRESS_UPLOAD_CAP_BLOCKING_MODULES as $module) {
+        if (serviceIsActive($module)) {
+            $activeModules[] = $module;
+        }
+    }
+
+    return $activeModules;
 }
 
 function hasDistressUploadCapMeasurement(?array $state = null): bool
@@ -884,6 +914,28 @@ function measureDistressUploadCapManually(): array
     }
 
     $state = readDistressAutotuneState();
+    $blockingModules = getDistressUploadCapActiveBlockingModules();
+    if ($blockingModules !== []) {
+        distressAutotuneDebugLog('manual_upload_cap_measure_blocked_by_active_modules', [
+            'activeModules' => $blockingModules,
+        ]);
+        releaseDistressAutotuneLock($lockHandle);
+        return distressAutotuneError('distress_upload_cap_measure_requires_idle', [
+            'activeModules' => $blockingModules,
+        ]) + getDistressAutotuneStatus();
+    }
+
+    $cooldownRemaining = getDistressUploadCapMeasurementCooldownRemaining($state);
+    if ($cooldownRemaining > 0) {
+        distressAutotuneDebugLog('manual_upload_cap_measure_cooldown_active', [
+            'cooldownRemaining' => $cooldownRemaining,
+        ]);
+        releaseDistressAutotuneLock($lockHandle);
+        return distressAutotuneError('distress_upload_cap_measure_cooldown', [
+            'retryAfterSeconds' => $cooldownRemaining,
+        ]) + getDistressAutotuneStatus();
+    }
+
     distressAutotuneDebugLog('manual_upload_cap_measure_started', [
         'existingUploadCapMbps' => $state['uploadCapMbps'] ?? null,
         'existingUploadCapMeasuredAt' => $state['uploadCapMeasuredAt'] ?? null,

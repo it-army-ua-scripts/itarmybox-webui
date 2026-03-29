@@ -303,7 +303,7 @@ function rootHelperResetDistressDefaults(): bool
         'user-id' => '',
         'use-my-ip' => '',
         'use-tor' => '',
-        'concurrency' => (string)DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
+        'concurrency' => (string)DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY,
         'enable-icmp-flood' => '',
         'enable-packet-flood' => '',
         'disable-udp-flood' => '',
@@ -314,7 +314,7 @@ function rootHelperResetDistressDefaults(): bool
         return false;
     }
 
-    $result = setDistressAutotuneMode(true, DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY);
+    $result = setDistressAutotuneMode(false, DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY);
     return ($result['ok'] ?? false) === true;
 }
 

@@ -35,6 +35,12 @@ if (in_array($daemonName, $config['daemonNames'], true)) {
             'uploadCapProgressPhase' => isset($measureStatus['uploadCapProgressPhase']) && is_string($measureStatus['uploadCapProgressPhase'])
                 ? $measureStatus['uploadCapProgressPhase']
                 : 'idle',
+            'uploadCapMeasureCooldownRemaining' => isset($measureStatus['uploadCapMeasureCooldownRemaining']) && is_numeric($measureStatus['uploadCapMeasureCooldownRemaining'])
+                ? max(0, (int)$measureStatus['uploadCapMeasureCooldownRemaining'])
+                : 0,
+            'uploadCapBlockedByActiveModules' => isset($measureStatus['uploadCapBlockedByActiveModules']) && is_array($measureStatus['uploadCapBlockedByActiveModules'])
+                ? array_values(array_filter($measureStatus['uploadCapBlockedByActiveModules'], 'is_string'))
+                : [],
             'uploadCapMbps' => isset($measureStatus['uploadCapMbps']) && is_numeric($measureStatus['uploadCapMbps'])
                 ? (float)$measureStatus['uploadCapMbps']
                 : null,
@@ -61,11 +67,20 @@ if (in_array($daemonName, $config['daemonNames'], true)) {
                 : ((string)($measureResponse['error'] ?? '') === 'distress_upload_cap_measure_failed'
                     ? ''
                     : (string)($measureResponse['error'] ?? ''));
+            $flashText = $flashKey === 'distress_upload_cap_measure_failed'
+                ? match ((string)($measureResponse['error'] ?? '')) {
+                    'distress_upload_cap_measure_cooldown' => t('distress_upload_cap_measure_cooldown', [
+                        'seconds' => (string)max(0, (int)($measureResponse['retryAfterSeconds'] ?? 0)),
+                    ]),
+                    'distress_upload_cap_measure_requires_idle' => t('distress_upload_cap_measure_requires_idle'),
+                    default => t($flashKey),
+                }
+                : t($flashKey);
             header('Content-Type: application/json; charset=UTF-8');
             echo json_encode([
                 'ok' => $measureOk,
                 'flashKey' => $flashKey,
-                'flashText' => t($flashKey),
+                'flashText' => $flashText,
                 'flashClass' => $measureOk ? 'status active' : 'status inactive',
                 'secondaryKey' => $secondaryKey,
                 'secondaryText' => ($secondaryKey !== '' && in_array($secondaryKey, $allowedFlashKeys, true)) ? t($secondaryKey) : '',
@@ -82,6 +97,12 @@ if (in_array($daemonName, $config['daemonNames'], true)) {
                 'uploadCapProgressPhase' => isset($measureResponse['uploadCapProgressPhase']) && is_string($measureResponse['uploadCapProgressPhase'])
                     ? $measureResponse['uploadCapProgressPhase']
                     : 'idle',
+                'uploadCapMeasureCooldownRemaining' => isset($measureResponse['uploadCapMeasureCooldownRemaining']) && is_numeric($measureResponse['uploadCapMeasureCooldownRemaining'])
+                    ? max(0, (int)$measureResponse['uploadCapMeasureCooldownRemaining'])
+                    : 0,
+                'uploadCapBlockedByActiveModules' => isset($measureResponse['uploadCapBlockedByActiveModules']) && is_array($measureResponse['uploadCapBlockedByActiveModules'])
+                    ? array_values(array_filter($measureResponse['uploadCapBlockedByActiveModules'], 'is_string'))
+                    : [],
                 'uploadCapMbps' => isset($measureResponse['uploadCapMbps']) && is_numeric($measureResponse['uploadCapMbps'])
                     ? (float)$measureResponse['uploadCapMbps']
                     : null,

@@ -46,6 +46,18 @@
     $distressUploadCapErrorText = isset($distressAutotune['uploadCapLastError']) && is_string($distressAutotune['uploadCapLastError']) && trim($distressAutotune['uploadCapLastError']) !== ''
         ? t('distress_upload_cap_error', ['value' => trim($distressAutotune['uploadCapLastError'])])
         : null;
+    $distressUploadCapCooldownRemaining = isset($distressAutotune['uploadCapMeasureCooldownRemaining']) && is_numeric($distressAutotune['uploadCapMeasureCooldownRemaining'])
+        ? max(0, (int)$distressAutotune['uploadCapMeasureCooldownRemaining'])
+        : 0;
+    $distressUploadCapBlockedByActiveModules = isset($distressAutotune['uploadCapBlockedByActiveModules']) && is_array($distressAutotune['uploadCapBlockedByActiveModules'])
+        ? array_values(array_filter($distressAutotune['uploadCapBlockedByActiveModules'], 'is_string'))
+        : [];
+    $distressUploadCapCooldownText = $distressUploadCapCooldownRemaining > 0
+        ? t('distress_upload_cap_measure_cooldown', ['seconds' => (string)$distressUploadCapCooldownRemaining])
+        : null;
+    $distressUploadCapBlockedText = $distressUploadCapBlockedByActiveModules !== []
+        ? t('distress_upload_cap_measure_requires_idle')
+        : null;
     $distressHasUploadCapMeasurement = isset($distressAutotune['uploadCapMeasuredAt']) && is_numeric($distressAutotune['uploadCapMeasuredAt']) && (int)$distressAutotune['uploadCapMeasuredAt'] > 0
         && isset($distressAutotune['uploadCapMbps']) && is_numeric($distressAutotune['uploadCapMbps']) && (float)$distressAutotune['uploadCapMbps'] > 0.0;
 $distressLastLoadText = isset($distressAutotune['lastLoadAverage']) && is_numeric($distressAutotune['lastLoadAverage'])
@@ -202,9 +214,19 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
         <input type="text" id="proxies-path" name="proxies-path" value="<?= $currentAdjustableParams['proxies-path']??"" ?>">
     </div>
     <div class="distress-form-actions">
-        <button class="submit-btn distress-form-action" type="submit" name="distress-action" value="measure-upload-cap" id="distress-measure-button"><?= htmlspecialchars(t('distress_upload_cap_measure_button'), ENT_QUOTES, 'UTF-8') ?></button>
+        <button class="submit-btn distress-form-action" type="submit" name="distress-action" value="measure-upload-cap" id="distress-measure-button"<?= ($distressUploadCapCooldownRemaining > 0 || $distressUploadCapBlockedText !== null) ? ' disabled' : '' ?>><?= htmlspecialchars(t('distress_upload_cap_measure_button'), ENT_QUOTES, 'UTF-8') ?></button>
         <button class="submit-btn distress-form-action" type="submit" name="distress-action" value="save-settings"><?= htmlspecialchars(t('save'), ENT_QUOTES, 'UTF-8') ?></button>
     </div>
+    <?php if ($distressUploadCapBlockedText !== null): ?>
+        <div class="schedule-limit-hint distress-autotune-line" id="distress-measure-blocked-hint"><?= htmlspecialchars($distressUploadCapBlockedText, ENT_QUOTES, 'UTF-8') ?></div>
+    <?php else: ?>
+        <div class="schedule-limit-hint distress-autotune-line" id="distress-measure-blocked-hint" hidden></div>
+    <?php endif; ?>
+    <?php if ($distressUploadCapCooldownText !== null): ?>
+        <div class="schedule-limit-hint distress-autotune-line" id="distress-measure-cooldown-hint"><?= htmlspecialchars($distressUploadCapCooldownText, ENT_QUOTES, 'UTF-8') ?></div>
+    <?php else: ?>
+        <div class="schedule-limit-hint distress-autotune-line" id="distress-measure-cooldown-hint" hidden></div>
+    <?php endif; ?>
 </form>
 <div class="status-log-modal distress-measure-modal" id="distress-measure-modal" hidden>
     <div class="status-log-modal-card distress-measure-modal-card" role="dialog" aria-modal="true" aria-labelledby="distress-measure-title">
@@ -233,6 +255,8 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
     'ajaxUrl' => build_tool_url('distress', ['ajax' => '1']),
     'measureStatusUrl' => build_tool_url('distress', ['ajax' => '1', 'measureStatus' => '1']),
     'hasMeasurement' => $distressHasUploadCapMeasurement,
+    'cooldownRemaining' => $distressUploadCapCooldownRemaining,
+    'blockedByActiveModules' => $distressUploadCapBlockedByActiveModules,
     'text' => [
         'progressTitle' => t('distress_upload_cap_progress_title'),
         'progressPreparing' => t('distress_upload_cap_progress_preparing'),
@@ -242,6 +266,8 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
         'progressAttempt' => t('distress_upload_cap_progress_attempt', ['current' => '{{current}}', 'total' => '{{total}}']),
         'progressCloseBlocked' => t('distress_upload_cap_progress_close_blocked'),
         'progressError' => t('distress_upload_cap_progress_error'),
+        'cooldownText' => t('distress_upload_cap_measure_cooldown', ['seconds' => '{{seconds}}']),
+        'blockedText' => t('distress_upload_cap_measure_requires_idle'),
         'statusIdle' => t('distress_upload_cap_status_idle'),
         'statusRunning' => t('distress_upload_cap_status_running'),
         'statusSuccess' => t('distress_upload_cap_status_success'),

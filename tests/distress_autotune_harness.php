@@ -22,6 +22,7 @@ $GLOBALS['distressHarness'] = [
     'repairSucceeds' => true,
     'timersEnabled' => true,
     'serviceActive' => false,
+    'activeModules' => [],
     'servicePid' => null,
     'nextPid' => 9001,
     'serviceExecStart' => 'ExecStart=/usr/bin/distress --concurrency 2048',
@@ -182,6 +183,10 @@ function replaceExecStartOptionValue(string $execStartLine, string $option, stri
 
 function serviceIsActive(string $module): bool
 {
+    $activeModules = $GLOBALS['distressHarness']['activeModules'] ?? [];
+    if (is_array($activeModules) && in_array($module, $activeModules, true)) {
+        return true;
+    }
     return $module === 'distress' && (($GLOBALS['distressHarness']['serviceActive'] ?? false) === true);
 }
 
@@ -229,6 +234,7 @@ function harness_reset_runtime(): void
         'repairSucceeds' => true,
         'timersEnabled' => true,
         'serviceActive' => false,
+        'activeModules' => [],
         'servicePid' => null,
         'nextPid' => 9001,
         'serviceExecStart' => 'ExecStart=/usr/bin/distress --concurrency 2048',
@@ -734,6 +740,36 @@ function harness_test_manual_measure_fails_when_lock_is_busy(): void
     harness_assert(abs((float)($state['uploadCapMbps'] ?? 0.0) - 111.0) < 0.0001, 'busy lock should preserve the previous upload cap');
 }
 
+function harness_test_manual_measure_respects_cooldown(): void
+{
+    harness_reset_runtime();
+    writeDistressAutotuneState([
+        'enabled' => true,
+        'desiredConcurrency' => 2048,
+        'uploadCapFinishedAt' => time(),
+        'uploadCapMeasuredAt' => 1234,
+        'uploadCapMbps' => 111.0,
+        'uploadCapStatus' => DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_SUCCESS,
+    ]);
+
+    $result = measureDistressUploadCapManually();
+    harness_assert(($result['ok'] ?? true) === false, 'measurement should be blocked during cooldown');
+    harness_assert(($result['error'] ?? '') === 'distress_upload_cap_measure_cooldown', 'cooldown should return a dedicated error');
+    harness_assert((int)($result['retryAfterSeconds'] ?? 0) > 0, 'cooldown error should expose remaining seconds');
+    harness_assert((int)($GLOBALS['distressHarness']['uploadCapMeasureCount'] ?? 0) === 0, 'cooldown should prevent a new measurement attempt');
+}
+
+function harness_test_manual_measure_requires_all_modules_to_be_stopped(): void
+{
+    harness_reset_runtime();
+    $GLOBALS['distressHarness']['activeModules'] = ['mhddos'];
+
+    $result = measureDistressUploadCapManually();
+    harness_assert(($result['ok'] ?? true) === false, 'measurement should be blocked when any module is active');
+    harness_assert(($result['error'] ?? '') === 'distress_upload_cap_measure_requires_idle', 'active module block should return a dedicated error');
+    harness_assert((int)($GLOBALS['distressHarness']['uploadCapMeasureCount'] ?? 0) === 0, 'active module block should prevent a new measurement attempt');
+}
+
 function harness_test_service_prepare_does_not_measure_upload_cap(): void
 {
     harness_reset_runtime();
@@ -819,6 +855,8 @@ $tests = [
     'manual_upload_cap_measure_persists_success_status' => 'harness_test_manual_upload_cap_measure_persists_success_status',
     'manual_upload_cap_measure_persists_failure_status_without_clearing_previous_value' => 'harness_test_manual_upload_cap_measure_persists_failure_status_without_clearing_previous_value',
     'manual_measure_fails_when_lock_is_busy' => 'harness_test_manual_measure_fails_when_lock_is_busy',
+    'manual_measure_respects_cooldown' => 'harness_test_manual_measure_respects_cooldown',
+    'manual_measure_requires_all_modules_to_be_stopped' => 'harness_test_manual_measure_requires_all_modules_to_be_stopped',
     'service_prepare_does_not_measure_upload_cap' => 'harness_test_service_prepare_does_not_measure_upload_cap',
     'target_set_change_does_not_refresh_upload_cap_while_active' => 'harness_test_target_set_change_does_not_refresh_upload_cap_while_active',
     'service_start_does_not_refresh_upload_cap' => 'harness_test_service_start_does_not_refresh_upload_cap',

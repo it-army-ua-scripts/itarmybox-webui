@@ -1,6 +1,8 @@
 <?php
 
-require_once __DIR__ . '/root_helper_client.php';
+if (!function_exists('root_helper_request')) {
+    require_once __DIR__ . '/root_helper_client.php';
+}
 require_once __DIR__ . '/tool_helpers.php';
 
 function render_module_action_form(string $path, string $daemonName, string $label): string
@@ -104,13 +106,17 @@ function tool_handle_post(array $config, string $daemonName, array $post, bool $
         if ($saveError === '' && $currentConfigString !== '') {
             $updatedConfigParams = updateServiceConfigParams($currentConfigString, $paramsToSave, $daemonName);
             if ($daemonName === 'distress') {
-                $saveOk = saveDistressSettings(
+                $saveResponse = saveDistressSettings(
                     implode(' ', $updatedConfigParams),
                     (($distressValidation['autotuneEnabled'] ?? false) === true),
                     (int)($distressValidation['concurrencyValue'] ?? 0)
                 );
+                $saveOk = (($saveResponse['ok'] ?? false) === true);
                 if (!$saveOk && $saveError === '') {
-                    $saveError = 'settings_not_saved';
+                    $saveResponseError = (string)($saveResponse['error'] ?? '');
+                    $saveError = in_array($saveResponseError, tool_allowed_flash_keys(), true)
+                        ? $saveResponseError
+                        : 'settings_not_saved';
                 }
             } else {
                 $saveOk = updateServiceFile($daemonName, $updatedConfigParams);
@@ -125,7 +131,10 @@ function tool_handle_post(array $config, string $daemonName, array $post, bool $
             'module' => $daemonName,
         ]);
         if (($restartResponse['ok'] ?? false) !== true) {
-            $restartError = 'settings_saved_restart_failed';
+            $restartResponseError = (string)($restartResponse['error'] ?? '');
+            $restartError = in_array($restartResponseError, tool_allowed_flash_keys(), true)
+                ? $restartResponseError
+                : 'settings_saved_restart_failed';
         }
     }
 
