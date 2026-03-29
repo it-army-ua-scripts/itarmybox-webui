@@ -261,6 +261,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
         .reset-journal-summary {
             margin-top: 12px;
         }
+
+        .reset-confirm-modal[hidden] {
+            display: none;
+        }
+
+        .reset-confirm-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: rgba(7, 12, 22, 0.78);
+            backdrop-filter: blur(4px);
+        }
+
+        .reset-confirm-card {
+            width: min(100%, 480px);
+            background: rgba(15, 26, 43, 0.98);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+            padding: 22px 20px 18px;
+            text-align: left;
+        }
+
+        .reset-confirm-title {
+            margin: 0 0 10px;
+            font-size: 1.15rem;
+            font-weight: 500;
+        }
+
+        .reset-confirm-text {
+            margin: 0;
+            line-height: 1.6;
+        }
+
+        .reset-confirm-text + .reset-confirm-text {
+            margin-top: 10px;
+        }
+
+        .reset-confirm-actions {
+            display: grid;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        @media (min-width: 520px) {
+            .reset-confirm-actions {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
     </style>
 </head>
 <body class="padded">
@@ -286,7 +339,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
             <div class="schedule-limit-hint"><?= htmlspecialchars(t('reset_webui_defaults_help'), ENT_QUOTES, 'UTF-8') ?></div>
             <div class="schedule-limit-hint" style="margin-top: 8px;"><?= htmlspecialchars(t('reset_webui_defaults_warning'), ENT_QUOTES, 'UTF-8') ?></div>
             <div class="schedule-limit-hint" style="margin-top: 8px;"><?= htmlspecialchars($resetWifiNameWarning, ENT_QUOTES, 'UTF-8') ?></div>
-            <form method="post" action="" style="margin-top: 18px;" onsubmit='return window.confirm(<?= json_encode($resetConfirmMessage, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>);'>
+            <form method="post" action="" style="margin-top: 18px;" id="reset-webui-defaults-form">
                 <input type="hidden" name="action" value="reset_webui_defaults">
                 <button class="submit-btn" type="submit"><?= htmlspecialchars(t('reset_webui_defaults_button'), ENT_QUOTES, 'UTF-8') ?></button>
             </form>
@@ -324,6 +377,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
         </div>
     </div>
 </div>
+<div class="reset-confirm-modal" id="reset-confirm-modal" hidden>
+    <div class="reset-confirm-card" role="dialog" aria-modal="true" aria-labelledby="reset-confirm-title">
+        <h2 class="reset-confirm-title" id="reset-confirm-title"><?= htmlspecialchars(t('reset_webui_defaults'), ENT_QUOTES, 'UTF-8') ?></h2>
+        <p class="reset-confirm-text"><?= htmlspecialchars(t('reset_webui_defaults_warning'), ENT_QUOTES, 'UTF-8') ?></p>
+        <p class="reset-confirm-text"><?= htmlspecialchars($resetWifiNameWarning, ENT_QUOTES, 'UTF-8') ?></p>
+        <div class="reset-confirm-actions">
+            <button type="button" class="submit-btn" id="reset-confirm-submit"><?= htmlspecialchars(t('reset_webui_defaults_button'), ENT_QUOTES, 'UTF-8') ?></button>
+            <button type="button" class="submit-btn" id="reset-confirm-cancel"><?= htmlspecialchars(t('cancel'), ENT_QUOTES, 'UTF-8') ?></button>
+        </div>
+    </div>
+</div>
 <?= render_app_footer() ?>
 <?php if (($_GET['themeReset'] ?? '') === '1'): ?>
 <script>
@@ -339,6 +403,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
 })();
 </script>
 <?php endif; ?>
+<script>
+(() => {
+    const resetFormEl = document.getElementById('reset-webui-defaults-form');
+    const modalEl = document.getElementById('reset-confirm-modal');
+    const submitEl = document.getElementById('reset-confirm-submit');
+    const cancelEl = document.getElementById('reset-confirm-cancel');
+
+    if (!resetFormEl || !modalEl || !submitEl || !cancelEl) {
+        return;
+    }
+
+    let confirmed = false;
+
+    function openModal() {
+        modalEl.hidden = false;
+        document.body.classList.add('modal-open');
+        submitEl.focus();
+    }
+
+    function closeModal() {
+        modalEl.hidden = true;
+        document.body.classList.remove('modal-open');
+    }
+
+    resetFormEl.addEventListener('submit', (event) => {
+        if (confirmed) {
+            return;
+        }
+
+        event.preventDefault();
+        openModal();
+    });
+
+    submitEl.addEventListener('click', () => {
+        confirmed = true;
+        closeModal();
+        resetFormEl.requestSubmit();
+    });
+
+    cancelEl.addEventListener('click', closeModal);
+
+    modalEl.addEventListener('click', (event) => {
+        if (event.target === modalEl) {
+            closeModal();
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !modalEl.hidden) {
+            closeModal();
+        }
+    });
+})();
+</script>
 <script src="/js/form_messages.js"></script>
 </body>
 </html>
