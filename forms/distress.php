@@ -46,6 +46,8 @@
     $distressUploadCapErrorText = isset($distressAutotune['uploadCapLastError']) && is_string($distressAutotune['uploadCapLastError']) && trim($distressAutotune['uploadCapLastError']) !== ''
         ? t('distress_upload_cap_error', ['value' => trim($distressAutotune['uploadCapLastError'])])
         : null;
+    $distressHasUploadCapMeasurement = isset($distressAutotune['uploadCapMeasuredAt']) && is_numeric($distressAutotune['uploadCapMeasuredAt']) && (int)$distressAutotune['uploadCapMeasuredAt'] > 0
+        && isset($distressAutotune['uploadCapMbps']) && is_numeric($distressAutotune['uploadCapMbps']) && (float)$distressAutotune['uploadCapMbps'] > 0.0;
 $distressLastLoadText = isset($distressAutotune['lastLoadAverage']) && is_numeric($distressAutotune['lastLoadAverage'])
     ? t('distress_autotune_last_load', [
         'value' => number_format((float)$distressAutotune['lastLoadAverage'], 2, '.', ''),
@@ -112,6 +114,10 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
         <?php if ($distressUploadCapErrorText !== null): ?>
             <div class="schedule-limit-hint"><?= htmlspecialchars($distressUploadCapErrorText, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
+        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_upload_cap_manual_only_hint'), ENT_QUOTES, 'UTF-8') ?></div>
+        <?php if (!$distressHasUploadCapMeasurement): ?>
+            <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_upload_cap_required_for_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
         <?php if ($distressLastLoadText !== null): ?>
             <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastLoadText, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
@@ -173,7 +179,8 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
         <label for="proxies-path"><?= htmlspecialchars(t('proxies_file_path'), ENT_QUOTES, 'UTF-8') ?></label>
         <input type="text" id="proxies-path" name="proxies-path" value="<?= $currentAdjustableParams['proxies-path']??"" ?>">
     </div>
-    <button class="submit-btn" type="submit"><?= htmlspecialchars(t('save'), ENT_QUOTES, 'UTF-8') ?></button>
+    <button class="submit-btn" type="submit" name="distress-action" value="measure-upload-cap"><?= htmlspecialchars(t('distress_upload_cap_measure_button'), ENT_QUOTES, 'UTF-8') ?></button>
+    <button class="submit-btn" type="submit" name="distress-action" value="save-settings"><?= htmlspecialchars(t('save'), ENT_QUOTES, 'UTF-8') ?></button>
 </form>
 <script>
     (function () {

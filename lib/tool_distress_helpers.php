@@ -130,6 +130,11 @@ function getDistressAutotuneSettings(): array
             'liveAppliedConcurrency' => null,
             'currentConcurrency' => DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
             'defaultConcurrency' => DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
+            'uploadCapMbps' => null,
+            'uploadCapMeasuredAt' => null,
+            'uploadCapStatus' => 'idle',
+            'uploadCapLastError' => null,
+            'uploadCapLastMethod' => null,
         ];
     }
 
@@ -171,6 +176,21 @@ function getDistressAutotuneSettings(): array
         'bestBpsConcurrency' => isset($response['bestBpsConcurrency']) && is_numeric($response['bestBpsConcurrency'])
             ? (int)$response['bestBpsConcurrency']
             : null,
+        'uploadCapMbps' => isset($response['uploadCapMbps']) && is_numeric($response['uploadCapMbps'])
+            ? (float)$response['uploadCapMbps']
+            : null,
+        'uploadCapMeasuredAt' => isset($response['uploadCapMeasuredAt']) && is_numeric($response['uploadCapMeasuredAt'])
+            ? (int)$response['uploadCapMeasuredAt']
+            : null,
+        'uploadCapStatus' => isset($response['uploadCapStatus']) && is_string($response['uploadCapStatus'])
+            ? $response['uploadCapStatus']
+            : 'idle',
+        'uploadCapLastError' => isset($response['uploadCapLastError']) && is_string($response['uploadCapLastError'])
+            ? $response['uploadCapLastError']
+            : null,
+        'uploadCapLastMethod' => isset($response['uploadCapLastMethod']) && is_string($response['uploadCapLastMethod'])
+            ? $response['uploadCapLastMethod']
+            : null,
         'lastTargetCount' => isset($response['lastTargetCount']) && is_numeric($response['lastTargetCount'])
             ? max(0, (int)$response['lastTargetCount'])
             : null,
@@ -202,4 +222,13 @@ function saveDistressSettings(string $execStartLine, bool $enabled, int $concurr
     ]);
 
     return ($response['ok'] ?? false) === true;
+}
+
+function measureDistressUploadCap(): array
+{
+    $config = require __DIR__ . '/../config/config.php';
+    return root_helper_request([
+        'action' => 'distress_upload_cap_measure',
+        'modules' => $config['daemonNames'],
+    ]);
 }

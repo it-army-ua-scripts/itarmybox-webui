@@ -82,11 +82,22 @@ function start_harness_test_failure_is_reported_from_root_helper(): void
     start_harness_assert(($result['error'] ?? '') === 'service_switch_failed', 'root helper error should be preserved');
 }
 
+function start_harness_test_auto_requires_manual_speed_measure_message_is_preserved(): void
+{
+    start_harness_reset();
+    $GLOBALS['startHarness']['rootHelperResponse'] = ['ok' => false, 'error' => 'distress_upload_cap_required_for_auto'];
+    $result = start_module_request('distress', ['daemonNames' => ['mhddos', 'distress', 'x100']]);
+    start_harness_assert(($result['ok'] ?? true) === false, 'auto start without manual speed measurement should fail');
+    start_harness_assert(($result['messageKey'] ?? '') === 'distress_upload_cap_required_for_auto', 'specific auto-speed requirement message should be preserved');
+    start_harness_assert(($result['error'] ?? '') === 'distress_upload_cap_required_for_auto', 'specific root helper error should be preserved');
+}
+
 $tests = [
     'manual_launch_returns_success_when_root_helper_accepts' => 'start_harness_test_manual_launch_returns_success_when_root_helper_accepts',
     'manual_launch_ignores_service_file_update_failures' => 'start_harness_test_manual_launch_ignores_service_file_update_failures',
     'manual_launch_succeeds_when_execstart_read_is_unavailable' => 'start_harness_test_manual_launch_returns_success_when_execstart_read_is_unavailable',
     'failure_is_reported_from_root_helper' => 'start_harness_test_failure_is_reported_from_root_helper',
+    'auto_requires_manual_speed_measure_message_is_preserved' => 'start_harness_test_auto_requires_manual_speed_measure_message_is_preserved',
 ];
 
 $passed = 0;

@@ -7,7 +7,6 @@ $daemonNames = $config['daemonNames'];
 
 if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     header('Content-Type: application/json; charset=UTF-8');
-    $includeDistressAutotune = ($_GET['includeDistressAutotune'] ?? '') === '1';
 
     $response = root_helper_request([
         'action' => 'status_snapshot',
@@ -22,12 +21,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
         'action' => 'traffic_limit_get',
         'modules' => $daemonNames,
     ]);
-    $distressAutotuneResponse = $includeDistressAutotune
-        ? root_helper_request([
-            'action' => 'distress_autotune_get',
-            'modules' => $daemonNames,
-        ])
-        : ['ok' => false];
     $activeModule = ($response['ok'] ?? false) ? ($response['activeModule'] ?? null) : null;
     $commonLogs = ($response['ok'] ?? false) ? (string)($response['commonLogs'] ?? '') : '';
     $selectedModule = (($autostartResponse['ok'] ?? false) === true) ? ($autostartResponse['active'] ?? null) : null;
@@ -57,24 +50,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
             'scheduleLocked' => $scheduleLocked,
             'scheduleModule' => $scheduleModule,
             'schedulePercent' => $schedulePercent !== null ? (int)$schedulePercent : null,
-            'distressAutotune' => (($distressAutotuneResponse['ok'] ?? false) === true) ? [
-                'enabled' => ($distressAutotuneResponse['enabled'] ?? false) === true,
-                'serviceActive' => ($distressAutotuneResponse['serviceActive'] ?? false) === true,
-                'statusKey' => (string)($distressAutotuneResponse['statusKey'] ?? 'distress_autotune_status_active'),
-                'uploadCapStatus' => (string)($distressAutotuneResponse['uploadCapStatus'] ?? 'idle'),
-                'uploadCapMbps' => isset($distressAutotuneResponse['uploadCapMbps']) && is_numeric($distressAutotuneResponse['uploadCapMbps'])
-                    ? (float)$distressAutotuneResponse['uploadCapMbps']
-                    : null,
-                'uploadCapMeasuredAt' => isset($distressAutotuneResponse['uploadCapMeasuredAt']) && is_numeric($distressAutotuneResponse['uploadCapMeasuredAt'])
-                    ? (int)$distressAutotuneResponse['uploadCapMeasuredAt']
-                    : null,
-                'uploadCapLastMethod' => isset($distressAutotuneResponse['uploadCapLastMethod']) && is_string($distressAutotuneResponse['uploadCapLastMethod'])
-                    ? $distressAutotuneResponse['uploadCapLastMethod']
-                    : null,
-                'uploadCapLastError' => isset($distressAutotuneResponse['uploadCapLastError']) && is_string($distressAutotuneResponse['uploadCapLastError'])
-                    ? $distressAutotuneResponse['uploadCapLastError']
-                    : null,
-            ] : null,
             'error' => $statusOk ? null : (string)($response['error'] ?? 'status_unavailable'),
         ],
         JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
@@ -98,7 +73,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     <?php
     $messageKey = $_GET['msg'] ?? '';
     $messageOk = ($_GET['ok'] ?? '') === '1';
-    $allowedMessages = ['start_requested', 'start_failed', 'stop_requested', 'stop_failed'];
+    $allowedMessages = ['start_requested', 'start_failed', 'stop_requested', 'stop_failed', 'distress_upload_cap_required_for_auto'];
     if (is_string($messageKey) && in_array($messageKey, $allowedMessages, true)) {
         $messageClass = $messageOk ? 'status active' : 'status inactive';
         echo '<div class="form-message ' . htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') . '">'

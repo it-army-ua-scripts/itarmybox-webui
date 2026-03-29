@@ -486,7 +486,7 @@ function getActiveScheduleControlEntry(array $modules): ?array
     return resolveScheduleEntryForCurrentTime($entries);
 }
 
-function switchExclusiveModuleState(array $modules, ?string $selected, bool $forceDistressUploadCapRefresh = false): array
+function switchExclusiveModuleState(array $modules, ?string $selected): array
 {
     runCommand('systemctl daemon-reload', $reloadCode);
     if ($reloadCode !== 0) {
@@ -508,15 +508,14 @@ function switchExclusiveModuleState(array $modules, ?string $selected, bool $for
 
     if ($selected !== null) {
         $distressAutotuneEnabledForStart = false;
+        $distressHasUploadCapMeasurement = true;
         if ($selected === 'distress') {
             $distressAutotuneState = readDistressAutotuneState();
             $distressAutotuneEnabledForStart = (($distressAutotuneState['enabled'] ?? false) === true);
+            $distressHasUploadCapMeasurement = hasDistressUploadCapMeasurement($distressAutotuneState);
         }
-        if ($selected === 'distress' && $distressAutotuneEnabledForStart && !prepareDistressUploadCapBeforeStart(true)) {
-            return ['ok' => false, 'error' => 'distress_upload_cap_prepare_failed'];
-        }
-        if ($selected === 'distress' && $distressAutotuneEnabledForStart && !markDistressUploadCapServicePrestartSkip()) {
-            return ['ok' => false, 'error' => 'distress_upload_cap_prestart_skip_mark_failed'];
+        if ($selected === 'distress' && $distressAutotuneEnabledForStart && !$distressHasUploadCapMeasurement) {
+            return ['ok' => false, 'error' => 'distress_upload_cap_required_for_auto'];
         }
         $selectedService = escapeshellarg($selected . '.service');
         runCommand("systemctl start $selectedService", $code);
@@ -558,8 +557,7 @@ function applyExclusiveModuleState(array $modules, ?string $selected, ?int $traf
         : null;
 
     $resetDistressBaseline = $previousSelected === 'distress' && $selected !== 'distress';
-    $forceDistressUploadCapRefresh = $selected === 'distress' && $trafficPercent !== null;
-    $switchResult = switchExclusiveModuleState($modules, $selected, $forceDistressUploadCapRefresh);
+    $switchResult = switchExclusiveModuleState($modules, $selected);
     if (($switchResult['ok'] ?? false) !== true) {
         $rollbackResult = restoreModuleStateSet($modules, $previousActiveModules);
         releaseDistressAutotuneLock($lockHandle);

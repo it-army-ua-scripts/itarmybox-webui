@@ -8,7 +8,6 @@ const DISTRESS_BPS_COLLECTOR_TIMER_NAME = 'itarmybox-distress-bps-collector.time
 const DISTRESS_AUTOTUNE_STATE_FILE = ROOT_HELPER_STATE_DIR . '/distress-autotune.json';
 defined('DISTRESS_AUTOTUNE_LOCK_FILE') || define('DISTRESS_AUTOTUNE_LOCK_FILE', '/tmp/itarmybox-distress-autotune.lock');
 const DISTRESS_AUTOTUNE_DEBUG_LOG_FILE = ROOT_HELPER_LOG_DIR . '/distress-autotune-debug.log';
-const DISTRESS_AUTOTUNE_SERVICE_PRESTART_SKIP_FILE = ROOT_HELPER_STATE_DIR . '/distress-upload-cap-prestart-skip';
 const DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY = 2048;
 const DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY = 4096;
 const DISTRESS_AUTOTUNE_MIN_CONCURRENCY = 64;
@@ -345,7 +344,6 @@ function readDistressAutotuneState(): array
         'uploadCapFinishedAt' => null,
         'uploadCapLastError' => null,
         'uploadCapLastMethod' => null,
-        'lastAutostartBootId' => null,
         'lastTargetCount' => null,
         'lastBpsCycleId' => null,
         'bpsSettleCyclesRemaining' => 0,
@@ -410,9 +408,6 @@ function readDistressAutotuneState(): array
             : null,
         'uploadCapLastMethod' => isset($data['uploadCapLastMethod']) && is_string($data['uploadCapLastMethod']) && $data['uploadCapLastMethod'] !== ''
             ? $data['uploadCapLastMethod']
-            : null,
-        'lastAutostartBootId' => isset($data['lastAutostartBootId']) && is_string($data['lastAutostartBootId']) && $data['lastAutostartBootId'] !== ''
-            ? $data['lastAutostartBootId']
             : null,
         'lastTargetCount' => isset($data['lastTargetCount']) && is_numeric($data['lastTargetCount'])
             ? max(0, (int)$data['lastTargetCount'])
@@ -479,9 +474,6 @@ function writeDistressAutotuneState(array $state): bool
             : null,
         'uploadCapLastMethod' => isset($state['uploadCapLastMethod']) && is_string($state['uploadCapLastMethod']) && $state['uploadCapLastMethod'] !== ''
             ? $state['uploadCapLastMethod']
-            : null,
-        'lastAutostartBootId' => isset($state['lastAutostartBootId']) && is_string($state['lastAutostartBootId']) && $state['lastAutostartBootId'] !== ''
-            ? $state['lastAutostartBootId']
             : null,
         'lastTargetCount' => isset($state['lastTargetCount']) && is_numeric($state['lastTargetCount'])
             ? max(0, (int)$state['lastTargetCount'])
@@ -797,6 +789,41 @@ function getDistressAutotuneStatus(): array
         'lastTargetCount' => $state['lastTargetCount'] ?? null,
         'lastBpsCycleId' => $state['lastBpsCycleId'] ?? null,
         'bpsSettleCyclesRemaining' => (int)($state['bpsSettleCyclesRemaining'] ?? 0),
+    ];
+}
+
+function hasDistressUploadCapMeasurement(?array $state = null): bool
+{
+    $state = is_array($state) ? $state : readDistressAutotuneState();
+    return isset($state['uploadCapMeasuredAt'], $state['uploadCapMbps'])
+        && is_numeric($state['uploadCapMeasuredAt'])
+        && (int)$state['uploadCapMeasuredAt'] > 0
+        && is_numeric($state['uploadCapMbps'])
+        && (float)$state['uploadCapMbps'] > 0.0;
+}
+
+function measureDistressUploadCapManually(): array
+{
+    $lockHandle = acquireDistressAutotuneLock();
+    if ($lockHandle === false) {
+        return distressAutotuneError('distress_autotune_lock_failed');
+    }
+
+    $state = readDistressAutotuneState();
+    $measuredMbps = refreshDistressUploadCap($state);
+    if ($measuredMbps === null) {
+        releaseDistressAutotuneLock($lockHandle);
+        return distressAutotuneError('distress_upload_cap_measure_failed') + getDistressAutotuneStatus();
+    }
+
+    if (!writeDistressAutotuneState($state)) {
+        releaseDistressAutotuneLock($lockHandle);
+        return distressAutotuneError('distress_autotune_state_write_failed');
+    }
+
+    releaseDistressAutotuneLock($lockHandle);
+    return getDistressAutotuneStatus() + [
+        'measured' => true,
     ];
 }
 
@@ -1148,147 +1175,17 @@ function refreshDistressUploadCap(array &$state): ?float
     return $measuredMbps;
 }
 
-function markDistressUploadCapServicePrestartSkip(): bool
-{
-    if (!ensureWebuiVarLayout() || !ensureParentDirectoryExists(DISTRESS_AUTOTUNE_SERVICE_PRESTART_SKIP_FILE)) {
-        return false;
-    }
-
-    return @file_put_contents(DISTRESS_AUTOTUNE_SERVICE_PRESTART_SKIP_FILE, (string)time()) !== false;
-}
-
-function consumeDistressUploadCapServicePrestartSkip(): bool
-{
-    if (!is_file(DISTRESS_AUTOTUNE_SERVICE_PRESTART_SKIP_FILE)) {
-        return false;
-    }
-
-    @unlink(DISTRESS_AUTOTUNE_SERVICE_PRESTART_SKIP_FILE);
-    return true;
-}
-
-if (!function_exists('readCurrentSystemBootId')) {
-    function readCurrentSystemBootId(): ?string
-    {
-        $raw = @file_get_contents('/proc/sys/kernel/random/boot_id');
-        if (!is_string($raw)) {
-            return null;
-        }
-
-        $bootId = trim($raw);
-        return $bootId !== '' ? $bootId : null;
-    }
-}
-
-function shouldForceDistressUploadCapRefreshForAutostart(array $state): bool
-{
-    if (!isModuleAutostartEnabled('distress')) {
-        return false;
-    }
-
-    $bootId = readCurrentSystemBootId();
-    if (!is_string($bootId) || $bootId === '') {
-        return false;
-    }
-
-    return (string)($state['lastAutostartBootId'] ?? '') !== $bootId;
-}
-
-function shouldRefreshDistressUploadCapOnStart(array $state, bool $forceRefresh): bool
-{
-    if ($forceRefresh) {
-        return true;
-    }
-
-    return !isset($state['uploadCapMeasuredAt']) || !is_numeric($state['uploadCapMeasuredAt']) || (int)$state['uploadCapMeasuredAt'] <= 0
-        || !isset($state['uploadCapMbps']) || !is_numeric($state['uploadCapMbps']) || (float)$state['uploadCapMbps'] <= 0.0;
-}
-
 function prepareDistressUploadCapBeforeStart(bool $forceRefresh = false): bool
 {
-    $state = readDistressAutotuneState();
-    if (($state['enabled'] ?? false) !== true) {
-        return true;
-    }
-
-    $lockHandle = acquireDistressAutotuneLock();
-    if ($lockHandle === false) {
-        distressAutotuneDebugLog('upload_cap_lock_failed_before_start');
-        return false;
-    }
-
-    if (shouldRefreshDistressUploadCapOnStart($state, $forceRefresh)) {
-        $measuredMbps = refreshDistressUploadCap($state);
-        if ($measuredMbps === null) {
-            distressAutotuneDebugLog('upload_cap_measure_skipped_before_start', [
-                'forceRefresh' => $forceRefresh,
-                'hasPreviousUploadCap' => isset($state['uploadCapMbps']) && is_numeric($state['uploadCapMbps']) && (float)$state['uploadCapMbps'] > 0.0,
-            ]);
-            releaseDistressAutotuneLock($lockHandle);
-            return true;
-        }
-        if (!writeDistressAutotuneState($state)) {
-            distressAutotuneDebugLog('upload_cap_state_write_failed_before_start');
-            releaseDistressAutotuneLock($lockHandle);
-            return false;
-        }
-    }
-
-    releaseDistressAutotuneLock($lockHandle);
+    distressAutotuneDebugLog('upload_cap_automatic_prepare_disabled_before_start', [
+        'forceRefresh' => $forceRefresh,
+    ]);
     return true;
 }
 
 function prepareDistressUploadCapForServiceStart(): bool
 {
-    // When WebUI already prepared upload-cap state before `systemctl start`,
-    // the service pre-start hook must not try to reacquire the same lock.
-    if (consumeDistressUploadCapServicePrestartSkip()) {
-        distressAutotuneDebugLog('upload_cap_service_start_skip_consumed');
-        return true;
-    }
-
-    $lockHandle = acquireDistressAutotuneLock();
-    if ($lockHandle === false) {
-        distressAutotuneDebugLog('upload_cap_lock_failed_before_service_start');
-        return false;
-    }
-
-    $state = readDistressAutotuneState();
-    if (($state['enabled'] ?? false) !== true) {
-        releaseDistressAutotuneLock($lockHandle);
-        return true;
-    }
-
-    $bootId = readCurrentSystemBootId();
-    $forceRefresh = is_string($bootId) && $bootId !== ''
-        && shouldForceDistressUploadCapRefreshForAutostart($state);
-
-    if (shouldRefreshDistressUploadCapOnStart($state, $forceRefresh)) {
-        if (refreshDistressUploadCap($state) === null) {
-            distressAutotuneDebugLog('upload_cap_measure_skipped_before_service_start', [
-                'forceRefresh' => $forceRefresh,
-                'bootId' => $bootId,
-                'hasPreviousUploadCap' => isset($state['uploadCapMbps']) && is_numeric($state['uploadCapMbps']) && (float)$state['uploadCapMbps'] > 0.0,
-            ]);
-            releaseDistressAutotuneLock($lockHandle);
-            return true;
-        }
-    }
-
-    if (is_string($bootId) && $bootId !== '' && isModuleAutostartEnabled('distress')) {
-        $state['lastAutostartBootId'] = $bootId;
-    }
-
-    if (!writeDistressAutotuneState($state)) {
-        distressAutotuneDebugLog('upload_cap_state_write_failed_before_service_start', [
-            'forceRefresh' => $forceRefresh,
-            'bootId' => $bootId,
-        ]);
-        releaseDistressAutotuneLock($lockHandle);
-        return false;
-    }
-
-    releaseDistressAutotuneLock($lockHandle);
+    distressAutotuneDebugLog('upload_cap_automatic_prepare_disabled_before_service_start');
     return true;
 }
 

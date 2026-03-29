@@ -32,8 +32,6 @@ $GLOBALS['distressHarness'] = [
     'daemonReloadShouldFail' => false,
     'uploadCapMeasureCount' => 0,
     'uploadCapMeasureValue' => 123.45,
-    'autostartEnabled' => false,
-    'bootId' => 'boot-a',
 ];
 
 function writeDebugLogLine(string $filePath, string $message): void
@@ -213,17 +211,6 @@ function verifyServiceExecStartOptionValue(string $module, string $option, strin
     return getExecStartOptionValue((string)readServiceExecStart($module), $option) === $expectedValue;
 }
 
-function isModuleAutostartEnabled(string $module): bool
-{
-    return $module === 'distress' && (($GLOBALS['distressHarness']['autostartEnabled'] ?? false) === true);
-}
-
-function readCurrentSystemBootId(): ?string
-{
-    $bootId = $GLOBALS['distressHarness']['bootId'] ?? null;
-    return is_string($bootId) && $bootId !== '' ? $bootId : null;
-}
-
 function measureDistressCloudflareUploadCap(): ?float
 {
     $GLOBALS['distressHarness']['uploadCapMeasureCount'] = (int)($GLOBALS['distressHarness']['uploadCapMeasureCount'] ?? 0) + 1;
@@ -252,15 +239,12 @@ function harness_reset_runtime(): void
         'daemonReloadShouldFail' => false,
         'uploadCapMeasureCount' => 0,
         'uploadCapMeasureValue' => 123.45,
-        'autostartEnabled' => false,
-        'bootId' => 'boot-a',
     ];
 
     @unlink(DISTRESS_AUTOTUNE_STATE_FILE);
     @unlink(DISTRESS_AUTOTUNE_STATE_FILE . '.tmp');
     @unlink(DISTRESS_AUTOTUNE_BPS_STATE_FILE);
     @unlink(DISTRESS_AUTOTUNE_DEBUG_LOG_FILE);
-    @unlink(DISTRESS_AUTOTUNE_SERVICE_PRESTART_SKIP_FILE);
 }
 
 function harness_assert(bool $condition, string $message): void
@@ -663,7 +647,7 @@ function harness_test_manual_second_start_does_not_refresh_upload_cap(): void
     harness_assert((int)$GLOBALS['distressHarness']['uploadCapMeasureCount'] === 0, 'manual second start should not re-measure upload cap');
 }
 
-function harness_test_scheduler_start_forces_upload_cap_refresh(): void
+function harness_test_scheduler_start_does_not_refresh_upload_cap(): void
 {
     harness_reset_runtime();
     writeDistressAutotuneState([
@@ -674,10 +658,10 @@ function harness_test_scheduler_start_forces_upload_cap_refresh(): void
     ]);
 
     harness_assert(prepareDistressUploadCapBeforeStart(true) === true, 'scheduler start should succeed');
-    harness_assert((int)$GLOBALS['distressHarness']['uploadCapMeasureCount'] === 1, 'scheduler start should force upload cap re-measurement');
+    harness_assert((int)$GLOBALS['distressHarness']['uploadCapMeasureCount'] === 0, 'scheduler start should not re-measure upload cap');
 }
 
-function harness_test_upload_cap_refresh_persists_success_status(): void
+function harness_test_manual_upload_cap_measure_persists_success_status(): void
 {
     harness_reset_runtime();
     writeDistressAutotuneState([
@@ -685,7 +669,8 @@ function harness_test_upload_cap_refresh_persists_success_status(): void
         'desiredConcurrency' => 2048,
     ]);
 
-    harness_assert(prepareDistressUploadCapBeforeStart(true) === true, 'forced refresh should succeed');
+    $result = measureDistressUploadCapManually();
+    harness_assert(($result['ok'] ?? false) === true, 'manual upload-cap measurement should succeed');
 
     $state = readDistressAutotuneState();
     harness_assert(($state['uploadCapStatus'] ?? '') === DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_SUCCESS, 'successful measurement should be marked as success');
@@ -695,7 +680,7 @@ function harness_test_upload_cap_refresh_persists_success_status(): void
     harness_assert(($state['uploadCapLastError'] ?? null) === null, 'successful measurement should clear the last error');
 }
 
-function harness_test_upload_cap_refresh_persists_failure_status_without_clearing_previous_value(): void
+function harness_test_manual_upload_cap_measure_persists_failure_status_without_clearing_previous_value(): void
 {
     harness_reset_runtime();
     $GLOBALS['distressHarness']['uploadCapMeasureValue'] = null;
@@ -707,7 +692,8 @@ function harness_test_upload_cap_refresh_persists_failure_status_without_clearin
         'uploadCapStatus' => DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_SUCCESS,
     ]);
 
-    harness_assert(prepareDistressUploadCapBeforeStart(true) === true, 'failed measurement should not block start');
+    $result = measureDistressUploadCapManually();
+    harness_assert(($result['ok'] ?? true) === false, 'failed manual measurement should report failure');
 
     $state = readDistressAutotuneState();
     harness_assert(($state['uploadCapStatus'] ?? '') === DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_FAILED, 'failed measurement should be marked as failed');
@@ -716,6 +702,46 @@ function harness_test_upload_cap_refresh_persists_failure_status_without_clearin
     harness_assert(($state['uploadCapLastError'] ?? '') === 'upload_cap_measure_failed', 'failed measurement should persist the fallback error code');
     harness_assert((int)($state['uploadCapStartedAt'] ?? 0) > 0, 'failed measurement should persist started timestamp');
     harness_assert((int)($state['uploadCapFinishedAt'] ?? 0) > 0, 'failed measurement should persist finished timestamp');
+}
+
+function harness_test_manual_measure_fails_when_lock_is_busy(): void
+{
+    harness_reset_runtime();
+    writeDistressAutotuneState([
+        'enabled' => true,
+        'desiredConcurrency' => 2048,
+        'uploadCapMbps' => 111.0,
+        'uploadCapMeasuredAt' => 1234,
+    ]);
+    @mkdir(dirname(DISTRESS_AUTOTUNE_LOCK_FILE), 0777, true);
+    $lockHandle = fopen(DISTRESS_AUTOTUNE_LOCK_FILE, 'c+');
+    harness_assert(is_resource($lockHandle), 'lock handle should be created for busy-start test');
+    harness_assert(flock($lockHandle, LOCK_EX | LOCK_NB), 'busy-start test should acquire autotune lock');
+
+    $result = measureDistressUploadCapManually();
+
+    flock($lockHandle, LOCK_UN);
+    fclose($lockHandle);
+
+    harness_assert(($result['ok'] ?? true) === false, 'busy upload-cap lock should fail manual measurement');
+    harness_assert(($result['error'] ?? '') === 'distress_autotune_lock_failed', 'busy upload-cap lock should report a lock failure');
+    $state = readDistressAutotuneState();
+    harness_assert(abs((float)($state['uploadCapMbps'] ?? 0.0) - 111.0) < 0.0001, 'busy lock should preserve the previous upload cap');
+}
+
+function harness_test_service_prepare_does_not_measure_upload_cap(): void
+{
+    harness_reset_runtime();
+    writeDistressAutotuneState([
+        'enabled' => true,
+        'desiredConcurrency' => 2048,
+        'uploadCapMbps' => 111.0,
+        'uploadCapMeasuredAt' => 1234,
+    ]);
+
+    $result = prepareDistressUploadCapForServiceStart();
+    harness_assert($result === true, 'service start preparation should succeed');
+    harness_assert((int)$GLOBALS['distressHarness']['uploadCapMeasureCount'] === 0, 'service start preparation should not measure upload cap');
 }
 
 function harness_test_target_set_change_does_not_refresh_upload_cap_while_active(): void
@@ -739,44 +765,18 @@ function harness_test_target_set_change_does_not_refresh_upload_cap_while_active
     harness_assert((int)($state['uploadCapMeasuredAt'] ?? 0) > 0, 'upload cap timestamp should remain until the next successful measurement');
 }
 
-function harness_test_service_start_autostart_forces_upload_cap_refresh_once_per_boot(): void
+function harness_test_service_start_does_not_refresh_upload_cap(): void
 {
     harness_reset_runtime();
-    $GLOBALS['distressHarness']['autostartEnabled'] = true;
     writeDistressAutotuneState([
         'enabled' => true,
         'desiredConcurrency' => 2048,
         'uploadCapMbps' => 111.0,
         'uploadCapMeasuredAt' => time(),
-        'lastAutostartBootId' => 'boot-old',
     ]);
 
-    harness_assert(prepareDistressUploadCapForServiceStart() === true, 'autostart service prepare should succeed');
-    harness_assert((int)$GLOBALS['distressHarness']['uploadCapMeasureCount'] === 1, 'autostart should force upload cap refresh on a new boot');
-
-    $state = readDistressAutotuneState();
-    harness_assert(($state['lastAutostartBootId'] ?? '') === 'boot-a', 'autostart boot id should be persisted after refresh');
-
-    harness_assert(prepareDistressUploadCapForServiceStart() === true, 'repeated service prepare in the same boot should succeed');
-    harness_assert((int)$GLOBALS['distressHarness']['uploadCapMeasureCount'] === 1, 'autostart should not refresh upload cap more than once per boot');
-}
-
-function harness_test_service_start_skip_marker_prevents_duplicate_refresh_after_manual_start(): void
-{
-    harness_reset_runtime();
-    $GLOBALS['distressHarness']['autostartEnabled'] = true;
-    writeDistressAutotuneState([
-        'enabled' => true,
-        'desiredConcurrency' => 2048,
-        'uploadCapMbps' => 111.0,
-        'uploadCapMeasuredAt' => time(),
-        'lastAutostartBootId' => 'boot-old',
-    ]);
-
-    harness_assert(markDistressUploadCapServicePrestartSkip() === true, 'manual start path should be able to mark prestart skip');
-    harness_assert(prepareDistressUploadCapForServiceStart() === true, 'service prepare should honor the prestart skip marker');
-    harness_assert((int)$GLOBALS['distressHarness']['uploadCapMeasureCount'] === 0, 'skip marker should prevent duplicate upload cap refresh');
-    harness_assert(!is_file(DISTRESS_AUTOTUNE_SERVICE_PRESTART_SKIP_FILE), 'skip marker should be consumed after service prepare');
+    harness_assert(prepareDistressUploadCapForServiceStart() === true, 'service prepare should succeed');
+    harness_assert((int)$GLOBALS['distressHarness']['uploadCapMeasureCount'] === 0, 'service prepare should not refresh upload cap automatically');
 }
 
 $tests = [
@@ -810,12 +810,13 @@ $tests = [
     'settle_counter_decrements_and_blocks_bps_evaluation' => 'harness_test_settle_counter_decrements_and_blocks_bps_evaluation',
     'settle_counter_allows_bps_evaluation_when_zero' => 'harness_test_settle_counter_allows_bps_evaluation_when_zero',
     'manual_second_start_does_not_refresh_upload_cap' => 'harness_test_manual_second_start_does_not_refresh_upload_cap',
-    'scheduler_start_forces_upload_cap_refresh' => 'harness_test_scheduler_start_forces_upload_cap_refresh',
-    'upload_cap_refresh_persists_success_status' => 'harness_test_upload_cap_refresh_persists_success_status',
-    'upload_cap_refresh_persists_failure_status_without_clearing_previous_value' => 'harness_test_upload_cap_refresh_persists_failure_status_without_clearing_previous_value',
+    'scheduler_start_does_not_refresh_upload_cap' => 'harness_test_scheduler_start_does_not_refresh_upload_cap',
+    'manual_upload_cap_measure_persists_success_status' => 'harness_test_manual_upload_cap_measure_persists_success_status',
+    'manual_upload_cap_measure_persists_failure_status_without_clearing_previous_value' => 'harness_test_manual_upload_cap_measure_persists_failure_status_without_clearing_previous_value',
+    'manual_measure_fails_when_lock_is_busy' => 'harness_test_manual_measure_fails_when_lock_is_busy',
+    'service_prepare_does_not_measure_upload_cap' => 'harness_test_service_prepare_does_not_measure_upload_cap',
     'target_set_change_does_not_refresh_upload_cap_while_active' => 'harness_test_target_set_change_does_not_refresh_upload_cap_while_active',
-    'service_start_autostart_forces_upload_cap_refresh_once_per_boot' => 'harness_test_service_start_autostart_forces_upload_cap_refresh_once_per_boot',
-    'service_start_skip_marker_prevents_duplicate_refresh_after_manual_start' => 'harness_test_service_start_skip_marker_prevents_duplicate_refresh_after_manual_start',
+    'service_start_does_not_refresh_upload_cap' => 'harness_test_service_start_does_not_refresh_upload_cap',
 ];
 
 $passed = 0;

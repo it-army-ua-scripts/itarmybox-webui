@@ -33,6 +33,9 @@ function tool_allowed_flash_keys(): array
         'settings_saved_and_restarted',
         'settings_saved_restart_failed',
         'settings_not_saved',
+        'distress_upload_cap_measure_success',
+        'distress_upload_cap_measure_failed',
+        'distress_upload_cap_required_for_auto',
         'invalid_distress_settings',
         'invalid_mhddos_settings',
         'invalid_use_my_ip_digits',
@@ -57,6 +60,19 @@ function tool_service_info(array $daemonNames, string $daemonName): array
 
 function tool_handle_post(array $config, string $daemonName, array $post, bool $wasActiveBeforeSave): array
 {
+    if ($daemonName === 'distress' && (($post['distress-action'] ?? '') === 'measure-upload-cap')) {
+        $measureResponse = measureDistressUploadCap();
+        return [
+            'flash' => (($measureResponse['ok'] ?? false) === true) ? 'distress_upload_cap_measure_success' : 'distress_upload_cap_measure_failed',
+            'flashClass' => (($measureResponse['ok'] ?? false) === true) ? 'active' : 'inactive',
+            'flashSecondary' => (($measureResponse['ok'] ?? false) === true)
+                ? ''
+                : ((string)($measureResponse['error'] ?? '') === 'distress_upload_cap_measure_failed'
+                    ? ''
+                    : (string)($measureResponse['error'] ?? '')),
+        ];
+    }
+
     $saveOk = false;
     $saveError = '';
     $restartError = '';

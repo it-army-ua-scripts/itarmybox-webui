@@ -57,7 +57,11 @@ function start_module_request(string $daemon, array $config): array
 
     return [
         'ok' => (($response['ok'] ?? false) === true),
-        'messageKey' => (($response['ok'] ?? false) === true) ? 'start_requested' : 'start_failed',
+        'messageKey' => (($response['ok'] ?? false) === true)
+            ? 'start_requested'
+            : (((string)($response['error'] ?? '') === 'distress_upload_cap_required_for_auto')
+                ? 'distress_upload_cap_required_for_auto'
+                : 'start_failed'),
         'error' => $response['error'] ?? null,
     ];
 }
