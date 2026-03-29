@@ -12,6 +12,40 @@
     $distressAutotuneStatusText = $distressAutotuneStatusKey === 'distress_autotune_status_cooldown'
         ? t($distressAutotuneStatusKey, ['seconds' => (string)($distressAutotune['cooldownRemaining'] ?? 0)])
         : t($distressAutotuneStatusKey);
+    $distressUploadCapStatus = (string)($distressAutotune['uploadCapStatus'] ?? 'idle');
+    $distressUploadCapStatusKey = match ($distressUploadCapStatus) {
+        'running' => 'distress_upload_cap_status_running',
+        'success' => 'distress_upload_cap_status_success',
+        'failed' => 'distress_upload_cap_status_failed',
+        'skipped' => 'distress_upload_cap_status_skipped',
+        default => 'distress_upload_cap_status_idle',
+    };
+    $distressUploadCapStatusText = t($distressUploadCapStatusKey);
+    $distressUploadCapValueText = isset($distressAutotune['uploadCapMbps']) && is_numeric($distressAutotune['uploadCapMbps'])
+        ? t('distress_upload_cap_value', [
+            'value' => number_format((float)$distressAutotune['uploadCapMbps'], 2, '.', ''),
+        ])
+        : null;
+    $distressUploadCapMeasuredAtText = isset($distressAutotune['uploadCapMeasuredAt']) && is_numeric($distressAutotune['uploadCapMeasuredAt']) && (int)$distressAutotune['uploadCapMeasuredAt'] > 0
+        ? t('distress_upload_cap_measured_at', [
+            'value' => date('Y-m-d H:i:s', (int)$distressAutotune['uploadCapMeasuredAt']),
+        ])
+        : null;
+    $distressUploadCapMethodRaw = isset($distressAutotune['uploadCapLastMethod']) && is_string($distressAutotune['uploadCapLastMethod'])
+        ? trim($distressAutotune['uploadCapLastMethod'])
+        : '';
+    $distressUploadCapMethodValue = match ($distressUploadCapMethodRaw) {
+        'php_curl' => 'PHP cURL',
+        'curl_binary' => 'curl',
+        'mixed' => 'PHP cURL + curl',
+        default => $distressUploadCapMethodRaw,
+    };
+    $distressUploadCapMethodText = $distressUploadCapMethodValue !== ''
+        ? t('distress_upload_cap_method', ['value' => $distressUploadCapMethodValue])
+        : null;
+    $distressUploadCapErrorText = isset($distressAutotune['uploadCapLastError']) && is_string($distressAutotune['uploadCapLastError']) && trim($distressAutotune['uploadCapLastError']) !== ''
+        ? t('distress_upload_cap_error', ['value' => trim($distressAutotune['uploadCapLastError'])])
+        : null;
 $distressLastLoadText = isset($distressAutotune['lastLoadAverage']) && is_numeric($distressAutotune['lastLoadAverage'])
     ? t('distress_autotune_last_load', [
         'value' => number_format((float)$distressAutotune['lastLoadAverage'], 2, '.', ''),
@@ -62,9 +96,22 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
         </select>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_concurrency_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_status_label'), ENT_QUOTES, 'UTF-8') ?> <?= htmlspecialchars($distressAutotuneStatusText, ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_upload_cap_status_label'), ENT_QUOTES, 'UTF-8') ?> <?= htmlspecialchars($distressUploadCapStatusText, ENT_QUOTES, 'UTF-8') ?></div>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_desired_value', ['value' => (string)$distressDesiredConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_config_value', ['value' => (string)$distressConfigConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_live_value', ['value' => $distressLiveAppliedConcurrency !== null ? (string)$distressLiveAppliedConcurrency : t('status_unavailable_short')]), ENT_QUOTES, 'UTF-8') ?></div>
+        <?php if ($distressUploadCapValueText !== null): ?>
+            <div class="schedule-limit-hint"><?= htmlspecialchars($distressUploadCapValueText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
+        <?php if ($distressUploadCapMeasuredAtText !== null): ?>
+            <div class="schedule-limit-hint"><?= htmlspecialchars($distressUploadCapMeasuredAtText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
+        <?php if ($distressUploadCapMethodText !== null): ?>
+            <div class="schedule-limit-hint"><?= htmlspecialchars($distressUploadCapMethodText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
+        <?php if ($distressUploadCapErrorText !== null): ?>
+            <div class="schedule-limit-hint"><?= htmlspecialchars($distressUploadCapErrorText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
         <?php if ($distressLastLoadText !== null): ?>
             <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastLoadText, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
