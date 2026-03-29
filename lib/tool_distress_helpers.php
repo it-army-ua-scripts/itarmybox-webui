@@ -124,7 +124,7 @@ function getDistressAutotuneSettings(): array
     if (($response['ok'] ?? false) !== true) {
         return [
             'ok' => false,
-            'enabled' => true,
+            'enabled' => false,
             'desiredConcurrency' => DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
             'configConcurrency' => DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
             'liveAppliedConcurrency' => null,

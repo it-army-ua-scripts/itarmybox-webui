@@ -327,7 +327,7 @@ function readDistressAutotuneState(): array
     migrateLegacyFileIfNeeded(DISTRESS_AUTOTUNE_LEGACY_STATE_FILE, DISTRESS_AUTOTUNE_STATE_FILE);
 
     $defaults = [
-        'enabled' => true,
+        'enabled' => false,
         'desiredConcurrency' => DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY,
         'lastAdjustedAt' => 0,
         'lastLoadAverage' => null,

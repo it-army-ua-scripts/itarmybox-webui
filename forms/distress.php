@@ -1,7 +1,7 @@
-<form method="post" action="">
+<form method="post" action="" id="distress-settings-form">
     <?php
     $distressAutotune = getDistressAutotuneSettings();
-    $distressConcurrencyMode = (($distressAutotune['enabled'] ?? true) === true) ? 'auto' : 'manual';
+    $distressConcurrencyMode = (($distressAutotune['enabled'] ?? false) === true) ? 'auto' : 'manual';
     $distressDesiredConcurrency = (int)($distressAutotune['desiredConcurrency'] ?? DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY);
     $distressConfigConcurrency = (int)($distressAutotune['configConcurrency'] ?? $distressDesiredConcurrency);
     $distressLiveAppliedConcurrency = isset($distressAutotune['liveAppliedConcurrency']) && is_numeric($distressAutotune['liveAppliedConcurrency'])
@@ -98,25 +98,35 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
         </select>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_concurrency_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_status_label'), ENT_QUOTES, 'UTF-8') ?> <?= htmlspecialchars($distressAutotuneStatusText, ENT_QUOTES, 'UTF-8') ?></div>
-        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_upload_cap_status_label'), ENT_QUOTES, 'UTF-8') ?> <?= htmlspecialchars($distressUploadCapStatusText, ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="schedule-limit-hint" id="distress-upload-cap-status-line"><?= htmlspecialchars(t('distress_upload_cap_status_label'), ENT_QUOTES, 'UTF-8') ?> <span id="distress-upload-cap-status-text"><?= htmlspecialchars($distressUploadCapStatusText, ENT_QUOTES, 'UTF-8') ?></span></div>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_desired_value', ['value' => (string)$distressDesiredConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_config_value', ['value' => (string)$distressConfigConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_live_value', ['value' => $distressLiveAppliedConcurrency !== null ? (string)$distressLiveAppliedConcurrency : t('status_unavailable_short')]), ENT_QUOTES, 'UTF-8') ?></div>
         <?php if ($distressUploadCapValueText !== null): ?>
-            <div class="schedule-limit-hint"><?= htmlspecialchars($distressUploadCapValueText, ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="schedule-limit-hint" id="distress-upload-cap-value-line"><?= htmlspecialchars($distressUploadCapValueText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php else: ?>
+            <div class="schedule-limit-hint" id="distress-upload-cap-value-line" hidden></div>
         <?php endif; ?>
         <?php if ($distressUploadCapMeasuredAtText !== null): ?>
-            <div class="schedule-limit-hint"><?= htmlspecialchars($distressUploadCapMeasuredAtText, ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="schedule-limit-hint" id="distress-upload-cap-measured-at-line"><?= htmlspecialchars($distressUploadCapMeasuredAtText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php else: ?>
+            <div class="schedule-limit-hint" id="distress-upload-cap-measured-at-line" hidden></div>
         <?php endif; ?>
         <?php if ($distressUploadCapMethodText !== null): ?>
-            <div class="schedule-limit-hint"><?= htmlspecialchars($distressUploadCapMethodText, ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="schedule-limit-hint" id="distress-upload-cap-method-line"><?= htmlspecialchars($distressUploadCapMethodText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php else: ?>
+            <div class="schedule-limit-hint" id="distress-upload-cap-method-line" hidden></div>
         <?php endif; ?>
         <?php if ($distressUploadCapErrorText !== null): ?>
-            <div class="schedule-limit-hint"><?= htmlspecialchars($distressUploadCapErrorText, ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="schedule-limit-hint" id="distress-upload-cap-error-line"><?= htmlspecialchars($distressUploadCapErrorText, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php else: ?>
+            <div class="schedule-limit-hint" id="distress-upload-cap-error-line" hidden></div>
         <?php endif; ?>
         <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_upload_cap_manual_only_hint'), ENT_QUOTES, 'UTF-8') ?></div>
         <?php if (!$distressHasUploadCapMeasurement): ?>
-            <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_upload_cap_required_for_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="schedule-limit-hint" id="distress-upload-cap-required-line"><?= htmlspecialchars(t('distress_upload_cap_required_for_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
+        <?php else: ?>
+            <div class="schedule-limit-hint" id="distress-upload-cap-required-line" hidden></div>
         <?php endif; ?>
         <?php if ($distressLastLoadText !== null): ?>
             <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastLoadText, ENT_QUOTES, 'UTF-8') ?></div>
@@ -179,9 +189,58 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
         <label for="proxies-path"><?= htmlspecialchars(t('proxies_file_path'), ENT_QUOTES, 'UTF-8') ?></label>
         <input type="text" id="proxies-path" name="proxies-path" value="<?= $currentAdjustableParams['proxies-path']??"" ?>">
     </div>
-    <button class="submit-btn" type="submit" name="distress-action" value="measure-upload-cap"><?= htmlspecialchars(t('distress_upload_cap_measure_button'), ENT_QUOTES, 'UTF-8') ?></button>
+    <button class="submit-btn" type="submit" name="distress-action" value="measure-upload-cap" id="distress-measure-button"><?= htmlspecialchars(t('distress_upload_cap_measure_button'), ENT_QUOTES, 'UTF-8') ?></button>
     <button class="submit-btn" type="submit" name="distress-action" value="save-settings"><?= htmlspecialchars(t('save'), ENT_QUOTES, 'UTF-8') ?></button>
 </form>
+<div class="status-log-modal distress-measure-modal" id="distress-measure-modal" hidden>
+    <div class="status-log-modal-card distress-measure-modal-card" role="dialog" aria-modal="true" aria-labelledby="distress-measure-title">
+        <div class="status-log-modal-head">
+            <button
+                type="button"
+                class="status-log-modal-close"
+                id="distress-measure-close"
+                aria-label="<?= htmlspecialchars(t('close'), ENT_QUOTES, 'UTF-8') ?>"
+                title="<?= htmlspecialchars(t('close'), ENT_QUOTES, 'UTF-8') ?>"
+            >&times;</button>
+        </div>
+        <div class="distress-measure-modal-body">
+            <h2 id="distress-measure-title"><?= htmlspecialchars(t('distress_upload_cap_progress_title'), ENT_QUOTES, 'UTF-8') ?></h2>
+            <p class="distress-measure-modal-text" id="distress-measure-status"><?= htmlspecialchars(t('distress_upload_cap_progress_preparing'), ENT_QUOTES, 'UTF-8') ?></p>
+            <div class="distress-measure-progress-shell" aria-hidden="true">
+                <div class="distress-measure-progress-bar" id="distress-measure-progress-bar"></div>
+            </div>
+            <div class="distress-measure-progress-percent" id="distress-measure-progress-percent">0%</div>
+            <p class="distress-measure-modal-text distress-measure-modal-detail" id="distress-measure-detail"><?= htmlspecialchars(t('distress_upload_cap_progress_detail'), ENT_QUOTES, 'UTF-8') ?></p>
+            <div class="form-message distress-measure-result" id="distress-measure-result" hidden></div>
+        </div>
+    </div>
+</div>
+<script id="distress-measure-config" type="application/json"><?= json_encode([
+    'ajaxUrl' => build_tool_url('distress', ['ajax' => '1']),
+    'hasMeasurement' => $distressHasUploadCapMeasurement,
+    'text' => [
+        'progressTitle' => t('distress_upload_cap_progress_title'),
+        'progressPreparing' => t('distress_upload_cap_progress_preparing'),
+        'progressRunning' => t('distress_upload_cap_progress_running'),
+        'progressAlmostDone' => t('distress_upload_cap_progress_almost_done'),
+        'progressDetail' => t('distress_upload_cap_progress_detail'),
+        'progressCloseBlocked' => t('distress_upload_cap_progress_close_blocked'),
+        'progressError' => t('distress_upload_cap_progress_error'),
+        'statusIdle' => t('distress_upload_cap_status_idle'),
+        'statusRunning' => t('distress_upload_cap_status_running'),
+        'statusSuccess' => t('distress_upload_cap_status_success'),
+        'statusFailed' => t('distress_upload_cap_status_failed'),
+        'statusSkipped' => t('distress_upload_cap_status_skipped'),
+        'statusLabel' => t('distress_upload_cap_status_label'),
+        'valueText' => t('distress_upload_cap_value', ['value' => '{{value}}']),
+        'measuredAtText' => t('distress_upload_cap_measured_at', ['value' => '{{value}}']),
+        'methodText' => t('distress_upload_cap_method', ['value' => '{{value}}']),
+        'errorText' => t('distress_upload_cap_error', ['value' => '{{value}}']),
+        'startAutoReady' => t('distress_start_auto_ready'),
+        'startAutoBlocked' => t('distress_start_auto_blocked'),
+    ],
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
+<script src="/js/distress_measure.js"></script>
 <script>
     (function () {
         const useMyIpEl = document.getElementById("use-my-ip");
