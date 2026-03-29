@@ -80,6 +80,7 @@ function reset_ui_catalog(string $lang): array
                 'reset_wifi_power_failed' => 'Не вдалося повернути стандартну потужність Wi‑Fi.',
                 'reset_time_sync_failed' => 'Не вдалося повернути стандартні налаштування таймзони та NTP.',
                 'reset_update_branch_failed' => 'Не вдалося повернути стандартну гілку оновлення.',
+                'reset_user_ids_failed' => 'Не вдалося очистити User ID у модулях.',
             ],
             'steps' => [
                 'stop_active_modules' => 'Зупинка активних модулів',
@@ -93,6 +94,7 @@ function reset_ui_catalog(string $lang): array
                 'reset_wifi_power' => 'Повернення стандартної потужності Wi‑Fi',
                 'reset_time_sync' => 'Повернення стандартних налаштувань часу',
                 'reset_update_branch' => 'Повернення стандартної гілки оновлення',
+                'reset_user_ids' => 'Очищення User ID у модулях',
                 'restore_update_branch' => 'Відновлення попередньої гілки оновлення',
                 'restore_time_sync' => 'Відновлення попередніх налаштувань часу',
                 'restore_wifi_power' => 'Відновлення попередньої потужності Wi‑Fi',
@@ -151,6 +153,7 @@ function reset_ui_catalog(string $lang): array
             'reset_wifi_power_failed' => 'Could not restore the default Wi-Fi power.',
             'reset_time_sync_failed' => 'Could not restore the default timezone and NTP settings.',
             'reset_update_branch_failed' => 'Could not restore the default update branch.',
+            'reset_user_ids_failed' => 'Could not clear the User ID values in the modules.',
         ],
         'steps' => [
             'stop_active_modules' => 'Stop active modules',
@@ -164,6 +167,7 @@ function reset_ui_catalog(string $lang): array
             'reset_wifi_power' => 'Restore the default Wi-Fi power',
             'reset_time_sync' => 'Restore the default time settings',
             'reset_update_branch' => 'Restore the default update branch',
+            'reset_user_ids' => 'Clear User ID values in the modules',
             'restore_update_branch' => 'Restore the previous update branch',
             'restore_time_sync' => 'Restore the previous time settings',
             'restore_wifi_power' => 'Restore the previous Wi-Fi power',

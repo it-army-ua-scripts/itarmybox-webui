@@ -8,8 +8,6 @@ const ROOT_HELPER_WEBUI_DEFAULT_TRAFFIC_PERCENT = 31;
 const ROOT_HELPER_WEBUI_DEFAULT_TIMEZONE = 'Europe/Kyiv';
 const ROOT_HELPER_WEBUI_DEFAULT_WIFI_SSID = 'Artline';
 const ROOT_HELPER_WEBUI_DEFAULT_WIFI_DBM = '1.00';
-const ROOT_HELPER_X100_CONFIG_PATH = '/opt/itarmy/x100-for-docker/put-your-ovpn-files-here/x100-config.txt';
-
 function rootHelperResetAddLog(array &$log, string $phase, string $step, bool $ok, string $details = ''): void
 {
     $entry = [
@@ -45,29 +43,6 @@ function rootHelperResetResultDetails($result, string $fallback = ''): string
 {
     $error = rootHelperResetResultError($result);
     return $error !== '' ? $error : $fallback;
-}
-
-function rootHelperReadX100ConfigSnapshot(): array
-{
-    $content = getX100Config();
-    return [
-        'exists' => is_string($content),
-        'content' => is_string($content) ? $content : '',
-    ];
-}
-
-function rootHelperRestoreX100ConfigSnapshot(array $snapshot): bool
-{
-    $exists = ($snapshot['exists'] ?? false) === true;
-    if ($exists) {
-        return setX100Config((string)($snapshot['content'] ?? ''));
-    }
-
-    if (is_file(ROOT_HELPER_X100_CONFIG_PATH)) {
-        return @unlink(ROOT_HELPER_X100_CONFIG_PATH);
-    }
-
-    return true;
 }
 
 function rootHelperRestoreAutostartModules(array $modules, array $enabledModules): array
@@ -297,9 +272,44 @@ function rootHelperResetMhddosDefaults(): bool
     ], 'mhddos');
 }
 
+function rootHelperClearMhddosUserId(): bool
+{
+    return rootHelperWriteServiceDefaults('mhddos', [
+        'user-id' => '',
+    ], 'mhddos');
+}
+
+function rootHelperClearDistressUserId(): bool
+{
+    $currentExecStart = readServiceExecStart('distress');
+    if (!is_string($currentExecStart) || $currentExecStart === '') {
+        return false;
+    }
+
+    $updatedExecStart = rootHelperExecStartUpdateOptions($currentExecStart, [
+        'user-id' => '',
+    ], 'distress');
+    if (!is_string($updatedExecStart) || trim($updatedExecStart) === '') {
+        return false;
+    }
+
+    return updateServiceExecStart('distress', $updatedExecStart);
+}
+
+function rootHelperClearAllUserIds(): bool
+{
+    return rootHelperClearMhddosUserId()
+        && rootHelperClearDistressUserId();
+}
+
 function rootHelperResetDistressDefaults(): bool
 {
-    if (!rootHelperWriteServiceDefaults('distress', [
+    $currentExecStart = readServiceExecStart('distress');
+    if (!is_string($currentExecStart) || $currentExecStart === '') {
+        return false;
+    }
+
+    $updatedExecStart = rootHelperExecStartUpdateOptions($currentExecStart, [
         'user-id' => '',
         'use-my-ip' => '',
         'use-tor' => '',
@@ -310,50 +320,13 @@ function rootHelperResetDistressDefaults(): bool
         'udp-packet-size' => '',
         'direct-udp-mixed-flood-packets-per-conn' => '',
         'proxies-path' => '',
-    ], 'distress')) {
+    ], 'distress');
+    if (!is_string($updatedExecStart) || trim($updatedExecStart) === '') {
         return false;
     }
 
-    $result = setDistressAutotuneMode(false, DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY);
+    $result = saveDistressSettings($updatedExecStart, false, DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY);
     return ($result['ok'] ?? false) === true;
-}
-
-function rootHelperSetX100ConfigValues(array $updatedConfig): bool
-{
-    $allowed = ['itArmyUserId', 'initialDistressScale', 'ignoreBundledFreeVpn'];
-    $content = getX100Config();
-    if (!is_string($content)) {
-        $content = '';
-    }
-
-    foreach ($allowed as $key) {
-        if (!array_key_exists($key, $updatedConfig)) {
-            continue;
-        }
-
-        $value = trim((string)$updatedConfig[$key]);
-        if ($key === 'ignoreBundledFreeVpn' && $value === '') {
-            $value = '0';
-        }
-
-        $pattern = '/^' . preg_quote($key, '/') . '=.*/m';
-        if (preg_match($pattern, $content)) {
-            $content = (string)preg_replace($pattern, $key . '=' . $value, $content, 1);
-        } else {
-            $content .= PHP_EOL . $key . '=' . $value;
-        }
-    }
-
-    return setX100Config($content);
-}
-
-function rootHelperResetX100Defaults(): bool
-{
-    return rootHelperSetX100ConfigValues([
-        'itArmyUserId' => '',
-        'initialDistressScale' => '',
-        'ignoreBundledFreeVpn' => '0',
-    ]);
 }
 
 function rootHelperSetWifiApNameWithRetry(string $ssid): array
@@ -371,7 +344,6 @@ function rootHelperResetWebuiDefaults(array $modules): array
     $previousMhddosExecStart = readServiceExecStart('mhddos');
     $previousDistressExecStart = readServiceExecStart('distress');
     $previousDistressAutotune = getDistressAutotuneStatus();
-    $previousX100Config = rootHelperReadX100ConfigSnapshot();
     $previousAutostartModules = getEnabledAutostartModules($modules);
     $previousSchedule = getSchedule($modules);
     $previousTrafficState = getTrafficLimitRollbackSnapshot();
@@ -434,18 +406,6 @@ function rootHelperResetWebuiDefaults(array $modules): array
         ];
     }
 
-    if (!rootHelperResetX100Defaults()) {
-        rootHelperResetAddLog($steps, 'apply', 'reset_x100', false);
-        return rootHelperResetFailure('reset_x100_failed', $steps, $rollbackStack);
-    }
-    rootHelperResetAddLog($steps, 'apply', 'reset_x100', true);
-    $rollbackStack[] = [
-        'step' => 'restore_x100',
-        'handler' => static function () use ($previousX100Config): bool {
-            return rootHelperRestoreX100ConfigSnapshot($previousX100Config);
-        },
-    ];
-
     $autostart = setAutostart($modules, null);
     if (($autostart['ok'] ?? false) !== true) {
         rootHelperResetAddLog($steps, 'apply', 'clear_autostart', false, rootHelperResetResultDetails($autostart));
@@ -485,21 +445,6 @@ function rootHelperResetWebuiDefaults(array $modules): array
             'step' => 'restore_traffic_limit',
             'handler' => static function () use ($previousTrafficState): array {
                 return setTrafficLimit((int)$previousTrafficState['percent']);
-            },
-        ];
-    }
-
-    $wifiName = rootHelperSetWifiApNameWithRetry(ROOT_HELPER_WEBUI_DEFAULT_WIFI_SSID);
-    if (($wifiName['ok'] ?? false) !== true) {
-        rootHelperResetAddLog($steps, 'apply', 'reset_wifi_name', false, rootHelperResetResultDetails($wifiName));
-        return rootHelperResetFailure('reset_wifi_name_failed', $steps, $rollbackStack);
-    }
-    rootHelperResetAddLog($steps, 'apply', 'reset_wifi_name', true, ROOT_HELPER_WEBUI_DEFAULT_WIFI_SSID);
-    if (($previousWifiName['ok'] ?? false) === true && isset($previousWifiName['ssid']) && is_string($previousWifiName['ssid'])) {
-        $rollbackStack[] = [
-            'step' => 'restore_wifi_name',
-            'handler' => static function () use ($previousWifiName): array {
-                return rootHelperSetWifiApNameWithRetry((string)$previousWifiName['ssid']);
             },
         ];
     }
@@ -545,6 +490,27 @@ function rootHelperResetWebuiDefaults(array $modules): array
             return webui_set_selected_branch($previousBranch);
         },
     ];
+
+    $wifiName = rootHelperSetWifiApNameWithRetry(ROOT_HELPER_WEBUI_DEFAULT_WIFI_SSID);
+    if (($wifiName['ok'] ?? false) !== true) {
+        rootHelperResetAddLog($steps, 'apply', 'reset_wifi_name', false, rootHelperResetResultDetails($wifiName));
+        return rootHelperResetFailure('reset_wifi_name_failed', $steps, $rollbackStack);
+    }
+    rootHelperResetAddLog($steps, 'apply', 'reset_wifi_name', true, ROOT_HELPER_WEBUI_DEFAULT_WIFI_SSID);
+    if (($previousWifiName['ok'] ?? false) === true && isset($previousWifiName['ssid']) && is_string($previousWifiName['ssid'])) {
+        $rollbackStack[] = [
+            'step' => 'restore_wifi_name',
+            'handler' => static function () use ($previousWifiName): array {
+                return rootHelperSetWifiApNameWithRetry((string)$previousWifiName['ssid']);
+            },
+        ];
+    }
+
+    if (!rootHelperClearAllUserIds()) {
+        rootHelperResetAddLog($steps, 'apply', 'reset_user_ids', false);
+        return rootHelperResetFailure('reset_user_ids_failed', $steps, $rollbackStack);
+    }
+    rootHelperResetAddLog($steps, 'apply', 'reset_user_ids', true);
 
     return [
         'ok' => true,
