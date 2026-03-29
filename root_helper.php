@@ -507,10 +507,15 @@ function switchExclusiveModuleState(array $modules, ?string $selected, bool $for
     }
 
     if ($selected !== null) {
-        if ($selected === 'distress' && !prepareDistressUploadCapBeforeStart(true)) {
+        $distressAutotuneEnabledForStart = false;
+        if ($selected === 'distress') {
+            $distressAutotuneState = readDistressAutotuneState();
+            $distressAutotuneEnabledForStart = (($distressAutotuneState['enabled'] ?? false) === true);
+        }
+        if ($selected === 'distress' && $distressAutotuneEnabledForStart && !prepareDistressUploadCapBeforeStart(true)) {
             return ['ok' => false, 'error' => 'distress_upload_cap_prepare_failed'];
         }
-        if ($selected === 'distress' && !markDistressUploadCapServicePrestartSkip()) {
+        if ($selected === 'distress' && $distressAutotuneEnabledForStart && !markDistressUploadCapServicePrestartSkip()) {
             return ['ok' => false, 'error' => 'distress_upload_cap_prestart_skip_mark_failed'];
         }
         $selectedService = escapeshellarg($selected . '.service');

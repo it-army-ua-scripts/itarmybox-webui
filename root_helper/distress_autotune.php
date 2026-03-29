@@ -955,16 +955,15 @@ function shouldRefreshDistressUploadCapOnStart(array $state, bool $forceRefresh)
 
 function prepareDistressUploadCapBeforeStart(bool $forceRefresh = false): bool
 {
+    $state = readDistressAutotuneState();
+    if (($state['enabled'] ?? false) !== true) {
+        return true;
+    }
+
     $lockHandle = acquireDistressAutotuneLock();
     if ($lockHandle === false) {
         distressAutotuneDebugLog('upload_cap_lock_failed_before_start');
         return false;
-    }
-
-    $state = readDistressAutotuneState();
-    if (($state['enabled'] ?? false) !== true) {
-        releaseDistressAutotuneLock($lockHandle);
-        return true;
     }
 
     if (shouldRefreshDistressUploadCapOnStart($state, $forceRefresh)) {
