@@ -804,24 +804,49 @@ function hasDistressUploadCapMeasurement(?array $state = null): bool
 
 function measureDistressUploadCapManually(): array
 {
+    distressAutotuneDebugLog('manual_upload_cap_measure_requested');
+
     $lockHandle = acquireDistressAutotuneLock();
     if ($lockHandle === false) {
+        distressAutotuneDebugLog('manual_upload_cap_measure_lock_failed');
         return distressAutotuneError('distress_autotune_lock_failed');
     }
 
     $state = readDistressAutotuneState();
+    distressAutotuneDebugLog('manual_upload_cap_measure_started', [
+        'existingUploadCapMbps' => $state['uploadCapMbps'] ?? null,
+        'existingUploadCapMeasuredAt' => $state['uploadCapMeasuredAt'] ?? null,
+        'existingUploadCapStatus' => $state['uploadCapStatus'] ?? null,
+    ]);
+
     $measuredMbps = refreshDistressUploadCap($state);
     if ($measuredMbps === null) {
+        distressAutotuneDebugLog('manual_upload_cap_measure_refresh_failed', [
+            'uploadCapStatus' => $state['uploadCapStatus'] ?? null,
+            'uploadCapLastError' => $state['uploadCapLastError'] ?? null,
+            'uploadCapLastMethod' => $state['uploadCapLastMethod'] ?? null,
+            'uploadCapFinishedAt' => $state['uploadCapFinishedAt'] ?? null,
+        ]);
         releaseDistressAutotuneLock($lockHandle);
         return distressAutotuneError('distress_upload_cap_measure_failed') + getDistressAutotuneStatus();
     }
 
     if (!writeDistressAutotuneState($state)) {
+        distressAutotuneDebugLog('manual_upload_cap_measure_state_write_failed', [
+            'measuredMbps' => round($measuredMbps, 3),
+            'uploadCapStatus' => $state['uploadCapStatus'] ?? null,
+        ]);
         releaseDistressAutotuneLock($lockHandle);
         return distressAutotuneError('distress_autotune_state_write_failed');
     }
 
     releaseDistressAutotuneLock($lockHandle);
+    distressAutotuneDebugLog('manual_upload_cap_measure_completed', [
+        'measuredMbps' => round($measuredMbps, 3),
+        'uploadCapMeasuredAt' => $state['uploadCapMeasuredAt'] ?? null,
+        'uploadCapLastMethod' => $state['uploadCapLastMethod'] ?? null,
+    ]);
+
     return getDistressAutotuneStatus() + [
         'measured' => true,
     ];
@@ -1073,7 +1098,19 @@ if (!function_exists('measureDistressCloudflareUploadCap')) {
         $sampleMethods = [];
         $lastError = null;
         setDistressUploadCapMeasurementMeta(null, null);
+        distressAutotuneDebugLog('upload_cap_measure_started', [
+            'url' => DISTRESS_AUTOTUNE_UPLOAD_CAP_URL,
+            'sampleBytes' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES,
+            'sampleCount' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+            'timeoutSeconds' => DISTRESS_AUTOTUNE_UPLOAD_CAP_TIMEOUT_SECONDS,
+        ]);
         for ($i = 0; $i < DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT; $i++) {
+            distressAutotuneDebugLog('upload_cap_measure_attempt_started', [
+                'attempt' => $i + 1,
+                'sampleCount' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+                'sampleBytes' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES,
+                'timeoutSeconds' => DISTRESS_AUTOTUNE_UPLOAD_CAP_TIMEOUT_SECONDS,
+            ]);
             $sample = measureDistressUploadCapWithPhpCurl(
                 DISTRESS_AUTOTUNE_UPLOAD_CAP_URL,
                 DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES,
@@ -1091,8 +1128,20 @@ if (!function_exists('measureDistressCloudflareUploadCap')) {
             if ($sample !== null && $sample > 0.0) {
                 $samples[] = $sample;
                 $sampleMethods[] = $sampleMeta['method'] ?? null;
+                distressAutotuneDebugLog('upload_cap_measure_attempt_succeeded', [
+                    'attempt' => $i + 1,
+                    'sampleCount' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+                    'measuredMbps' => round($sample, 3),
+                    'method' => $sampleMeta['method'] ?? null,
+                ]);
             } elseif (isset($sampleMeta['error']) && is_string($sampleMeta['error']) && $sampleMeta['error'] !== '') {
                 $lastError = $sampleMeta['error'];
+                distressAutotuneDebugLog('upload_cap_measure_attempt_failed', [
+                    'attempt' => $i + 1,
+                    'sampleCount' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+                    'error' => $lastError,
+                    'method' => $sampleMeta['method'] ?? null,
+                ]);
             }
         }
 
