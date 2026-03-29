@@ -507,6 +507,9 @@ function switchExclusiveModuleState(array $modules, ?string $selected): array
     }
 
     if ($selected !== null) {
+        if ($selected === 'distress' && !prepareDistressUploadCapBeforeStart()) {
+            return ['ok' => false, 'error' => 'distress_upload_cap_prepare_failed'];
+        }
         $selectedService = escapeshellarg($selected . '.service');
         runCommand("systemctl start $selectedService", $code);
         if ($code !== 0) {
