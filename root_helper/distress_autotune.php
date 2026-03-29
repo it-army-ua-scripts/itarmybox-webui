@@ -13,14 +13,19 @@ const DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY = 4096;
 const DISTRESS_AUTOTUNE_MIN_CONCURRENCY = 64;
 const DISTRESS_AUTOTUNE_MAX_CONCURRENCY = 30720;
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_URL = 'https://speed.cloudflare.com/__up';
-const DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES = 33554432;
+const DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES = 67108864;
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT = 3;
-const DISTRESS_AUTOTUNE_UPLOAD_CAP_TIMEOUT_SECONDS = 8;
+const DISTRESS_AUTOTUNE_UPLOAD_CAP_TIMEOUT_SECONDS = 20;
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_IDLE = 'idle';
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_RUNNING = 'running';
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_SUCCESS = 'success';
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_FAILED = 'failed';
 const DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_SKIPPED = 'skipped';
+const DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_IDLE = 'idle';
+const DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_PREPARING = 'preparing';
+const DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_ATTEMPT = 'attempt';
+const DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_FINALIZING = 'finalizing';
+const DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_COMPLETE = 'complete';
 const DISTRESS_AUTOTUNE_BIG_CORE_COUNT = 4;
 const DISTRESS_AUTOTUNE_BIG_CORE_WEIGHT = 1.0;
 const DISTRESS_AUTOTUNE_LITTLE_CORE_COUNT = 2;
@@ -171,6 +176,39 @@ function setDistressUploadCapStatus(
     $state['uploadCapFinishedAt'] = is_numeric($finishedAt) && (int)$finishedAt > 0 ? (int)$finishedAt : null;
 }
 
+function normalizeDistressUploadCapProgressPercent($value): int
+{
+    if (!is_numeric($value)) {
+        return 0;
+    }
+
+    return max(0, min(100, (int)round((float)$value)));
+}
+
+function normalizeDistressUploadCapProgressPhase($value): string
+{
+    return match ($value) {
+        DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_PREPARING,
+        DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_ATTEMPT,
+        DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_FINALIZING,
+        DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_COMPLETE => (string)$value,
+        default => DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_IDLE,
+    };
+}
+
+function setDistressUploadCapProgress(
+    array &$state,
+    int $percent,
+    ?int $attempt = null,
+    ?int $total = null,
+    ?string $phase = null
+): void {
+    $state['uploadCapProgressPercent'] = normalizeDistressUploadCapProgressPercent($percent);
+    $state['uploadCapProgressAttempt'] = is_numeric($attempt) && (int)$attempt > 0 ? (int)$attempt : null;
+    $state['uploadCapProgressTotal'] = is_numeric($total) && (int)$total > 0 ? (int)$total : DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT;
+    $state['uploadCapProgressPhase'] = normalizeDistressUploadCapProgressPhase($phase);
+}
+
 function persistDistressUploadCapStatus(array &$state, string $event, array $context = []): void
 {
     if (writeDistressAutotuneState($state)) {
@@ -179,6 +217,10 @@ function persistDistressUploadCapStatus(array &$state, string $event, array $con
 
     distressAutotuneDebugLog($event, $context + [
         'status' => $state['uploadCapStatus'] ?? null,
+        'progressPercent' => $state['uploadCapProgressPercent'] ?? null,
+        'progressAttempt' => $state['uploadCapProgressAttempt'] ?? null,
+        'progressTotal' => $state['uploadCapProgressTotal'] ?? null,
+        'progressPhase' => $state['uploadCapProgressPhase'] ?? null,
         'stateWriteFailed' => true,
     ]);
 }
@@ -342,6 +384,10 @@ function readDistressAutotuneState(): array
         'uploadCapStatus' => DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_IDLE,
         'uploadCapStartedAt' => null,
         'uploadCapFinishedAt' => null,
+        'uploadCapProgressPercent' => 0,
+        'uploadCapProgressAttempt' => null,
+        'uploadCapProgressTotal' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+        'uploadCapProgressPhase' => DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_IDLE,
         'uploadCapLastError' => null,
         'uploadCapLastMethod' => null,
         'lastTargetCount' => null,
@@ -403,6 +449,14 @@ function readDistressAutotuneState(): array
         'uploadCapFinishedAt' => isset($data['uploadCapFinishedAt']) && is_numeric($data['uploadCapFinishedAt'])
             ? (int)$data['uploadCapFinishedAt']
             : null,
+        'uploadCapProgressPercent' => normalizeDistressUploadCapProgressPercent($data['uploadCapProgressPercent'] ?? null),
+        'uploadCapProgressAttempt' => isset($data['uploadCapProgressAttempt']) && is_numeric($data['uploadCapProgressAttempt']) && (int)$data['uploadCapProgressAttempt'] > 0
+            ? (int)$data['uploadCapProgressAttempt']
+            : null,
+        'uploadCapProgressTotal' => isset($data['uploadCapProgressTotal']) && is_numeric($data['uploadCapProgressTotal']) && (int)$data['uploadCapProgressTotal'] > 0
+            ? (int)$data['uploadCapProgressTotal']
+            : DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+        'uploadCapProgressPhase' => normalizeDistressUploadCapProgressPhase($data['uploadCapProgressPhase'] ?? null),
         'uploadCapLastError' => isset($data['uploadCapLastError']) && is_string($data['uploadCapLastError']) && $data['uploadCapLastError'] !== ''
             ? $data['uploadCapLastError']
             : null,
@@ -469,6 +523,14 @@ function writeDistressAutotuneState(array $state): bool
         'uploadCapFinishedAt' => isset($state['uploadCapFinishedAt']) && is_numeric($state['uploadCapFinishedAt'])
             ? (int)$state['uploadCapFinishedAt']
             : null,
+        'uploadCapProgressPercent' => normalizeDistressUploadCapProgressPercent($state['uploadCapProgressPercent'] ?? null),
+        'uploadCapProgressAttempt' => isset($state['uploadCapProgressAttempt']) && is_numeric($state['uploadCapProgressAttempt']) && (int)$state['uploadCapProgressAttempt'] > 0
+            ? (int)$state['uploadCapProgressAttempt']
+            : null,
+        'uploadCapProgressTotal' => isset($state['uploadCapProgressTotal']) && is_numeric($state['uploadCapProgressTotal']) && (int)$state['uploadCapProgressTotal'] > 0
+            ? (int)$state['uploadCapProgressTotal']
+            : DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+        'uploadCapProgressPhase' => normalizeDistressUploadCapProgressPhase($state['uploadCapProgressPhase'] ?? null),
         'uploadCapLastError' => isset($state['uploadCapLastError']) && is_string($state['uploadCapLastError']) && $state['uploadCapLastError'] !== ''
             ? $state['uploadCapLastError']
             : null,
@@ -558,6 +620,7 @@ function resetDistressAutotuneLearnedState(array &$state, bool $resetUploadCap =
         $state['uploadCapMbps'] = null;
         $state['uploadCapMeasuredAt'] = null;
         setDistressUploadCapStatus($state, DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_IDLE);
+        setDistressUploadCapProgress($state, 0, null, DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT, DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_IDLE);
     }
     $state['lastTargetCount'] = null;
     $state['lastBpsCycleId'] = null;
@@ -784,6 +847,14 @@ function getDistressAutotuneStatus(): array
         'uploadCapStatus' => normalizeDistressUploadCapStatus($state['uploadCapStatus'] ?? null),
         'uploadCapStartedAt' => $state['uploadCapStartedAt'] ?? null,
         'uploadCapFinishedAt' => $state['uploadCapFinishedAt'] ?? null,
+        'uploadCapProgressPercent' => normalizeDistressUploadCapProgressPercent($state['uploadCapProgressPercent'] ?? null),
+        'uploadCapProgressAttempt' => isset($state['uploadCapProgressAttempt']) && is_numeric($state['uploadCapProgressAttempt']) && (int)$state['uploadCapProgressAttempt'] > 0
+            ? (int)$state['uploadCapProgressAttempt']
+            : null,
+        'uploadCapProgressTotal' => isset($state['uploadCapProgressTotal']) && is_numeric($state['uploadCapProgressTotal']) && (int)$state['uploadCapProgressTotal'] > 0
+            ? (int)$state['uploadCapProgressTotal']
+            : DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+        'uploadCapProgressPhase' => normalizeDistressUploadCapProgressPhase($state['uploadCapProgressPhase'] ?? null),
         'uploadCapLastError' => $state['uploadCapLastError'] ?? null,
         'uploadCapLastMethod' => $state['uploadCapLastMethod'] ?? null,
         'lastTargetCount' => $state['lastTargetCount'] ?? null,
@@ -1092,7 +1163,7 @@ function measureDistressUploadCapWithCurlBinary(string $url, int $bytes, int $ti
 }
 
 if (!function_exists('measureDistressCloudflareUploadCap')) {
-    function measureDistressCloudflareUploadCap(): ?float
+    function measureDistressCloudflareUploadCap(?array &$state = null): ?float
     {
         $samples = [];
         $sampleMethods = [];
@@ -1105,8 +1176,23 @@ if (!function_exists('measureDistressCloudflareUploadCap')) {
             'timeoutSeconds' => DISTRESS_AUTOTUNE_UPLOAD_CAP_TIMEOUT_SECONDS,
         ]);
         for ($i = 0; $i < DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT; $i++) {
+            $attemptNumber = $i + 1;
+            if (is_array($state)) {
+                $attemptStartPercent = 10 + (int)floor(($i / DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT) * 70);
+                setDistressUploadCapProgress(
+                    $state,
+                    $attemptStartPercent,
+                    $attemptNumber,
+                    DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+                    DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_ATTEMPT
+                );
+                persistDistressUploadCapStatus($state, 'upload_cap_attempt_progress_write_failed', [
+                    'attempt' => $attemptNumber,
+                    'phase' => DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_ATTEMPT,
+                ]);
+            }
             distressAutotuneDebugLog('upload_cap_measure_attempt_started', [
-                'attempt' => $i + 1,
+                'attempt' => $attemptNumber,
                 'sampleCount' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
                 'sampleBytes' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES,
                 'timeoutSeconds' => DISTRESS_AUTOTUNE_UPLOAD_CAP_TIMEOUT_SECONDS,
@@ -1128,16 +1214,44 @@ if (!function_exists('measureDistressCloudflareUploadCap')) {
             if ($sample !== null && $sample > 0.0) {
                 $samples[] = $sample;
                 $sampleMethods[] = $sampleMeta['method'] ?? null;
+                if (is_array($state)) {
+                    $attemptDonePercent = 10 + (int)floor(($attemptNumber / DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT) * 70);
+                    setDistressUploadCapProgress(
+                        $state,
+                        $attemptDonePercent,
+                        $attemptNumber,
+                        DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+                        DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_ATTEMPT
+                    );
+                    persistDistressUploadCapStatus($state, 'upload_cap_attempt_progress_write_failed', [
+                        'attempt' => $attemptNumber,
+                        'phase' => 'attempt_done',
+                    ]);
+                }
                 distressAutotuneDebugLog('upload_cap_measure_attempt_succeeded', [
-                    'attempt' => $i + 1,
+                    'attempt' => $attemptNumber,
                     'sampleCount' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
                     'measuredMbps' => round($sample, 3),
                     'method' => $sampleMeta['method'] ?? null,
                 ]);
             } elseif (isset($sampleMeta['error']) && is_string($sampleMeta['error']) && $sampleMeta['error'] !== '') {
                 $lastError = $sampleMeta['error'];
+                if (is_array($state)) {
+                    $attemptDonePercent = 10 + (int)floor(($attemptNumber / DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT) * 70);
+                    setDistressUploadCapProgress(
+                        $state,
+                        $attemptDonePercent,
+                        $attemptNumber,
+                        DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+                        DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_ATTEMPT
+                    );
+                    persistDistressUploadCapStatus($state, 'upload_cap_attempt_progress_write_failed', [
+                        'attempt' => $attemptNumber,
+                        'phase' => 'attempt_failed',
+                    ]);
+                }
                 distressAutotuneDebugLog('upload_cap_measure_attempt_failed', [
-                    'attempt' => $i + 1,
+                    'attempt' => $attemptNumber,
                     'sampleCount' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
                     'error' => $lastError,
                     'method' => $sampleMeta['method'] ?? null,
@@ -1153,6 +1267,19 @@ if (!function_exists('measureDistressCloudflareUploadCap')) {
                 'sampleCount' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
             ]);
             return null;
+        }
+
+        if (is_array($state)) {
+            setDistressUploadCapProgress(
+                $state,
+                90,
+                DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+                DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+                DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_FINALIZING
+            );
+            persistDistressUploadCapStatus($state, 'upload_cap_finalizing_progress_write_failed', [
+                'phase' => DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_FINALIZING,
+            ]);
         }
 
         sort($samples, SORT_NUMERIC);
@@ -1186,11 +1313,12 @@ function refreshDistressUploadCap(array &$state): ?float
 {
     $startedAt = time();
     setDistressUploadCapStatus($state, DISTRESS_AUTOTUNE_UPLOAD_CAP_STATUS_RUNNING, null, null, $startedAt, null);
+    setDistressUploadCapProgress($state, 5, null, DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT, DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_PREPARING);
     persistDistressUploadCapStatus($state, 'upload_cap_running_state_write_failed', [
         'startedAt' => $startedAt,
     ]);
 
-    $measuredMbps = measureDistressCloudflareUploadCap();
+    $measuredMbps = measureDistressCloudflareUploadCap($state);
     $measurementMeta = getDistressUploadCapMeasurementMeta();
     $finishedAt = time();
     if ($measuredMbps === null || $measuredMbps <= 0.0) {
@@ -1201,6 +1329,13 @@ function refreshDistressUploadCap(array &$state): ?float
             $measurementMeta['method'] ?? null,
             $startedAt,
             $finishedAt
+        );
+        setDistressUploadCapProgress(
+            $state,
+            100,
+            DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+            DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+            DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_COMPLETE
         );
         persistDistressUploadCapStatus($state, 'upload_cap_failed_state_write_failed', [
             'startedAt' => $startedAt,
@@ -1220,6 +1355,13 @@ function refreshDistressUploadCap(array &$state): ?float
         $measurementMeta['method'] ?? null,
         $startedAt,
         $finishedAt
+    );
+    setDistressUploadCapProgress(
+        $state,
+        100,
+        DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+        DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+        DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_COMPLETE
     );
     return $measuredMbps;
 }
@@ -1716,6 +1858,10 @@ function resetDistressAutotuneBpsCycle(array &$state): void
     $previousUploadCapStatus = normalizeDistressUploadCapStatus($state['uploadCapStatus'] ?? null);
     $previousUploadCapStartedAt = $state['uploadCapStartedAt'] ?? null;
     $previousUploadCapFinishedAt = $state['uploadCapFinishedAt'] ?? null;
+    $previousUploadCapProgressPercent = normalizeDistressUploadCapProgressPercent($state['uploadCapProgressPercent'] ?? null);
+    $previousUploadCapProgressAttempt = $state['uploadCapProgressAttempt'] ?? null;
+    $previousUploadCapProgressTotal = $state['uploadCapProgressTotal'] ?? null;
+    $previousUploadCapProgressPhase = normalizeDistressUploadCapProgressPhase($state['uploadCapProgressPhase'] ?? null);
     $previousUploadCapLastError = $state['uploadCapLastError'] ?? null;
     $previousUploadCapLastMethod = $state['uploadCapLastMethod'] ?? null;
     $state['lastAdjustedAt'] = 0;
@@ -1737,6 +1883,14 @@ function resetDistressAutotuneBpsCycle(array &$state): void
     $state['uploadCapFinishedAt'] = is_numeric($previousUploadCapFinishedAt) && (int)$previousUploadCapFinishedAt > 0
         ? (int)$previousUploadCapFinishedAt
         : null;
+    $state['uploadCapProgressPercent'] = $previousUploadCapProgressPercent;
+    $state['uploadCapProgressAttempt'] = is_numeric($previousUploadCapProgressAttempt) && (int)$previousUploadCapProgressAttempt > 0
+        ? (int)$previousUploadCapProgressAttempt
+        : null;
+    $state['uploadCapProgressTotal'] = is_numeric($previousUploadCapProgressTotal) && (int)$previousUploadCapProgressTotal > 0
+        ? (int)$previousUploadCapProgressTotal
+        : DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT;
+    $state['uploadCapProgressPhase'] = $previousUploadCapProgressPhase;
     $state['uploadCapLastError'] = is_string($previousUploadCapLastError) && $previousUploadCapLastError !== ''
         ? $previousUploadCapLastError
         : null;

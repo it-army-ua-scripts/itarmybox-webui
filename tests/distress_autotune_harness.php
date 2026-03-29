@@ -677,6 +677,9 @@ function harness_test_manual_upload_cap_measure_persists_success_status(): void
     harness_assert(abs((float)($state['uploadCapMbps'] ?? 0.0) - 123.45) < 0.0001, 'successful measurement should persist upload cap value');
     harness_assert((int)($state['uploadCapStartedAt'] ?? 0) > 0, 'successful measurement should persist started timestamp');
     harness_assert((int)($state['uploadCapFinishedAt'] ?? 0) > 0, 'successful measurement should persist finished timestamp');
+    harness_assert((int)($state['uploadCapProgressPercent'] ?? 0) === 100, 'successful measurement should finish with 100 percent progress');
+    harness_assert((int)($state['uploadCapProgressTotal'] ?? 0) === DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT, 'successful measurement should expose total sample count');
+    harness_assert(($state['uploadCapProgressPhase'] ?? '') === DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_COMPLETE, 'successful measurement should finish in complete phase');
     harness_assert(($state['uploadCapLastError'] ?? null) === null, 'successful measurement should clear the last error');
 }
 
@@ -702,6 +705,8 @@ function harness_test_manual_upload_cap_measure_persists_failure_status_without_
     harness_assert(($state['uploadCapLastError'] ?? '') === 'upload_cap_measure_failed', 'failed measurement should persist the fallback error code');
     harness_assert((int)($state['uploadCapStartedAt'] ?? 0) > 0, 'failed measurement should persist started timestamp');
     harness_assert((int)($state['uploadCapFinishedAt'] ?? 0) > 0, 'failed measurement should persist finished timestamp');
+    harness_assert((int)($state['uploadCapProgressPercent'] ?? 0) === 100, 'failed measurement should also finish with 100 percent progress');
+    harness_assert(($state['uploadCapProgressPhase'] ?? '') === DISTRESS_AUTOTUNE_UPLOAD_CAP_PHASE_COMPLETE, 'failed measurement should end in complete phase');
 }
 
 function harness_test_manual_measure_fails_when_lock_is_busy(): void

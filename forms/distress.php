@@ -231,6 +231,7 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
 </div>
 <script id="distress-measure-config" type="application/json"><?= json_encode([
     'ajaxUrl' => build_tool_url('distress', ['ajax' => '1']),
+    'measureStatusUrl' => build_tool_url('distress', ['ajax' => '1', 'measureStatus' => '1']),
     'hasMeasurement' => $distressHasUploadCapMeasurement,
     'text' => [
         'progressTitle' => t('distress_upload_cap_progress_title'),
@@ -238,6 +239,7 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
         'progressRunning' => t('distress_upload_cap_progress_running'),
         'progressAlmostDone' => t('distress_upload_cap_progress_almost_done'),
         'progressDetail' => t('distress_upload_cap_progress_detail'),
+        'progressAttempt' => t('distress_upload_cap_progress_attempt', ['current' => '{{current}}', 'total' => '{{total}}']),
         'progressCloseBlocked' => t('distress_upload_cap_progress_close_blocked'),
         'progressError' => t('distress_upload_cap_progress_error'),
         'statusIdle' => t('distress_upload_cap_status_idle'),

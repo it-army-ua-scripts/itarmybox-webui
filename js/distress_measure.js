@@ -21,6 +21,7 @@
     let requestInFlight = false;
     let progressValue = 0;
     let progressTimer = null;
+    let progressPollAbortController = null;
 
     const config = JSON.parse(configEl.textContent || "{}");
     const text = config.text || {};
@@ -80,31 +81,6 @@
         document.body.classList.remove("modal-open");
     }
 
-    function startProgressAnimation() {
-        if (progressTimer !== null) {
-            window.clearInterval(progressTimer);
-        }
-        progressTimer = window.setInterval(function () {
-            if (progressValue < 28) {
-                setProgress(progressValue + 8);
-                statusEl.textContent = text.progressPreparing || "";
-            } else if (progressValue < 72) {
-                setProgress(progressValue + 4);
-                statusEl.textContent = text.progressRunning || "";
-            } else if (progressValue < 92) {
-                setProgress(progressValue + 1.5);
-                statusEl.textContent = text.progressAlmostDone || "";
-            }
-        }, 260);
-    }
-
-    function stopProgressAnimation() {
-        if (progressTimer !== null) {
-            window.clearInterval(progressTimer);
-            progressTimer = null;
-        }
-    }
-
     function setLine(id, textValue, hidden) {
         const el = document.getElementById(id);
         if (!el) {
@@ -152,6 +128,96 @@
         updateStartGate();
     }
 
+    function applyMeasurementProgress(payload) {
+        const percent = typeof payload.uploadCapProgressPercent === "number"
+            ? payload.uploadCapProgressPercent
+            : progressValue;
+        setProgress(percent);
+
+        const phase = payload.uploadCapProgressPhase || "idle";
+        const attempt = typeof payload.uploadCapProgressAttempt === "number" ? payload.uploadCapProgressAttempt : null;
+        const total = typeof payload.uploadCapProgressTotal === "number" ? payload.uploadCapProgressTotal : null;
+
+        if (phase === "preparing") {
+            statusEl.textContent = text.progressPreparing || "";
+            detailEl.textContent = text.progressDetail || "";
+            return;
+        }
+
+        if (phase === "attempt") {
+            statusEl.textContent = text.progressRunning || "";
+            if (attempt !== null && total !== null && total > 0) {
+                detailEl.textContent = (text.progressAttempt || "")
+                    .replace("{{current}}", String(attempt))
+                    .replace("{{total}}", String(total));
+            } else {
+                detailEl.textContent = text.progressRunning || "";
+            }
+            return;
+        }
+
+        if (phase === "finalizing") {
+            statusEl.textContent = text.progressAlmostDone || "";
+            detailEl.textContent = text.progressAlmostDone || "";
+            return;
+        }
+
+        if ((payload.uploadCapStatus || "idle") === "running") {
+            statusEl.textContent = text.progressRunning || "";
+            detailEl.textContent = text.progressDetail || "";
+        }
+    }
+
+    function stopProgressPolling() {
+        if (progressTimer !== null) {
+            window.clearInterval(progressTimer);
+            progressTimer = null;
+        }
+        if (progressPollAbortController) {
+            progressPollAbortController.abort();
+            progressPollAbortController = null;
+        }
+    }
+
+    async function pollMeasurementProgress() {
+        if (!config.measureStatusUrl) {
+            return;
+        }
+
+        try {
+            progressPollAbortController = new AbortController();
+            const response = await fetch(config.measureStatusUrl, {
+                method: "GET",
+                credentials: "same-origin",
+                cache: "no-store",
+                headers: {
+                    "X-Requested-With": "fetch"
+                },
+                signal: progressPollAbortController.signal
+            });
+            const payload = await response.json();
+            if (payload && payload.ok === true) {
+                applyMeasurementProgress(payload);
+            }
+        } catch (error) {
+            if (error && error.name === "AbortError") {
+                return;
+            }
+        } finally {
+            progressPollAbortController = null;
+        }
+    }
+
+    function startProgressPolling() {
+        stopProgressPolling();
+        pollMeasurementProgress();
+        progressTimer = window.setInterval(function () {
+            if (requestInFlight) {
+                pollMeasurementProgress();
+            }
+        }, 700);
+    }
+
     function updateStartGate() {
         if (!modeEl) {
             return;
@@ -196,7 +262,7 @@
         statusEl.textContent = text.progressPreparing || "";
         detailEl.textContent = text.progressDetail || "";
         showModal();
-        startProgressAnimation();
+        startProgressPolling();
 
         const formData = new FormData();
         formData.set("distress-action", "measure-upload-cap");
@@ -212,7 +278,7 @@
                 }
             });
             const payload = await response.json();
-            stopProgressAnimation();
+            stopProgressPolling();
             requestInFlight = false;
             measureButtonEl.disabled = false;
 
@@ -228,7 +294,7 @@
                 window.setTimeout(hideModal, 1200);
             }
         } catch (error) {
-            stopProgressAnimation();
+            stopProgressPolling();
             requestInFlight = false;
             measureButtonEl.disabled = false;
             progressBarEl.classList.remove("is-success");

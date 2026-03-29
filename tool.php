@@ -17,6 +17,40 @@ if (in_array($daemonName, $config['daemonNames'], true)) {
     $info = tool_service_info($config['daemonNames'], $daemonName);
     $wasActiveBeforeSave = (($info['ok'] ?? false) === true) ? (bool)($info['active'] ?? false) : false;
 
+    if ($isAjaxRequest && $daemonName === 'distress' && (($_GET['measureStatus'] ?? '') === '1')) {
+        $measureStatus = getDistressAutotuneSettings();
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode([
+            'ok' => (($measureStatus['ok'] ?? false) === true),
+            'uploadCapStatus' => (string)($measureStatus['uploadCapStatus'] ?? 'idle'),
+            'uploadCapProgressPercent' => isset($measureStatus['uploadCapProgressPercent']) && is_numeric($measureStatus['uploadCapProgressPercent'])
+                ? max(0, min(100, (int)$measureStatus['uploadCapProgressPercent']))
+                : 0,
+            'uploadCapProgressAttempt' => isset($measureStatus['uploadCapProgressAttempt']) && is_numeric($measureStatus['uploadCapProgressAttempt'])
+                ? (int)$measureStatus['uploadCapProgressAttempt']
+                : null,
+            'uploadCapProgressTotal' => isset($measureStatus['uploadCapProgressTotal']) && is_numeric($measureStatus['uploadCapProgressTotal'])
+                ? (int)$measureStatus['uploadCapProgressTotal']
+                : null,
+            'uploadCapProgressPhase' => isset($measureStatus['uploadCapProgressPhase']) && is_string($measureStatus['uploadCapProgressPhase'])
+                ? $measureStatus['uploadCapProgressPhase']
+                : 'idle',
+            'uploadCapMbps' => isset($measureStatus['uploadCapMbps']) && is_numeric($measureStatus['uploadCapMbps'])
+                ? (float)$measureStatus['uploadCapMbps']
+                : null,
+            'uploadCapMeasuredAt' => isset($measureStatus['uploadCapMeasuredAt']) && is_numeric($measureStatus['uploadCapMeasuredAt'])
+                ? (int)$measureStatus['uploadCapMeasuredAt']
+                : null,
+            'uploadCapLastMethod' => isset($measureStatus['uploadCapLastMethod']) && is_string($measureStatus['uploadCapLastMethod'])
+                ? $measureStatus['uploadCapLastMethod']
+                : '',
+            'uploadCapLastError' => isset($measureStatus['uploadCapLastError']) && is_string($measureStatus['uploadCapLastError'])
+                ? trim($measureStatus['uploadCapLastError'])
+                : '',
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
     if (!empty($_POST)) {
         if ($isAjaxRequest && $daemonName === 'distress' && (string)($_POST['distress-action'] ?? '') === 'measure-upload-cap') {
             $measureResponse = measureDistressUploadCap();
@@ -36,6 +70,18 @@ if (in_array($daemonName, $config['daemonNames'], true)) {
                 'secondaryKey' => $secondaryKey,
                 'secondaryText' => ($secondaryKey !== '' && in_array($secondaryKey, $allowedFlashKeys, true)) ? t($secondaryKey) : '',
                 'uploadCapStatus' => (string)($measureResponse['uploadCapStatus'] ?? 'idle'),
+                'uploadCapProgressPercent' => isset($measureResponse['uploadCapProgressPercent']) && is_numeric($measureResponse['uploadCapProgressPercent'])
+                    ? max(0, min(100, (int)$measureResponse['uploadCapProgressPercent']))
+                    : 0,
+                'uploadCapProgressAttempt' => isset($measureResponse['uploadCapProgressAttempt']) && is_numeric($measureResponse['uploadCapProgressAttempt'])
+                    ? (int)$measureResponse['uploadCapProgressAttempt']
+                    : null,
+                'uploadCapProgressTotal' => isset($measureResponse['uploadCapProgressTotal']) && is_numeric($measureResponse['uploadCapProgressTotal'])
+                    ? (int)$measureResponse['uploadCapProgressTotal']
+                    : null,
+                'uploadCapProgressPhase' => isset($measureResponse['uploadCapProgressPhase']) && is_string($measureResponse['uploadCapProgressPhase'])
+                    ? $measureResponse['uploadCapProgressPhase']
+                    : 'idle',
                 'uploadCapMbps' => isset($measureResponse['uploadCapMbps']) && is_numeric($measureResponse['uploadCapMbps'])
                     ? (float)$measureResponse['uploadCapMbps']
                     : null,

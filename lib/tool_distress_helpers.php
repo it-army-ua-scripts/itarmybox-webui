@@ -135,6 +135,10 @@ function getDistressAutotuneSettings(): array
             'uploadCapMbps' => null,
             'uploadCapMeasuredAt' => null,
             'uploadCapStatus' => 'idle',
+            'uploadCapProgressPercent' => 0,
+            'uploadCapProgressAttempt' => null,
+            'uploadCapProgressTotal' => 3,
+            'uploadCapProgressPhase' => 'idle',
             'uploadCapLastError' => null,
             'uploadCapLastMethod' => null,
         ];
@@ -186,6 +190,18 @@ function getDistressAutotuneSettings(): array
             : null,
         'uploadCapStatus' => isset($response['uploadCapStatus']) && is_string($response['uploadCapStatus'])
             ? $response['uploadCapStatus']
+            : 'idle',
+        'uploadCapProgressPercent' => isset($response['uploadCapProgressPercent']) && is_numeric($response['uploadCapProgressPercent'])
+            ? max(0, min(100, (int)$response['uploadCapProgressPercent']))
+            : 0,
+        'uploadCapProgressAttempt' => isset($response['uploadCapProgressAttempt']) && is_numeric($response['uploadCapProgressAttempt']) && (int)$response['uploadCapProgressAttempt'] > 0
+            ? (int)$response['uploadCapProgressAttempt']
+            : null,
+        'uploadCapProgressTotal' => isset($response['uploadCapProgressTotal']) && is_numeric($response['uploadCapProgressTotal']) && (int)$response['uploadCapProgressTotal'] > 0
+            ? (int)$response['uploadCapProgressTotal']
+            : 3,
+        'uploadCapProgressPhase' => isset($response['uploadCapProgressPhase']) && is_string($response['uploadCapProgressPhase'])
+            ? $response['uploadCapProgressPhase']
             : 'idle',
         'uploadCapLastError' => isset($response['uploadCapLastError']) && is_string($response['uploadCapLastError'])
             ? $response['uploadCapLastError']
