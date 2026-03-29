@@ -12,6 +12,7 @@
     const modeEl = document.getElementById("distress-concurrency-mode");
     const startLinkEl = document.getElementById("distress-start-link");
     const startHintEl = document.getElementById("distress-start-gate-hint");
+    const autotunePanelEl = document.getElementById("distress-autotune-panel");
 
     if (!configEl || !formEl || !measureButtonEl || !modalEl || !statusEl || !detailEl || !progressBarEl || !progressPercentEl || !resultEl) {
         return;
@@ -152,11 +153,19 @@
     }
 
     function updateStartGate() {
-        if (!startLinkEl || !modeEl) {
+        if (!modeEl) {
             return;
         }
 
         const mode = modeEl.value === "auto" ? "auto" : "manual";
+        if (autotunePanelEl) {
+            autotunePanelEl.hidden = mode !== "auto";
+        }
+
+        if (!startLinkEl) {
+            return;
+        }
+
         const blocked = mode === "auto" && !hasMeasurement;
         const ready = mode === "auto" && hasMeasurement;
         const href = startLinkEl.dataset.startHref || startLinkEl.getAttribute("href") || "#";
@@ -215,6 +224,9 @@
             detailEl.textContent = ok ? (payload.flashText || "") : (payload.secondaryText || payload.flashText || text.progressError || "");
             setResultMessage(payload.flashText || (ok ? "" : text.progressError || ""), ok);
             updatePageState(payload || {});
+            if (ok) {
+                window.setTimeout(hideModal, 1200);
+            }
         } catch (error) {
             stopProgressAnimation();
             requestInFlight = false;

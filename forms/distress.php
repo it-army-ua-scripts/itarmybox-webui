@@ -96,12 +96,29 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
             <option value="auto"<?= $distressConcurrencyMode === 'auto' ? ' selected' : '' ?>><?= htmlspecialchars(t('auto_mode'), ENT_QUOTES, 'UTF-8') ?></option>
             <option value="manual"<?= $distressConcurrencyMode === 'manual' ? ' selected' : '' ?>><?= htmlspecialchars(t('manual_mode'), ENT_QUOTES, 'UTF-8') ?></option>
         </select>
-        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_concurrency_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
-        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_status_label'), ENT_QUOTES, 'UTF-8') ?> <?= htmlspecialchars($distressAutotuneStatusText, ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="distress-autotune-panel" id="distress-autotune-panel"<?= $distressConcurrencyMode === 'auto' ? '' : ' hidden' ?>>
+            <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars(t('distress_concurrency_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars(t('distress_autotune_status_label'), ENT_QUOTES, 'UTF-8') ?> <?= htmlspecialchars($distressAutotuneStatusText, ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars(t('distress_autotune_desired_value', ['value' => (string)$distressDesiredConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars(t('distress_autotune_config_value', ['value' => (string)$distressConfigConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars(t('distress_autotune_live_value', ['value' => $distressLiveAppliedConcurrency !== null ? (string)$distressLiveAppliedConcurrency : t('status_unavailable_short')]), ENT_QUOTES, 'UTF-8') ?></div>
+            <?php if ($distressLastLoadText !== null): ?>
+                <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars($distressLastLoadText, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php endif; ?>
+            <?php if ($distressLastRamText !== null): ?>
+                <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars($distressLastRamText, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php endif; ?>
+            <?php if ($distressLastBpsText !== null): ?>
+                <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars($distressLastBpsText, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php endif; ?>
+            <?php if ($distressBestBpsText !== null): ?>
+                <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars($distressBestBpsText, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php endif; ?>
+            <?php if ($distressLastTargetCountText !== null): ?>
+                <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars($distressLastTargetCountText, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php endif; ?>
+        </div>
         <div class="schedule-limit-hint" id="distress-upload-cap-status-line"><?= htmlspecialchars(t('distress_upload_cap_status_label'), ENT_QUOTES, 'UTF-8') ?> <span id="distress-upload-cap-status-text"><?= htmlspecialchars($distressUploadCapStatusText, ENT_QUOTES, 'UTF-8') ?></span></div>
-        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_desired_value', ['value' => (string)$distressDesiredConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
-        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_config_value', ['value' => (string)$distressConfigConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
-        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_autotune_live_value', ['value' => $distressLiveAppliedConcurrency !== null ? (string)$distressLiveAppliedConcurrency : t('status_unavailable_short')]), ENT_QUOTES, 'UTF-8') ?></div>
         <?php if ($distressUploadCapValueText !== null): ?>
             <div class="schedule-limit-hint" id="distress-upload-cap-value-line"><?= htmlspecialchars($distressUploadCapValueText, ENT_QUOTES, 'UTF-8') ?></div>
         <?php else: ?>
@@ -127,21 +144,6 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
             <div class="schedule-limit-hint" id="distress-upload-cap-required-line"><?= htmlspecialchars(t('distress_upload_cap_required_for_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
         <?php else: ?>
             <div class="schedule-limit-hint" id="distress-upload-cap-required-line" hidden></div>
-        <?php endif; ?>
-        <?php if ($distressLastLoadText !== null): ?>
-            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastLoadText, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php endif; ?>
-        <?php if ($distressLastRamText !== null): ?>
-            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastRamText, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php endif; ?>
-        <?php if ($distressLastBpsText !== null): ?>
-            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastBpsText, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php endif; ?>
-        <?php if ($distressBestBpsText !== null): ?>
-            <div class="schedule-limit-hint"><?= htmlspecialchars($distressBestBpsText, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php endif; ?>
-        <?php if ($distressLastTargetCountText !== null): ?>
-            <div class="schedule-limit-hint"><?= htmlspecialchars($distressLastTargetCountText, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
     </div>
     <div class="form-group">
