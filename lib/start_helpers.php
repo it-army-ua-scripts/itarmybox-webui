@@ -97,20 +97,6 @@ function complete_start_task_state(string $daemon, bool $ok, ?string $error = nu
 
 function start_module_request(string $daemon, array $config): array
 {
-    $canStart = true;
-    if (in_array($daemon, ['mhddos', 'distress'], true)) {
-        $currentConfig = getConfigStringFromServiceFile($daemon);
-        if ($currentConfig !== '') {
-            $canStart = updateServiceFile($daemon, updateServiceConfigParams($currentConfig, [], $daemon));
-        } else {
-            $canStart = false;
-        }
-    }
-
-    if (!$canStart) {
-        return ['ok' => false, 'messageKey' => 'start_failed', 'error' => 'service_execstart_update_failed'];
-    }
-
     $response = root_helper_request([
         'action' => 'service_activate_exclusive',
         'modules' => $config['daemonNames'],

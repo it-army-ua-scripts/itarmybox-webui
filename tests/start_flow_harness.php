@@ -69,13 +69,22 @@ function start_harness_test_manual_launch_returns_success_when_root_helper_accep
     start_harness_assert(($result['messageKey'] ?? '') === 'start_requested', 'manual launch should report start_requested');
 }
 
-function start_harness_test_manual_launch_returns_failure_when_service_file_update_fails(): void
+function start_harness_test_manual_launch_ignores_service_file_update_failures(): void
 {
     start_harness_reset();
     $GLOBALS['startHarness']['updateServiceFileOk'] = false;
     $result = start_module_request('distress', ['daemonNames' => ['mhddos', 'distress', 'x100']]);
-    start_harness_assert(($result['ok'] ?? true) === false, 'manual launch should fail when service file update fails');
-    start_harness_assert(($result['error'] ?? '') === 'service_execstart_update_failed', 'manual launch should expose service_execstart_update_failed');
+    start_harness_assert(($result['ok'] ?? false) === true, 'manual launch should not depend on service file update');
+    start_harness_assert(($result['messageKey'] ?? '') === 'start_requested', 'manual launch should still report start_requested when root helper accepts activation');
+}
+
+function start_harness_test_manual_launch_returns_success_when_execstart_read_is_unavailable(): void
+{
+    start_harness_reset();
+    $GLOBALS['startHarness']['configString'] = '';
+    $result = start_module_request('mhddos', ['daemonNames' => ['mhddos', 'distress', 'x100']]);
+    start_harness_assert(($result['ok'] ?? false) === true, 'manual launch should not fail when ExecStart cannot be read');
+    start_harness_assert(($result['messageKey'] ?? '') === 'start_requested', 'manual launch should report start_requested when root helper accepts activation');
 }
 
 function start_harness_test_auto_launch_detection_tracks_saved_autotune_mode(): void
@@ -100,7 +109,8 @@ function start_harness_test_start_task_state_roundtrip(): void
 
 $tests = [
     'manual_launch_returns_success_when_root_helper_accepts' => 'start_harness_test_manual_launch_returns_success_when_root_helper_accepts',
-    'manual_launch_returns_failure_when_service_file_update_fails' => 'start_harness_test_manual_launch_returns_failure_when_service_file_update_fails',
+    'manual_launch_ignores_service_file_update_failures' => 'start_harness_test_manual_launch_ignores_service_file_update_failures',
+    'manual_launch_succeeds_when_execstart_read_is_unavailable' => 'start_harness_test_manual_launch_returns_success_when_execstart_read_is_unavailable',
     'auto_launch_detection_tracks_saved_autotune_mode' => 'start_harness_test_auto_launch_detection_tracks_saved_autotune_mode',
     'start_task_state_roundtrip' => 'start_harness_test_start_task_state_roundtrip',
 ];
