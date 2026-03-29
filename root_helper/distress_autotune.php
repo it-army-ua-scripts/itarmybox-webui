@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 const DISTRESS_AUTOTUNE_TIMER_NAME = 'itarmybox-distress-autotune.timer';
 const DISTRESS_AUTOTUNE_STATE_FILE = ROOT_HELPER_STATE_DIR . '/distress-autotune.json';
-const DISTRESS_AUTOTUNE_LOCK_FILE = '/tmp/itarmybox-distress-autotune.lock';
+defined('DISTRESS_AUTOTUNE_LOCK_FILE') || define('DISTRESS_AUTOTUNE_LOCK_FILE', '/tmp/itarmybox-distress-autotune.lock');
 const DISTRESS_AUTOTUNE_DEBUG_LOG_FILE = ROOT_HELPER_LOG_DIR . '/distress-autotune-debug.log';
+const DISTRESS_AUTOTUNE_SERVICE_PRESTART_SKIP_FILE = ROOT_HELPER_STATE_DIR . '/distress-upload-cap-prestart-skip';
 const DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY = 2048;
 const DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY = 4096;
 const DISTRESS_AUTOTUNE_MIN_CONCURRENCY = 64;
@@ -29,10 +30,8 @@ const DISTRESS_AUTOTUNE_RAM_RECOVERY_PERCENT = 15.0;
 const DISTRESS_AUTOTUNE_COOLDOWN_SECONDS = 360;
 const DISTRESS_AUTOTUNE_BPS_STATE_FILE = ROOT_HELPER_STATE_DIR . '/distress-bps.json';
 const DISTRESS_AUTOTUNE_BPS_BEST_IMPROVEMENT_RATIO = 1.01;
-const DISTRESS_AUTOTUNE_BPS_DEAD_ZONE_RATIO = 0.04;
-const DISTRESS_AUTOTUNE_BPS_HOLD_RATIO = 0.985;
-const DISTRESS_AUTOTUNE_BPS_DROP_RATIO = 0.95;
-const DISTRESS_AUTOTUNE_BPS_DROP_RESTORE_RATIO = 0.97;
+const DISTRESS_AUTOTUNE_BPS_DEAD_ZONE_RATIO = 0.10;
+const DISTRESS_AUTOTUNE_SPEED_TOLERANCE_RATIO = 0.10;
 const DISTRESS_AUTOTUNE_BPS_SETTLE_CYCLES = 0;
 const DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED = 2;
 const DISTRESS_AUTOTUNE_DROP_WINDOWS_REQUIRED = 4;
@@ -95,6 +94,16 @@ function normalizeDistressConcurrency($value): ?int
     }
 
     return min(DISTRESS_AUTOTUNE_MAX_CONCURRENCY, $concurrency);
+}
+
+function normalizeDistressAutotuneEnabled($value): bool
+{
+    return $value === true || $value === '1' || $value === 1 || $value === 'true';
+}
+
+function distressAutotuneError(string $error, array $extra = []): array
+{
+    return ['ok' => false, 'error' => $error] + $extra;
 }
 
 function getDistressAutotuneCpuCount(): int
@@ -229,6 +238,7 @@ function readDistressAutotuneState(): array
         'confirmedBestBpsConcurrency' => null,
         'uploadCapMbps' => null,
         'uploadCapMeasuredAt' => null,
+        'lastAutostartBootId' => null,
         'lastTargetCount' => null,
         'lastBpsCycleId' => null,
         'bpsSettleCyclesRemaining' => 0,
@@ -280,6 +290,9 @@ function readDistressAutotuneState(): array
             : null,
         'uploadCapMeasuredAt' => isset($data['uploadCapMeasuredAt']) && is_numeric($data['uploadCapMeasuredAt'])
             ? (int)$data['uploadCapMeasuredAt']
+            : null,
+        'lastAutostartBootId' => isset($data['lastAutostartBootId']) && is_string($data['lastAutostartBootId']) && $data['lastAutostartBootId'] !== ''
+            ? $data['lastAutostartBootId']
             : null,
         'lastTargetCount' => isset($data['lastTargetCount']) && is_numeric($data['lastTargetCount'])
             ? max(0, (int)$data['lastTargetCount'])
@@ -334,6 +347,9 @@ function writeDistressAutotuneState(array $state): bool
         'uploadCapMeasuredAt' => isset($state['uploadCapMeasuredAt']) && is_numeric($state['uploadCapMeasuredAt'])
             ? (int)$state['uploadCapMeasuredAt']
             : null,
+        'lastAutostartBootId' => isset($state['lastAutostartBootId']) && is_string($state['lastAutostartBootId']) && $state['lastAutostartBootId'] !== ''
+            ? $state['lastAutostartBootId']
+            : null,
         'lastTargetCount' => isset($state['lastTargetCount']) && is_numeric($state['lastTargetCount'])
             ? max(0, (int)$state['lastTargetCount'])
             : null,
@@ -353,7 +369,21 @@ function writeDistressAutotuneState(array $state): bool
         'refineHighConcurrency' => normalizeDistressConcurrency($state['refineHighConcurrency'] ?? null),
     ], JSON_UNESCAPED_SLASHES);
 
-    return is_string($payload) && @file_put_contents(DISTRESS_AUTOTUNE_STATE_FILE, $payload) !== false;
+    if (!is_string($payload)) {
+        return false;
+    }
+
+    $tmpPath = DISTRESS_AUTOTUNE_STATE_FILE . '.tmp';
+    if (@file_put_contents($tmpPath, $payload) === false) {
+        return false;
+    }
+
+    if (!@rename($tmpPath, DISTRESS_AUTOTUNE_STATE_FILE)) {
+        @unlink($tmpPath);
+        return false;
+    }
+
+    return true;
 }
 
 function normalizeDistressSearchPhase($value): string
@@ -387,6 +417,45 @@ function normalizeDistressProbeWindowBps($values): array
     }
 
     return $normalized;
+}
+
+function resetDistressAutotuneLearnedState(array &$state, bool $resetUploadCap = false): void
+{
+    $state['lastAdjustedAt'] = 0;
+    $state['lastLoadAverage'] = null;
+    $state['lastRamFreePercent'] = null;
+    $state['lastBpsMbps'] = null;
+    $state['bestBpsMbps'] = null;
+    $state['bestBpsConcurrency'] = null;
+    $state['confirmedBestBpsMbps'] = null;
+    $state['confirmedBestBpsConcurrency'] = null;
+    if ($resetUploadCap) {
+        $state['uploadCapMbps'] = null;
+        $state['uploadCapMeasuredAt'] = null;
+    }
+    $state['lastTargetCount'] = null;
+    $state['lastBpsCycleId'] = null;
+    $state['bpsSettleCyclesRemaining'] = 0;
+    resetDistressProbeState($state, DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE);
+}
+
+function applyDistressAutotuneModeState(array &$state, bool $enabled, int $concurrency, bool $resetUploadCap = false): void
+{
+    $state['enabled'] = $enabled;
+    $state['desiredConcurrency'] = $concurrency;
+    resetDistressAutotuneLearnedState($state, $resetUploadCap);
+}
+
+function persistDistressAutotuneStateAndReturnStatus(array $state, $lockHandle, bool $changed, string $reason, array $extra = []): array
+{
+    if (!writeDistressAutotuneState($state)) {
+        releaseDistressAutotuneLock($lockHandle);
+        return distressAutotuneError('distress_autotune_state_write_failed');
+    }
+
+    $status = getDistressAutotuneStatus();
+    releaseDistressAutotuneLock($lockHandle);
+    return $status + ['changed' => $changed, 'reason' => $reason] + $extra;
 }
 
 function resetDistressProbeState(array &$state, string $phase = DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE): void
@@ -508,20 +577,7 @@ function resetDistressAutotuneBaseline(): bool
     }
 
     $state['desiredConcurrency'] = DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY;
-    $state['lastAdjustedAt'] = 0;
-    $state['lastLoadAverage'] = null;
-    $state['lastRamFreePercent'] = null;
-    $state['lastBpsMbps'] = null;
-    $state['bestBpsMbps'] = null;
-    $state['bestBpsConcurrency'] = null;
-    $state['confirmedBestBpsMbps'] = null;
-    $state['confirmedBestBpsConcurrency'] = null;
-    $state['uploadCapMbps'] = null;
-    $state['uploadCapMeasuredAt'] = null;
-    $state['lastTargetCount'] = null;
-    $state['lastBpsCycleId'] = null;
-    $state['bpsSettleCyclesRemaining'] = 0;
-    resetDistressProbeState($state, DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE);
+    resetDistressAutotuneLearnedState($state, true);
     if (writeDistressAutotuneState($state)) {
         return true;
     }
@@ -537,8 +593,6 @@ function getDistressAutotuneStatus(): array
     $desiredConcurrency = (int)($state['desiredConcurrency'] ?? DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY);
     $configConcurrency = getDistressConfigConcurrency();
     if ($configConcurrency !== $desiredConcurrency) {
-        $state['desiredConcurrency'] = $configConcurrency;
-        writeDistressAutotuneState($state);
         $desiredConcurrency = $configConcurrency;
     }
     $liveAppliedConcurrency = getDistressLiveAppliedConcurrency();
@@ -597,18 +651,20 @@ function getDistressAutotuneStatus(): array
 
 function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
 {
-    ensureDistressAutotuneTimerInstalled();
+    $enabled = normalizeDistressAutotuneEnabled($enabledValue);
+    if ($enabled && !ensureDistressAutotuneTimerInstalled()) {
+        return distressAutotuneError('distress_autotune_timer_install_failed');
+    }
 
     $lockHandle = acquireDistressAutotuneLock();
     if ($lockHandle === false) {
-        return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
+        return distressAutotuneError('distress_autotune_lock_failed');
     }
 
-    $enabled = ($enabledValue === true || $enabledValue === '1' || $enabledValue === 1 || $enabledValue === 'true');
     $concurrency = normalizeDistressConcurrency($concurrencyValue);
     if ($concurrency === null) {
         releaseDistressAutotuneLock($lockHandle);
-        return ['ok' => false, 'error' => 'invalid_concurrency'];
+        return distressAutotuneError('invalid_concurrency');
     }
 
     $previousConfigConcurrency = getDistressConfigConcurrency();
@@ -616,35 +672,18 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
     $configChanged = $previousConfigConcurrency !== $concurrency;
     if ($configChanged && !setDistressConfigConcurrency($concurrency)) {
         releaseDistressAutotuneLock($lockHandle);
-        return ['ok' => false, 'error' => 'distress_concurrency_write_failed'];
+        return distressAutotuneError('distress_concurrency_write_failed');
     }
 
     $state = $previousState;
-    $state['enabled'] = $enabled;
-    $state['desiredConcurrency'] = $concurrency;
-    $state['lastAdjustedAt'] = 0;
-    $state['lastLoadAverage'] = null;
-    $state['lastRamFreePercent'] = null;
-    $state['lastBpsMbps'] = null;
-    $state['bestBpsMbps'] = null;
-    $state['bestBpsConcurrency'] = null;
-    $state['confirmedBestBpsMbps'] = null;
-    $state['confirmedBestBpsConcurrency'] = null;
-    $state['uploadCapMbps'] = null;
-    $state['uploadCapMeasuredAt'] = null;
-    $state['lastTargetCount'] = null;
-    $state['lastBpsCycleId'] = null;
-    $state['bpsSettleCyclesRemaining'] = 0;
-    resetDistressProbeState($state, DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE);
+    applyDistressAutotuneModeState($state, $enabled, $concurrency, true);
     if (!writeDistressAutotuneState($state)) {
         $rollbackConfigOk = !$configChanged || setDistressConfigConcurrency($previousConfigConcurrency);
         releaseDistressAutotuneLock($lockHandle);
-        return [
-            'ok' => false,
-            'error' => 'distress_autotune_state_write_failed',
+        return distressAutotuneError('distress_autotune_state_write_failed', [
             'rollbackConfigOk' => $rollbackConfigOk,
             'configConcurrencyAfterRollback' => getDistressConfigConcurrency(),
-        ];
+        ]);
     }
 
     releaseDistressAutotuneLock($lockHandle);
@@ -653,59 +692,46 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
 
 function saveDistressSettings(string $execStartLine, $enabledValue, $concurrencyValue): array
 {
-    ensureDistressAutotuneTimerInstalled();
-
-    if (!str_starts_with($execStartLine, 'ExecStart=')) {
-        return ['ok' => false, 'error' => 'invalid_execstart'];
+    $enabled = normalizeDistressAutotuneEnabled($enabledValue);
+    if ($enabled && !ensureDistressAutotuneTimerInstalled()) {
+        return distressAutotuneError('distress_autotune_timer_install_failed');
     }
 
-    $enabled = ($enabledValue === true || $enabledValue === '1' || $enabledValue === 1 || $enabledValue === 'true');
+    if (!str_starts_with($execStartLine, 'ExecStart=')) {
+        return distressAutotuneError('invalid_execstart');
+    }
+
     $concurrency = normalizeDistressConcurrency($concurrencyValue);
     if ($concurrency === null) {
-        return ['ok' => false, 'error' => 'invalid_concurrency'];
+        return distressAutotuneError('invalid_concurrency');
     }
 
     $lockHandle = acquireDistressAutotuneLock();
     if ($lockHandle === false) {
-        return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
+        return distressAutotuneError('distress_autotune_lock_failed');
     }
 
     $previousExecStart = readServiceExecStart('distress');
     if (!is_string($previousExecStart) || $previousExecStart === '') {
         releaseDistressAutotuneLock($lockHandle);
-        return ['ok' => false, 'error' => 'execstart_read_failed'];
+        return distressAutotuneError('execstart_read_failed');
     }
 
     $previousState = readDistressAutotuneState();
     $configChanged = $previousExecStart !== $execStartLine;
     if ($configChanged && !updateServiceExecStart('distress', $execStartLine)) {
         releaseDistressAutotuneLock($lockHandle);
-        return ['ok' => false, 'error' => 'distress_concurrency_write_failed'];
+        return distressAutotuneError('distress_concurrency_write_failed');
     }
 
     $state = $previousState;
-    $state['enabled'] = $enabled;
-    $state['desiredConcurrency'] = $concurrency;
-    $state['lastAdjustedAt'] = 0;
-    $state['lastLoadAverage'] = null;
-    $state['lastRamFreePercent'] = null;
-    $state['lastBpsMbps'] = null;
-    $state['bestBpsMbps'] = null;
-    $state['bestBpsConcurrency'] = null;
-    $state['confirmedBestBpsMbps'] = null;
-    $state['confirmedBestBpsConcurrency'] = null;
-    $state['lastTargetCount'] = null;
-    $state['lastBpsCycleId'] = null;
-    $state['bpsSettleCyclesRemaining'] = 0;
-    resetDistressProbeState($state, DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE);
+    applyDistressAutotuneModeState($state, $enabled, $concurrency);
     if (!writeDistressAutotuneState($state)) {
         $rollbackConfigOk = !$configChanged || updateServiceExecStart('distress', $previousExecStart);
         releaseDistressAutotuneLock($lockHandle);
-        return [
-            'ok' => false,
-            'error' => 'distress_autotune_state_write_failed',
+        return distressAutotuneError('distress_autotune_state_write_failed', [
             'rollbackConfigOk' => $rollbackConfigOk,
-        ];
+        ]);
     }
 
     releaseDistressAutotuneLock($lockHandle);
@@ -795,54 +821,56 @@ function measureDistressUploadCapWithCurlBinary(string $url, int $bytes, int $ti
     return ($byteCount * 8.0) / $durationSeconds / 1000000.0;
 }
 
-function measureDistressCloudflareUploadCap(): ?float
-{
-    $samples = [];
-    for ($i = 0; $i < DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT; $i++) {
-        $sample = measureDistressUploadCapWithPhpCurl(
-            DISTRESS_AUTOTUNE_UPLOAD_CAP_URL,
-            DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES,
-            DISTRESS_AUTOTUNE_UPLOAD_CAP_TIMEOUT_SECONDS
-        );
-        if ($sample === null) {
-            $sample = measureDistressUploadCapWithCurlBinary(
+if (!function_exists('measureDistressCloudflareUploadCap')) {
+    function measureDistressCloudflareUploadCap(): ?float
+    {
+        $samples = [];
+        for ($i = 0; $i < DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT; $i++) {
+            $sample = measureDistressUploadCapWithPhpCurl(
                 DISTRESS_AUTOTUNE_UPLOAD_CAP_URL,
                 DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES,
                 DISTRESS_AUTOTUNE_UPLOAD_CAP_TIMEOUT_SECONDS
             );
+            if ($sample === null) {
+                $sample = measureDistressUploadCapWithCurlBinary(
+                    DISTRESS_AUTOTUNE_UPLOAD_CAP_URL,
+                    DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES,
+                    DISTRESS_AUTOTUNE_UPLOAD_CAP_TIMEOUT_SECONDS
+                );
+            }
+            if ($sample !== null && $sample > 0.0) {
+                $samples[] = $sample;
+            }
         }
-        if ($sample !== null && $sample > 0.0) {
-            $samples[] = $sample;
-        }
-    }
 
-    if ($samples === []) {
-        distressAutotuneDebugLog('upload_cap_measure_failed', [
+        if ($samples === []) {
+            distressAutotuneDebugLog('upload_cap_measure_failed', [
+                'url' => DISTRESS_AUTOTUNE_UPLOAD_CAP_URL,
+                'sampleBytes' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES,
+                'sampleCount' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+            ]);
+            return null;
+        }
+
+        sort($samples, SORT_NUMERIC);
+        $sampleCount = count($samples);
+        $middle = (int)floor($sampleCount / 2);
+        if (($sampleCount % 2) === 1) {
+            $measuredMbps = $samples[$middle];
+        } else {
+            $measuredMbps = ($samples[$middle - 1] + $samples[$middle]) / 2.0;
+        }
+        distressAutotuneDebugLog('upload_cap_measured', [
             'url' => DISTRESS_AUTOTUNE_UPLOAD_CAP_URL,
             'sampleBytes' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES,
             'sampleCount' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
+            'samplesMbps' => $samples,
+            'measuredMbps' => $measuredMbps,
+            'aggregation' => 'median',
         ]);
-        return null;
-    }
 
-    sort($samples, SORT_NUMERIC);
-    $sampleCount = count($samples);
-    $middle = (int)floor($sampleCount / 2);
-    if (($sampleCount % 2) === 1) {
-        $measuredMbps = $samples[$middle];
-    } else {
-        $measuredMbps = ($samples[$middle - 1] + $samples[$middle]) / 2.0;
+        return $measuredMbps;
     }
-    distressAutotuneDebugLog('upload_cap_measured', [
-        'url' => DISTRESS_AUTOTUNE_UPLOAD_CAP_URL,
-        'sampleBytes' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_BYTES,
-        'sampleCount' => DISTRESS_AUTOTUNE_UPLOAD_CAP_SAMPLE_COUNT,
-        'samplesMbps' => $samples,
-        'measuredMbps' => $measuredMbps,
-        'aggregation' => 'median',
-    ]);
-
-    return $measuredMbps;
 }
 
 function refreshDistressUploadCap(array &$state): ?float
@@ -857,18 +885,139 @@ function refreshDistressUploadCap(array &$state): ?float
     return $measuredMbps;
 }
 
-function prepareDistressUploadCapBeforeStart(): bool
+function markDistressUploadCapServicePrestartSkip(): bool
 {
-    $state = readDistressAutotuneState();
-    if (($state['enabled'] ?? false) !== true) {
+    if (!ensureWebuiVarLayout() || !ensureParentDirectoryExists(DISTRESS_AUTOTUNE_SERVICE_PRESTART_SKIP_FILE)) {
+        return false;
+    }
+
+    return @file_put_contents(DISTRESS_AUTOTUNE_SERVICE_PRESTART_SKIP_FILE, (string)time()) !== false;
+}
+
+function consumeDistressUploadCapServicePrestartSkip(): bool
+{
+    if (!is_file(DISTRESS_AUTOTUNE_SERVICE_PRESTART_SKIP_FILE)) {
+        return false;
+    }
+
+    @unlink(DISTRESS_AUTOTUNE_SERVICE_PRESTART_SKIP_FILE);
+    return true;
+}
+
+if (!function_exists('readCurrentSystemBootId')) {
+    function readCurrentSystemBootId(): ?string
+    {
+        $raw = @file_get_contents('/proc/sys/kernel/random/boot_id');
+        if (!is_string($raw)) {
+            return null;
+        }
+
+        $bootId = trim($raw);
+        return $bootId !== '' ? $bootId : null;
+    }
+}
+
+function shouldForceDistressUploadCapRefreshForAutostart(array $state): bool
+{
+    if (!isModuleAutostartEnabled('distress')) {
+        return false;
+    }
+
+    $bootId = readCurrentSystemBootId();
+    if (!is_string($bootId) || $bootId === '') {
+        return false;
+    }
+
+    return (string)($state['lastAutostartBootId'] ?? '') !== $bootId;
+}
+
+function shouldRefreshDistressUploadCapOnStart(array $state, bool $forceRefresh): bool
+{
+    if ($forceRefresh) {
         return true;
     }
 
-    refreshDistressUploadCap($state);
-    if (!writeDistressAutotuneState($state)) {
-        distressAutotuneDebugLog('upload_cap_state_write_failed_before_start');
+    return !isset($state['uploadCapMeasuredAt']) || !is_numeric($state['uploadCapMeasuredAt']) || (int)$state['uploadCapMeasuredAt'] <= 0
+        || !isset($state['uploadCapMbps']) || !is_numeric($state['uploadCapMbps']) || (float)$state['uploadCapMbps'] <= 0.0;
+}
+
+function prepareDistressUploadCapBeforeStart(bool $forceRefresh = false): bool
+{
+    $lockHandle = acquireDistressAutotuneLock();
+    if ($lockHandle === false) {
+        distressAutotuneDebugLog('upload_cap_lock_failed_before_start');
+        return false;
     }
 
+    $state = readDistressAutotuneState();
+    if (($state['enabled'] ?? false) !== true) {
+        releaseDistressAutotuneLock($lockHandle);
+        return true;
+    }
+
+    if (shouldRefreshDistressUploadCapOnStart($state, $forceRefresh)) {
+        refreshDistressUploadCap($state);
+        if (!writeDistressAutotuneState($state)) {
+            distressAutotuneDebugLog('upload_cap_state_write_failed_before_start');
+            releaseDistressAutotuneLock($lockHandle);
+            return false;
+        }
+    }
+
+    releaseDistressAutotuneLock($lockHandle);
+    return true;
+}
+
+function prepareDistressUploadCapForServiceStart(): bool
+{
+    $lockHandle = acquireDistressAutotuneLock();
+    if ($lockHandle === false) {
+        distressAutotuneDebugLog('upload_cap_lock_failed_before_service_start');
+        return false;
+    }
+
+    $state = readDistressAutotuneState();
+    if (($state['enabled'] ?? false) !== true) {
+        consumeDistressUploadCapServicePrestartSkip();
+        releaseDistressAutotuneLock($lockHandle);
+        return true;
+    }
+
+    if (consumeDistressUploadCapServicePrestartSkip()) {
+        distressAutotuneDebugLog('upload_cap_service_start_skip_consumed');
+        releaseDistressAutotuneLock($lockHandle);
+        return true;
+    }
+
+    $bootId = readCurrentSystemBootId();
+    $forceRefresh = is_string($bootId) && $bootId !== ''
+        && shouldForceDistressUploadCapRefreshForAutostart($state);
+
+    if (shouldRefreshDistressUploadCapOnStart($state, $forceRefresh)) {
+        if (refreshDistressUploadCap($state) === null) {
+            distressAutotuneDebugLog('upload_cap_measure_failed_before_service_start', [
+                'forceRefresh' => $forceRefresh,
+                'bootId' => $bootId,
+            ]);
+            releaseDistressAutotuneLock($lockHandle);
+            return false;
+        }
+    }
+
+    if (is_string($bootId) && $bootId !== '' && isModuleAutostartEnabled('distress')) {
+        $state['lastAutostartBootId'] = $bootId;
+    }
+
+    if (!writeDistressAutotuneState($state)) {
+        distressAutotuneDebugLog('upload_cap_state_write_failed_before_service_start', [
+            'forceRefresh' => $forceRefresh,
+            'bootId' => $bootId,
+        ]);
+        releaseDistressAutotuneLock($lockHandle);
+        return false;
+    }
+
+    releaseDistressAutotuneLock($lockHandle);
     return true;
 }
 
@@ -952,35 +1101,20 @@ function isWithinDistressBpsDeadZone(float $currentBpsMbps, float $bestBpsMbps):
     return $ratioDelta <= DISTRESS_AUTOTUNE_BPS_DEAD_ZONE_RATIO;
 }
 
-function applyDistressBpsStabilityTarget(
-    int $currentConcurrency,
-    int $explorationTargetConcurrency,
-    ?float $currentBpsMbps,
-    ?float $bestBpsMbps,
-    ?int $bestBpsConcurrency
-): int {
-    if (
-        $currentBpsMbps === null ||
-        $bestBpsMbps === null ||
-        $bestBpsMbps <= 0.0 ||
-        $bestBpsConcurrency === null
-    ) {
-        return $explorationTargetConcurrency;
+function normalizeDistressBpsAgainstSpeed(?float $bpsMbps, ?float $speedMbps): ?float
+{
+    if ($bpsMbps === null || $speedMbps === null || $speedMbps <= 0.0) {
+        return $bpsMbps;
     }
 
-    if (isWithinDistressBpsDeadZone($currentBpsMbps, $bestBpsMbps)) {
-        return $currentConcurrency;
+    $lowerBoundMbps = $speedMbps * (1.0 - DISTRESS_AUTOTUNE_SPEED_TOLERANCE_RATIO);
+    $upperBoundMbps = $speedMbps * (1.0 + DISTRESS_AUTOTUNE_SPEED_TOLERANCE_RATIO);
+
+    if ($bpsMbps >= $lowerBoundMbps && $bpsMbps <= $upperBoundMbps) {
+        return $speedMbps;
     }
 
-    if ($currentConcurrency > $bestBpsConcurrency && $currentBpsMbps < $bestBpsMbps) {
-        return max($bestBpsConcurrency, adjustDistressConcurrencyByPercent($currentConcurrency, -12));
-    }
-
-    if ($currentConcurrency < $bestBpsConcurrency && $currentBpsMbps < $bestBpsMbps) {
-        return min($bestBpsConcurrency, max($currentConcurrency, $explorationTargetConcurrency));
-    }
-
-    return $explorationTargetConcurrency;
+    return min($bpsMbps, $upperBoundMbps);
 }
 
 function readDistressBpsState(): array
@@ -1097,19 +1231,18 @@ function getDistressFreshBpsMetrics(int $now): ?array
         return null;
     }
 
-    $effectiveMovingAverageMbps = $uploadCapMbps !== null ? min($movingAverageMbps, $uploadCapMbps) : $movingAverageMbps;
+    $effectiveMovingAverageMbps = normalizeDistressBpsAgainstSpeed($movingAverageMbps, $uploadCapMbps);
     $effectiveLatestBpsMbps = isset($bpsState['latestBpsMbps']) && is_numeric($bpsState['latestBpsMbps'])
         ? (float)$bpsState['latestBpsMbps']
         : null;
-    if ($uploadCapMbps !== null && $effectiveLatestBpsMbps !== null) {
-        $effectiveLatestBpsMbps = min($effectiveLatestBpsMbps, $uploadCapMbps);
-    }
+    $effectiveLatestBpsMbps = normalizeDistressBpsAgainstSpeed($effectiveLatestBpsMbps, $uploadCapMbps);
 
-    if ($uploadCapMbps !== null && $effectiveMovingAverageMbps < $movingAverageMbps) {
-        distressAutotuneDebugLog('bps_capped_by_upload_cap', [
+    if ($uploadCapMbps !== null && $effectiveMovingAverageMbps !== null && abs($effectiveMovingAverageMbps - $movingAverageMbps) > 0.0001) {
+        distressAutotuneDebugLog('bps_normalized_against_speed', [
             'rawMovingAverageMbps' => $movingAverageMbps,
-            'uploadCapMbps' => $uploadCapMbps,
+            'speedMbps' => $uploadCapMbps,
             'effectiveMovingAverageMbps' => $effectiveMovingAverageMbps,
+            'speedToleranceRatio' => DISTRESS_AUTOTUNE_SPEED_TOLERANCE_RATIO,
         ]);
     }
 
@@ -1143,64 +1276,217 @@ function getDistressFreshBpsMetrics(int $now): ?array
     ];
 }
 
-function applyDistressBpsAutotuneGuard(
-    int $currentConcurrency,
-    int $targetConcurrency,
-    ?float $lastBpsMbps,
-    ?float $bestBpsMbps,
-    ?int $bestBpsConcurrency
-): int {
-    if ($targetConcurrency <= $currentConcurrency) {
-        return $targetConcurrency;
-    }
+function syncDistressBpsCycleState(array &$state, ?array $bpsMetrics): array
+{
+    $currentCycleId = isset($bpsMetrics['cycleId']) && is_string($bpsMetrics['cycleId']) && $bpsMetrics['cycleId'] !== ''
+        ? $bpsMetrics['cycleId']
+        : null;
+    $latestTargetCount = isset($bpsMetrics['latestTargetCount']) && is_numeric($bpsMetrics['latestTargetCount'])
+        ? max(0, (int)$bpsMetrics['latestTargetCount'])
+        : null;
+    $previousTargetCount = isset($state['lastTargetCount']) && is_numeric($state['lastTargetCount'])
+        ? max(0, (int)$state['lastTargetCount'])
+        : null;
+    $previousCycleId = isset($state['lastBpsCycleId']) && is_string($state['lastBpsCycleId']) && $state['lastBpsCycleId'] !== ''
+        ? $state['lastBpsCycleId']
+        : null;
 
     if (
-        $lastBpsMbps === null ||
+        ($currentCycleId !== null && $previousCycleId !== null && $currentCycleId !== $previousCycleId) ||
+        ($currentCycleId === null && $latestTargetCount !== null && $previousTargetCount !== null && $latestTargetCount !== $previousTargetCount)
+    ) {
+        distressAutotuneDebugLog('bps_cycle_reset', [
+            'previousCycleId' => $previousCycleId,
+            'currentCycleId' => $currentCycleId,
+            'previousTargetCount' => $previousTargetCount,
+            'latestTargetCount' => $latestTargetCount,
+        ]);
+        resetDistressAutotuneBpsCycle($state);
+        refreshDistressUploadCap($state);
+    }
+
+    if ($latestTargetCount !== null) {
+        $state['lastTargetCount'] = $latestTargetCount;
+    }
+    if ($currentCycleId !== null) {
+        $state['lastBpsCycleId'] = $currentCycleId;
+    }
+
+    return [
+        'currentCycleId' => $currentCycleId,
+        'latestTargetCount' => $latestTargetCount,
+    ];
+}
+
+function updateDistressBestProbeState(array &$state, int $currentConcurrency, float $probeScoreMbps): array
+{
+    $bestBpsMbps = isset($state['bestBpsMbps']) && is_numeric($state['bestBpsMbps']) ? (float)$state['bestBpsMbps'] : null;
+    $bestBpsConcurrency = normalizeDistressConcurrency($state['bestBpsConcurrency'] ?? null);
+    $confirmedBestBpsMbps = isset($state['confirmedBestBpsMbps']) && is_numeric($state['confirmedBestBpsMbps'])
+        ? (float)$state['confirmedBestBpsMbps']
+        : null;
+    $confirmedBestBpsConcurrency = normalizeDistressConcurrency($state['confirmedBestBpsConcurrency'] ?? null);
+
+    if (
         $bestBpsMbps === null ||
         $bestBpsMbps <= 0.0 ||
         $bestBpsConcurrency === null ||
-        $currentConcurrency < $bestBpsConcurrency
+        $probeScoreMbps >= ($bestBpsMbps * DISTRESS_AUTOTUNE_BPS_BEST_IMPROVEMENT_RATIO)
     ) {
-        return $targetConcurrency;
+        $state['bestBpsMbps'] = $probeScoreMbps;
+        $state['bestBpsConcurrency'] = $currentConcurrency;
+        $bestBpsMbps = $probeScoreMbps;
+        $bestBpsConcurrency = $currentConcurrency;
+        distressAutotuneDebugLog('bps_new_best', [
+            'bestBpsMbps' => $state['bestBpsMbps'],
+            'bestBpsConcurrency' => $state['bestBpsConcurrency'],
+            'searchPhase' => $state['searchPhase'] ?? DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE,
+        ]);
     }
 
-    if ($lastBpsMbps < ($bestBpsMbps * DISTRESS_AUTOTUNE_BPS_HOLD_RATIO)) {
+    $confirmedProbeScoreMbps = calculateDistressProbeScore($state, DISTRESS_AUTOTUNE_CONFIRMED_BEST_WINDOWS_REQUIRED);
+    if (
+        $confirmedProbeScoreMbps !== null &&
+        $currentConcurrency === $bestBpsConcurrency &&
+        (
+            $confirmedBestBpsMbps === null ||
+            $confirmedBestBpsConcurrency === null ||
+            $currentConcurrency === $confirmedBestBpsConcurrency ||
+            $confirmedProbeScoreMbps >= ($confirmedBestBpsMbps * DISTRESS_AUTOTUNE_BPS_BEST_IMPROVEMENT_RATIO)
+        )
+    ) {
+        $state['confirmedBestBpsMbps'] = $confirmedProbeScoreMbps;
+        $state['confirmedBestBpsConcurrency'] = $currentConcurrency;
+        $confirmedBestBpsMbps = $confirmedProbeScoreMbps;
+        $confirmedBestBpsConcurrency = $currentConcurrency;
+        distressAutotuneDebugLog('bps_confirmed_best', [
+            'confirmedBestBpsMbps' => $confirmedBestBpsMbps,
+            'confirmedBestBpsConcurrency' => $confirmedBestBpsConcurrency,
+            'windowsRequired' => DISTRESS_AUTOTUNE_CONFIRMED_BEST_WINDOWS_REQUIRED,
+        ]);
+    }
+
+    return [
+        'bestBpsMbps' => $bestBpsMbps,
+        'bestBpsConcurrency' => $bestBpsConcurrency,
+        'confirmedBestBpsMbps' => $confirmedBestBpsMbps,
+        'confirmedBestBpsConcurrency' => $confirmedBestBpsConcurrency,
+        'decisionBestBpsMbps' => $confirmedBestBpsMbps ?? $bestBpsMbps,
+        'decisionBestBpsConcurrency' => $confirmedBestBpsConcurrency ?? $bestBpsConcurrency,
+    ];
+}
+
+function determineDistressCoarseTarget(
+    array &$state,
+    int $currentConcurrency,
+    int $explorationTargetConcurrency,
+    ?float $decisionBestBpsMbps,
+    ?int $decisionBestBpsConcurrency,
+    ?float $probeScoreMbps,
+    ?float $dropProbeScoreMbps,
+    bool $dropWindowReady
+): int {
+    if (
+        $decisionBestBpsMbps !== null &&
+        $decisionBestBpsConcurrency !== null &&
+        $currentConcurrency > $decisionBestBpsConcurrency &&
+        $dropWindowReady &&
+        !isWithinDistressBpsDeadZone((float)$dropProbeScoreMbps, $decisionBestBpsMbps) &&
+        (float)$dropProbeScoreMbps < $decisionBestBpsMbps
+    ) {
+        $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_REFINE;
+        $state['refineLowConcurrency'] = $decisionBestBpsConcurrency;
+        $state['refineHighConcurrency'] = $currentConcurrency;
+        $midpoint = calculateDistressRefineMidpoint($decisionBestBpsConcurrency, $currentConcurrency);
+        if ($midpoint === null) {
+            $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD;
+            return $decisionBestBpsConcurrency;
+        }
+        return $midpoint;
+    }
+
+    if (
+        $decisionBestBpsMbps !== null &&
+        $decisionBestBpsConcurrency !== null &&
+        $currentConcurrency > $decisionBestBpsConcurrency &&
+        !$dropWindowReady
+    ) {
         return $currentConcurrency;
     }
 
-    return $targetConcurrency;
+    if ($explorationTargetConcurrency > $currentConcurrency) {
+        return $explorationTargetConcurrency;
+    }
+
+    $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD;
+    return $decisionBestBpsConcurrency ?? $currentConcurrency;
 }
 
-function applyDistressBpsAutotuneDrop(
+function determineDistressRefineTarget(
+    array &$state,
     int $currentConcurrency,
-    int $targetConcurrency,
-    ?float $lastBpsMbps,
-    ?float $bestBpsMbps,
-    ?int $bestBpsConcurrency
+    ?int $decisionBestBpsConcurrency,
+    ?float $decisionBestBpsMbps,
+    float $probeScoreMbps
 ): int {
-    if (
-        $lastBpsMbps === null ||
-        $bestBpsMbps === null ||
-        $bestBpsMbps <= 0.0 ||
-        $bestBpsConcurrency === null ||
-        $currentConcurrency <= $bestBpsConcurrency
-    ) {
-        return $targetConcurrency;
+    $refineLowConcurrency = normalizeDistressConcurrency($state['refineLowConcurrency'] ?? null);
+    $refineHighConcurrency = normalizeDistressConcurrency($state['refineHighConcurrency'] ?? null);
+    if ($refineLowConcurrency === null || $refineHighConcurrency === null) {
+        $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD;
+        return $decisionBestBpsConcurrency ?? $currentConcurrency;
     }
 
-    if ($lastBpsMbps >= ($bestBpsMbps * DISTRESS_AUTOTUNE_BPS_DROP_RESTORE_RATIO)) {
-        return $targetConcurrency;
+    if ($currentConcurrency > ($decisionBestBpsConcurrency ?? $currentConcurrency)) {
+        if (isWithinDistressBpsDeadZone($probeScoreMbps, $decisionBestBpsMbps ?? $probeScoreMbps)) {
+            $state['refineLowConcurrency'] = $currentConcurrency;
+        } else {
+            $state['refineHighConcurrency'] = $currentConcurrency;
+        }
     }
 
-    if ($lastBpsMbps >= ($bestBpsMbps * DISTRESS_AUTOTUNE_BPS_DROP_RATIO)) {
-        return $targetConcurrency;
+    $refineLowConcurrency = normalizeDistressConcurrency($state['refineLowConcurrency'] ?? null) ?? $decisionBestBpsConcurrency ?? $currentConcurrency;
+    $refineHighConcurrency = normalizeDistressConcurrency($state['refineHighConcurrency'] ?? null) ?? $currentConcurrency;
+    $midpoint = calculateDistressRefineMidpoint($refineLowConcurrency, $refineHighConcurrency);
+    if ($midpoint === null) {
+        $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD;
+        return $decisionBestBpsConcurrency ?? $currentConcurrency;
     }
 
-    if ($targetConcurrency < $currentConcurrency) {
-        return min($targetConcurrency, $bestBpsConcurrency);
-    }
+    return $midpoint;
+}
 
-    return max($bestBpsConcurrency, adjustDistressConcurrencyByPercent($currentConcurrency, -12));
+function determineDistressSearchTarget(
+    array &$state,
+    int $currentConcurrency,
+    int $explorationTargetConcurrency,
+    ?float $decisionBestBpsMbps,
+    ?int $decisionBestBpsConcurrency,
+    float $probeScoreMbps,
+    ?float $dropProbeScoreMbps,
+    bool $dropWindowReady
+): int {
+    $searchPhase = normalizeDistressSearchPhase($state['searchPhase'] ?? null);
+
+    return match ($searchPhase) {
+        DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE => determineDistressCoarseTarget(
+            $state,
+            $currentConcurrency,
+            $explorationTargetConcurrency,
+            $decisionBestBpsMbps,
+            $decisionBestBpsConcurrency,
+            $probeScoreMbps,
+            $dropProbeScoreMbps,
+            $dropWindowReady
+        ),
+        DISTRESS_AUTOTUNE_SEARCH_PHASE_REFINE => determineDistressRefineTarget(
+            $state,
+            $currentConcurrency,
+            $decisionBestBpsConcurrency,
+            $decisionBestBpsMbps,
+            $probeScoreMbps
+        ),
+        default => $decisionBestBpsConcurrency ?? $currentConcurrency,
+    };
 }
 
 function resetDistressAutotuneBpsCycle(array &$state): void
@@ -1238,15 +1524,15 @@ function shouldSkipDistressBpsEvaluationForSettle(array &$state): bool
 function distressAutotuneSafetyTick($loadAverage, $ramFreePercent): array
 {
     if (!is_numeric($loadAverage)) {
-        return ['ok' => false, 'error' => 'invalid_load_average'];
+        return distressAutotuneError('invalid_load_average');
     }
     if (!is_numeric($ramFreePercent)) {
-        return ['ok' => false, 'error' => 'invalid_ram_free_percent'];
+        return distressAutotuneError('invalid_ram_free_percent');
     }
 
     $lockHandle = acquireDistressAutotuneLock();
     if ($lockHandle === false) {
-        return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
+        return distressAutotuneError('distress_autotune_lock_failed');
     }
 
     $load = max(0.0, (float)$loadAverage);
@@ -1262,16 +1548,12 @@ function distressAutotuneSafetyTick($loadAverage, $ramFreePercent): array
 
     if (($state['enabled'] ?? false) !== true) {
         distressAutotuneDebugLog('safety_tick_skip_manual_mode');
-        writeDistressAutotuneState($state);
-        releaseDistressAutotuneLock($lockHandle);
-        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'manual_mode'];
+        return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'manual_mode');
     }
 
     if (!serviceIsActive('distress')) {
         distressAutotuneDebugLog('safety_tick_skip_service_inactive');
-        writeDistressAutotuneState($state);
-        releaseDistressAutotuneLock($lockHandle);
-        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'distress_inactive'];
+        return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'distress_inactive');
     }
 
     $configConcurrency = getDistressConfigConcurrency();
@@ -1287,9 +1569,7 @@ function distressAutotuneSafetyTick($loadAverage, $ramFreePercent): array
             'loadAverage' => $load,
             'ramFreePercent' => $freeRam,
         ]);
-        writeDistressAutotuneState($state);
-        releaseDistressAutotuneLock($lockHandle);
-        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'within_safe_range'];
+        return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'within_safe_range');
     }
 
     if (!setDistressConfigConcurrency($targetConcurrency)) {
@@ -1300,7 +1580,7 @@ function distressAutotuneSafetyTick($loadAverage, $ramFreePercent): array
             'ramFreePercent' => $freeRam,
         ]);
         releaseDistressAutotuneLock($lockHandle);
-        return ['ok' => false, 'error' => 'distress_concurrency_write_failed'];
+        return distressAutotuneError('distress_concurrency_write_failed');
     }
 
     $restart = restartDistressForAutotune($state);
@@ -1312,7 +1592,7 @@ function distressAutotuneSafetyTick($loadAverage, $ramFreePercent): array
             'rollbackConfigOk' => $rollbackConfigOk,
         ]);
         releaseDistressAutotuneLock($lockHandle);
-        return ['ok' => false, 'error' => 'service_restart_failed'];
+        return distressAutotuneError('service_restart_failed');
     }
 
     $state['desiredConcurrency'] = $targetConcurrency;
@@ -1325,7 +1605,7 @@ function distressAutotuneSafetyTick($loadAverage, $ramFreePercent): array
             'targetConcurrency' => $targetConcurrency,
         ]);
         releaseDistressAutotuneLock($lockHandle);
-        return ['ok' => false, 'error' => 'distress_autotune_state_write_failed'];
+        return distressAutotuneError('distress_autotune_state_write_failed');
     }
 
     distressAutotuneDebugLog('safety_tick_changed', [
@@ -1346,25 +1626,23 @@ function restartDistressForAutotune(array &$state): array
 
     runCommand('systemctl daemon-reload', $reloadCode);
     if ($reloadCode !== 0) {
-        return ['ok' => false, 'error' => 'daemon_reload_failed'];
+        return distressAutotuneError('daemon_reload_failed');
     }
 
     $service = escapeshellarg('distress.service');
     $previousPid = getServiceMainPid('distress');
     runCommand("systemctl stop $service", $stopCode);
     if ($stopCode !== 0 || !waitForServiceInactive('distress')) {
-        return ['ok' => false, 'error' => 'service_stop_failed'];
+        return distressAutotuneError('service_stop_failed');
     }
-
-    refreshDistressUploadCap($state);
 
     runCommand("systemctl start $service", $startCode);
     if ($startCode !== 0) {
-        return ['ok' => false, 'error' => 'service_start_failed'];
+        return distressAutotuneError('service_start_failed');
     }
 
     if (!waitForServiceActive('distress')) {
-        return ['ok' => false, 'error' => 'service_restart_activation_failed'];
+        return distressAutotuneError('service_restart_activation_failed');
     }
 
     $currentPid = getServiceMainPid('distress');
@@ -1399,15 +1677,15 @@ function restartDistressForAutotune(array &$state): array
 function distressAutotuneTick($loadAverage, $ramFreePercent): array
 {
     if (!is_numeric($loadAverage)) {
-        return ['ok' => false, 'error' => 'invalid_load_average'];
+        return distressAutotuneError('invalid_load_average');
     }
     if (!is_numeric($ramFreePercent)) {
-        return ['ok' => false, 'error' => 'invalid_ram_free_percent'];
+        return distressAutotuneError('invalid_ram_free_percent');
     }
 
     $lockHandle = acquireDistressAutotuneLock();
     if ($lockHandle === false) {
-        return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
+        return distressAutotuneError('distress_autotune_lock_failed');
     }
 
     $load = max(0.0, (float)$loadAverage);
@@ -1417,56 +1695,27 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
         'ramFreePercent' => $freeRam,
     ]);
     $state = readDistressAutotuneState();
+    $state['lastLoadAverage'] = $load;
+    $state['lastRamFreePercent'] = $freeRam;
     if (($state['enabled'] ?? false) !== true) {
         distressAutotuneDebugLog('tick_skip_manual_mode');
-        releaseDistressAutotuneLock($lockHandle);
-        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'manual_mode'];
+        return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'manual_mode');
     }
 
     if (!serviceIsActive('distress')) {
         distressAutotuneDebugLog('tick_skip_service_inactive');
-        releaseDistressAutotuneLock($lockHandle);
-        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'distress_inactive'];
+        return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'distress_inactive');
     }
 
     $configConcurrency = getDistressConfigConcurrency();
     $liveAppliedConcurrency = getDistressLiveAppliedConcurrency();
     $currentConcurrency = $liveAppliedConcurrency ?? $configConcurrency;
     $state['desiredConcurrency'] = $configConcurrency;
-    $state['lastLoadAverage'] = $load;
-    $state['lastRamFreePercent'] = $freeRam;
     $now = time();
     $bpsMetrics = getDistressFreshBpsMetrics($now);
-    $currentCycleId = isset($bpsMetrics['cycleId']) && is_string($bpsMetrics['cycleId']) && $bpsMetrics['cycleId'] !== ''
-        ? $bpsMetrics['cycleId']
-        : null;
-    $latestTargetCount = isset($bpsMetrics['latestTargetCount']) && is_numeric($bpsMetrics['latestTargetCount'])
-        ? max(0, (int)$bpsMetrics['latestTargetCount'])
-        : null;
-    $previousTargetCount = isset($state['lastTargetCount']) && is_numeric($state['lastTargetCount'])
-        ? max(0, (int)$state['lastTargetCount'])
-        : null;
-    $previousCycleId = isset($state['lastBpsCycleId']) && is_string($state['lastBpsCycleId']) && $state['lastBpsCycleId'] !== ''
-        ? $state['lastBpsCycleId']
-        : null;
-    if (
-        ($currentCycleId !== null && $previousCycleId !== null && $currentCycleId !== $previousCycleId) ||
-        ($currentCycleId === null && $latestTargetCount !== null && $previousTargetCount !== null && $latestTargetCount !== $previousTargetCount)
-    ) {
-        distressAutotuneDebugLog('bps_cycle_reset', [
-            'previousCycleId' => $previousCycleId,
-            'currentCycleId' => $currentCycleId,
-            'previousTargetCount' => $previousTargetCount,
-            'latestTargetCount' => $latestTargetCount,
-        ]);
-        resetDistressAutotuneBpsCycle($state);
-    }
-    if ($latestTargetCount !== null) {
-        $state['lastTargetCount'] = $latestTargetCount;
-    }
-    if ($currentCycleId !== null) {
-        $state['lastBpsCycleId'] = $currentCycleId;
-    }
+    $cycleState = syncDistressBpsCycleState($state, $bpsMetrics);
+    $currentCycleId = $cycleState['currentCycleId'] ?? null;
+    $latestTargetCount = $cycleState['latestTargetCount'] ?? null;
     $safetyTargetConcurrency = calculateDistressSafetyTargetConcurrency($currentConcurrency, $load, $freeRam);
     $explorationTargetConcurrency = $currentConcurrency;
     if ($safetyTargetConcurrency >= $currentConcurrency) {
@@ -1493,9 +1742,7 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
                 'currentConcurrency' => $currentConcurrency,
                 'searchPhase' => $state['searchPhase'] ?? DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE,
             ]);
-            writeDistressAutotuneState($state);
-            releaseDistressAutotuneLock($lockHandle);
-            return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'bps_settle'];
+            return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'bps_settle');
         }
 
         if (($now - (int)($state['lastAdjustedAt'] ?? 0)) < DISTRESS_AUTOTUNE_COOLDOWN_SECONDS) {
@@ -1506,9 +1753,7 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
                 'currentConcurrency' => $currentConcurrency,
                 'bestBpsMbps' => $state['bestBpsMbps'] ?? null,
             ]);
-            writeDistressAutotuneState($state);
-            releaseDistressAutotuneLock($lockHandle);
-            return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'cooldown'];
+            return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'cooldown');
         }
 
         if ($bpsMetrics === null) {
@@ -1517,9 +1762,7 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
                 'currentConcurrency' => $currentConcurrency,
                 'searchPhase' => $state['searchPhase'] ?? DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE,
             ]);
-            writeDistressAutotuneState($state);
-            releaseDistressAutotuneLock($lockHandle);
-            return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'bps_unavailable'];
+            return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'bps_unavailable');
         }
 
         $bpsConcurrency = isset($bpsMetrics['startedConcurrency']) && is_numeric($bpsMetrics['startedConcurrency'])
@@ -1534,9 +1777,7 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
                 'runEndedAt' => $bpsMetrics['runEndedAt'] ?? null,
                 'scoreMethod' => $bpsMetrics['scoreMethod'] ?? null,
             ]);
-            writeDistressAutotuneState($state);
-            releaseDistressAutotuneLock($lockHandle);
-            return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'bps_concurrency_mismatch'];
+            return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'bps_concurrency_mismatch');
         }
 
         ensureDistressProbeForCurrentConcurrency($state, $currentConcurrency);
@@ -1572,121 +1813,22 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
                 'probeWindowCount' => $probeWindowCount,
                 'windowsRequired' => DISTRESS_AUTOTUNE_PROBE_WINDOWS_REQUIRED,
             ]);
-            writeDistressAutotuneState($state);
-            releaseDistressAutotuneLock($lockHandle);
-            return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'collecting_probe_windows'];
+            return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'collecting_probe_windows');
         }
 
-        $bestBpsMbps = isset($state['bestBpsMbps']) && is_numeric($state['bestBpsMbps']) ? (float)$state['bestBpsMbps'] : null;
-        $bestBpsConcurrency = normalizeDistressConcurrency($state['bestBpsConcurrency'] ?? null);
-        $confirmedBestBpsMbps = isset($state['confirmedBestBpsMbps']) && is_numeric($state['confirmedBestBpsMbps'])
-            ? (float)$state['confirmedBestBpsMbps']
-            : null;
-        $confirmedBestBpsConcurrency = normalizeDistressConcurrency($state['confirmedBestBpsConcurrency'] ?? null);
-        if (
-            $bestBpsMbps === null ||
-            $bestBpsMbps <= 0.0 ||
-            $bestBpsConcurrency === null ||
-            $probeScoreMbps >= ($bestBpsMbps * DISTRESS_AUTOTUNE_BPS_BEST_IMPROVEMENT_RATIO)
-        ) {
-            $state['bestBpsMbps'] = $probeScoreMbps;
-            $state['bestBpsConcurrency'] = $currentConcurrency;
-            $bestBpsMbps = $probeScoreMbps;
-            $bestBpsConcurrency = $currentConcurrency;
-            distressAutotuneDebugLog('bps_new_best', [
-                'bestBpsMbps' => $state['bestBpsMbps'],
-                'bestBpsConcurrency' => $state['bestBpsConcurrency'],
-                'searchPhase' => $state['searchPhase'] ?? DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE,
-            ]);
-        }
-
-        $confirmedProbeScoreMbps = calculateDistressProbeScore($state, DISTRESS_AUTOTUNE_CONFIRMED_BEST_WINDOWS_REQUIRED);
-        if (
-            $confirmedProbeScoreMbps !== null &&
-            $currentConcurrency === $bestBpsConcurrency &&
-            (
-                $confirmedBestBpsMbps === null ||
-                $confirmedBestBpsConcurrency === null ||
-                $currentConcurrency === $confirmedBestBpsConcurrency ||
-                $confirmedProbeScoreMbps >= ($confirmedBestBpsMbps * DISTRESS_AUTOTUNE_BPS_BEST_IMPROVEMENT_RATIO)
-            )
-        ) {
-            $state['confirmedBestBpsMbps'] = $confirmedProbeScoreMbps;
-            $state['confirmedBestBpsConcurrency'] = $currentConcurrency;
-            $confirmedBestBpsMbps = $confirmedProbeScoreMbps;
-            $confirmedBestBpsConcurrency = $currentConcurrency;
-            distressAutotuneDebugLog('bps_confirmed_best', [
-                'confirmedBestBpsMbps' => $confirmedBestBpsMbps,
-                'confirmedBestBpsConcurrency' => $confirmedBestBpsConcurrency,
-                'windowsRequired' => DISTRESS_AUTOTUNE_CONFIRMED_BEST_WINDOWS_REQUIRED,
-            ]);
-        }
-
-        $decisionBestBpsMbps = $confirmedBestBpsMbps ?? $bestBpsMbps;
-        $decisionBestBpsConcurrency = $confirmedBestBpsConcurrency ?? $bestBpsConcurrency;
-
-        $searchPhase = normalizeDistressSearchPhase($state['searchPhase'] ?? null);
-        $targetConcurrency = $currentConcurrency;
-        if ($searchPhase === DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE) {
-            if (
-                $decisionBestBpsMbps !== null &&
-                $decisionBestBpsConcurrency !== null &&
-                $currentConcurrency > $decisionBestBpsConcurrency &&
-                $dropWindowReady &&
-                !isWithinDistressBpsDeadZone($dropProbeScoreMbps, $decisionBestBpsMbps) &&
-                $dropProbeScoreMbps < $decisionBestBpsMbps
-            ) {
-                $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_REFINE;
-                $state['refineLowConcurrency'] = $decisionBestBpsConcurrency;
-                $state['refineHighConcurrency'] = $currentConcurrency;
-                $midpoint = calculateDistressRefineMidpoint($decisionBestBpsConcurrency, $currentConcurrency);
-                if ($midpoint === null) {
-                    $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD;
-                    $targetConcurrency = $decisionBestBpsConcurrency;
-                } else {
-                    $targetConcurrency = $midpoint;
-                }
-            } elseif (
-                $decisionBestBpsMbps !== null &&
-                $decisionBestBpsConcurrency !== null &&
-                $currentConcurrency > $decisionBestBpsConcurrency &&
-                !$dropWindowReady
-            ) {
-                $targetConcurrency = $currentConcurrency;
-            } elseif ($explorationTargetConcurrency > $currentConcurrency) {
-                $targetConcurrency = $explorationTargetConcurrency;
-            } else {
-                $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD;
-                $targetConcurrency = $decisionBestBpsConcurrency ?? $currentConcurrency;
-            }
-        } elseif ($searchPhase === DISTRESS_AUTOTUNE_SEARCH_PHASE_REFINE) {
-            $refineLowConcurrency = normalizeDistressConcurrency($state['refineLowConcurrency'] ?? null);
-            $refineHighConcurrency = normalizeDistressConcurrency($state['refineHighConcurrency'] ?? null);
-            if ($refineLowConcurrency === null || $refineHighConcurrency === null) {
-                $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD;
-                $targetConcurrency = $decisionBestBpsConcurrency ?? $currentConcurrency;
-            } else {
-                if ($currentConcurrency > ($decisionBestBpsConcurrency ?? $currentConcurrency)) {
-                    if (isWithinDistressBpsDeadZone($probeScoreMbps, $decisionBestBpsMbps ?? $probeScoreMbps)) {
-                        $state['refineLowConcurrency'] = $currentConcurrency;
-                    } else {
-                        $state['refineHighConcurrency'] = $currentConcurrency;
-                    }
-                }
-
-                $refineLowConcurrency = normalizeDistressConcurrency($state['refineLowConcurrency'] ?? null) ?? $decisionBestBpsConcurrency ?? $currentConcurrency;
-                $refineHighConcurrency = normalizeDistressConcurrency($state['refineHighConcurrency'] ?? null) ?? $currentConcurrency;
-                $midpoint = calculateDistressRefineMidpoint($refineLowConcurrency, $refineHighConcurrency);
-                if ($midpoint === null) {
-                    $state['searchPhase'] = DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD;
-                    $targetConcurrency = $decisionBestBpsConcurrency ?? $currentConcurrency;
-                } else {
-                    $targetConcurrency = $midpoint;
-                }
-            }
-        } else {
-            $targetConcurrency = $decisionBestBpsConcurrency ?? $currentConcurrency;
-        }
+        $decisionMetrics = updateDistressBestProbeState($state, $currentConcurrency, $probeScoreMbps);
+        $decisionBestBpsMbps = $decisionMetrics['decisionBestBpsMbps'] ?? null;
+        $decisionBestBpsConcurrency = $decisionMetrics['decisionBestBpsConcurrency'] ?? null;
+        $targetConcurrency = determineDistressSearchTarget(
+            $state,
+            $currentConcurrency,
+            $explorationTargetConcurrency,
+            $decisionBestBpsMbps,
+            $decisionBestBpsConcurrency,
+            $probeScoreMbps,
+            $dropProbeScoreMbps,
+            $dropWindowReady
+        );
 
         if (
             $decisionBestBpsMbps !== null &&
@@ -1729,9 +1871,7 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
             'bestBpsMbps' => $state['bestBpsMbps'] ?? null,
             'searchPhase' => $state['searchPhase'] ?? DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE,
         ]);
-        writeDistressAutotuneState($state);
-        releaseDistressAutotuneLock($lockHandle);
-        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'within_range'];
+        return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'within_range');
     }
 
     if (!setDistressConfigConcurrency($targetConcurrency)) {
@@ -1740,7 +1880,7 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
             'targetConcurrency' => $targetConcurrency,
         ]);
         releaseDistressAutotuneLock($lockHandle);
-        return ['ok' => false, 'error' => 'distress_concurrency_write_failed'];
+        return distressAutotuneError('distress_concurrency_write_failed');
     }
 
     $restart = restartDistressForAutotune($state);
@@ -1765,9 +1905,7 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
             'serviceActiveAfterFailure' => $serviceActiveAfterFailure,
         ]);
         releaseDistressAutotuneLock($lockHandle);
-        return [
-            'ok' => false,
-            'error' => 'service_restart_failed',
+        return distressAutotuneError('service_restart_failed', [
             'attemptedConcurrency' => $targetConcurrency,
             'previousConfigConcurrency' => $configConcurrency,
             'configConcurrencyAfterFailure' => $configConcurrencyAfterFailure,
@@ -1776,7 +1914,7 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
             'rollbackConfigOk' => $rollbackConfigOk,
             'rollbackStateOk' => $rollbackStateOk,
             'configConcurrencyAfterRollback' => getDistressConfigConcurrency(),
-        ];
+        ]);
     }
 
     $state['desiredConcurrency'] = $targetConcurrency;
@@ -1791,7 +1929,7 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
             'targetConcurrency' => $targetConcurrency,
         ]);
         releaseDistressAutotuneLock($lockHandle);
-        return ['ok' => false, 'error' => 'distress_autotune_state_write_failed'];
+        return distressAutotuneError('distress_autotune_state_write_failed');
     }
 
     distressAutotuneDebugLog('tick_changed', [

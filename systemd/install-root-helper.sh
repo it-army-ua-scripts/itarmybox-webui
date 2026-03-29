@@ -9,6 +9,7 @@ LEGACY_DISTRESS_STATE="/opt/itarmy/distress-autotune.json"
 LEGACY_WIFI_STATE="/opt/itarmy/wifi-txpower.json"
 WEBUI_DISTRESS_STATE="${WEBUI_STATE_DIR}/distress-autotune.json"
 WEBUI_WIFI_STATE="${WEBUI_STATE_DIR}/wifi-txpower.json"
+DISTRESS_DROPIN_DIR="${SYSTEMD_DIR}/distress.service.d"
 
 cleanup_legacy_webui_files() {
   if [ -f "${WEBUI_DISTRESS_STATE}" ] && [ -f "${LEGACY_DISTRESS_STATE}" ]; then
@@ -20,6 +21,7 @@ cleanup_legacy_webui_files() {
 }
 
 mkdir -p "${WEBUI_STATE_DIR}"
+mkdir -p "${DISTRESS_DROPIN_DIR}"
 
 if [ ! -f "${WEBUI_DISTRESS_STATE}" ] && [ -f "${LEGACY_DISTRESS_STATE}" ]; then
   cp -f "${LEGACY_DISTRESS_STATE}" "${WEBUI_DISTRESS_STATE}"
@@ -37,6 +39,7 @@ ln -sf "${WEBUI_DIR}/systemd/itarmybox-distress-autotune-safety.timer" "${SYSTEM
 ln -sf "${WEBUI_DIR}/systemd/itarmybox-distress-autotune.service" "${SYSTEMD_DIR}/itarmybox-distress-autotune.service"
 ln -sf "${WEBUI_DIR}/systemd/itarmybox-distress-autotune.timer" "${SYSTEMD_DIR}/itarmybox-distress-autotune.timer"
 ln -sf "${WEBUI_DIR}/systemd/itarmybox-wifi-txpower.service" "${SYSTEMD_DIR}/itarmybox-wifi-txpower.service"
+ln -sf "${WEBUI_DIR}/systemd/distress.service.d/itarmybox-upload-cap.conf" "${DISTRESS_DROPIN_DIR}/itarmybox-upload-cap.conf"
 
 systemctl daemon-reload
 if [ "$SKIP_ROOT_HELPER_SOCKET_REFRESH" != "1" ]; then
