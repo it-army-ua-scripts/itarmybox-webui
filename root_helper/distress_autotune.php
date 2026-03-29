@@ -543,17 +543,29 @@ function calculateDistressRefineMidpoint(int $lowerConcurrency, int $upperConcur
     return $midpoint;
 }
 
-function acquireDistressAutotuneLock()
+function acquireDistressAutotuneLock(int $timeoutMilliseconds = 5000, int $retrySleepMicroseconds = 100000)
 {
     $handle = @fopen(DISTRESS_AUTOTUNE_LOCK_FILE, 'c+');
     if ($handle === false) {
         return false;
     }
-    if (!flock($handle, LOCK_EX)) {
-        fclose($handle);
-        return false;
-    }
-    return $handle;
+
+    $deadline = microtime(true) + (max(0, $timeoutMilliseconds) / 1000);
+    do {
+        if (flock($handle, LOCK_EX | LOCK_NB)) {
+            return $handle;
+        }
+
+        if (microtime(true) >= $deadline) {
+            fclose($handle);
+            distressAutotuneDebugLog('lock_timeout', [
+                'timeoutMilliseconds' => $timeoutMilliseconds,
+            ]);
+            return false;
+        }
+
+        usleep(max(1000, $retrySleepMicroseconds));
+    } while (true);
 }
 
 function releaseDistressAutotuneLock($handle): void
