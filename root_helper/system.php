@@ -2,6 +2,174 @@
 
 declare(strict_types=1);
 
+const SYSTEM_HEALTH_LOG_FILE = ROOT_HELPER_LOG_DIR . '/system-health.log';
+
+function readSystemHealthTextFile(string $path): ?string
+{
+    $raw = @file_get_contents($path);
+    if (!is_string($raw)) {
+        return null;
+    }
+
+    $value = trim($raw);
+    return $value !== '' ? $value : null;
+}
+
+function readSystemHealthUptimeSeconds(): ?int
+{
+    $raw = readSystemHealthTextFile('/proc/uptime');
+    if ($raw === null || preg_match('/^\s*([0-9]+(?:\.[0-9]+)?)/', $raw, $matches) !== 1) {
+        return null;
+    }
+
+    return max(0, (int)floor((float)$matches[1]));
+}
+
+function readSystemHealthLoadAverage(): array
+{
+    $raw = readSystemHealthTextFile('/proc/loadavg');
+    if ($raw === null || preg_match('/^\s*([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)/', $raw, $matches) !== 1) {
+        return ['load1' => null, 'load5' => null, 'load15' => null];
+    }
+
+    return [
+        'load1' => (float)$matches[1],
+        'load5' => (float)$matches[2],
+        'load15' => (float)$matches[3],
+    ];
+}
+
+function readSystemHealthMemoryInfo(): array
+{
+    $raw = @file_get_contents('/proc/meminfo');
+    if (!is_string($raw) || trim($raw) === '') {
+        return [
+            'memTotalKb' => null,
+            'memAvailableKb' => null,
+            'memAvailablePercent' => null,
+            'swapTotalKb' => null,
+            'swapFreeKb' => null,
+            'swapFreePercent' => null,
+        ];
+    }
+
+    $readValue = static function (string $pattern) use ($raw): ?int {
+        return preg_match($pattern, $raw, $matches) === 1 ? max(0, (int)$matches[1]) : null;
+    };
+
+    $memTotalKb = $readValue('/^MemTotal:\s+(\d+)\s+kB$/mi');
+    $memAvailableKb = $readValue('/^MemAvailable:\s+(\d+)\s+kB$/mi');
+    $swapTotalKb = $readValue('/^SwapTotal:\s+(\d+)\s+kB$/mi');
+    $swapFreeKb = $readValue('/^SwapFree:\s+(\d+)\s+kB$/mi');
+
+    return [
+        'memTotalKb' => $memTotalKb,
+        'memAvailableKb' => $memAvailableKb,
+        'memAvailablePercent' => ($memTotalKb !== null && $memTotalKb > 0 && $memAvailableKb !== null)
+            ? max(0.0, min(100.0, ($memAvailableKb / $memTotalKb) * 100.0))
+            : null,
+        'swapTotalKb' => $swapTotalKb,
+        'swapFreeKb' => $swapFreeKb,
+        'swapFreePercent' => ($swapTotalKb !== null && $swapTotalKb > 0 && $swapFreeKb !== null)
+            ? max(0.0, min(100.0, ($swapFreeKb / $swapTotalKb) * 100.0))
+            : null,
+    ];
+}
+
+function readSystemHealthPsiResource(string $resource): array
+{
+    $path = '/proc/pressure/' . $resource;
+    $raw = @file_get_contents($path);
+    if (!is_string($raw) || trim($raw) === '') {
+        return ['someAvg10' => null, 'fullAvg10' => null];
+    }
+
+    $someAvg10 = preg_match('/^some\s+avg10=([0-9]+(?:\.[0-9]+)?)/mi', $raw, $someMatches) === 1
+        ? (float)$someMatches[1]
+        : null;
+    $fullAvg10 = preg_match('/^full\s+avg10=([0-9]+(?:\.[0-9]+)?)/mi', $raw, $fullMatches) === 1
+        ? (float)$fullMatches[1]
+        : null;
+
+    return ['someAvg10' => $someAvg10, 'fullAvg10' => $fullAvg10];
+}
+
+function readSystemHealthThermalZones(int $limit = 4): array
+{
+    $paths = glob('/sys/class/thermal/thermal_zone*');
+    if (!is_array($paths) || $paths === []) {
+        return [];
+    }
+
+    $zones = [];
+    foreach ($paths as $path) {
+        $type = readSystemHealthTextFile($path . '/type') ?? basename($path);
+        $tempRaw = readSystemHealthTextFile($path . '/temp');
+        if ($tempRaw === null || !is_numeric($tempRaw)) {
+            continue;
+        }
+
+        $tempValue = (float)$tempRaw;
+        $tempC = $tempValue > 1000.0 ? ($tempValue / 1000.0) : $tempValue;
+        $zones[] = [
+            'type' => $type,
+            'tempC' => round($tempC, 1),
+        ];
+    }
+
+    usort($zones, static fn(array $a, array $b): int => ($b['tempC'] <=> $a['tempC']));
+    if (count($zones) > $limit) {
+        $zones = array_slice($zones, 0, $limit);
+    }
+    return $zones;
+}
+
+function collectSystemHealthSnapshot(array $modules): array
+{
+    $load = readSystemHealthLoadAverage();
+    $memory = readSystemHealthMemoryInfo();
+    $cpuPsi = readSystemHealthPsiResource('cpu');
+    $memoryPsi = readSystemHealthPsiResource('memory');
+    $ioPsi = readSystemHealthPsiResource('io');
+    $activeModules = function_exists('getActiveModules') ? getActiveModules($modules) : [];
+
+    return [
+        'uptimeSeconds' => readSystemHealthUptimeSeconds(),
+        'load1' => $load['load1'],
+        'load5' => $load['load5'],
+        'load15' => $load['load15'],
+        'memTotalKb' => $memory['memTotalKb'],
+        'memAvailableKb' => $memory['memAvailableKb'],
+        'memAvailablePercent' => $memory['memAvailablePercent'],
+        'swapTotalKb' => $memory['swapTotalKb'],
+        'swapFreeKb' => $memory['swapFreeKb'],
+        'swapFreePercent' => $memory['swapFreePercent'],
+        'cpuPsiSomeAvg10' => $cpuPsi['someAvg10'],
+        'memoryPsiSomeAvg10' => $memoryPsi['someAvg10'],
+        'memoryPsiFullAvg10' => $memoryPsi['fullAvg10'],
+        'ioPsiSomeAvg10' => $ioPsi['someAvg10'],
+        'ioPsiFullAvg10' => $ioPsi['fullAvg10'],
+        'thermalZones' => readSystemHealthThermalZones(),
+        'activeModules' => $activeModules,
+        'distressPid' => in_array('distress', $activeModules, true) ? getServiceMainPid('distress') : null,
+    ];
+}
+
+function logSystemHealthSnapshot(array $modules, string $event, array $extra = []): array
+{
+    $snapshot = collectSystemHealthSnapshot($modules) + ['event' => $event] + $extra;
+    $payload = json_encode($snapshot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if (is_string($payload)) {
+        writeDebugLogLine(SYSTEM_HEALTH_LOG_FILE, $payload);
+    }
+
+    return [
+        'ok' => true,
+        'logFile' => SYSTEM_HEALTH_LOG_FILE,
+        'snapshot' => $snapshot,
+    ];
+}
+
 function appendRebootLog(string $message): void
 {
     $line = '[' . date('c') . '] ' . $message . "\n";

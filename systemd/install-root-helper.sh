@@ -38,6 +38,8 @@ ln -sf "${WEBUI_DIR}/systemd/itarmybox-distress-autotune-safety.service" "${SYST
 ln -sf "${WEBUI_DIR}/systemd/itarmybox-distress-autotune-safety.timer" "${SYSTEMD_DIR}/itarmybox-distress-autotune-safety.timer"
 ln -sf "${WEBUI_DIR}/systemd/itarmybox-distress-autotune.service" "${SYSTEMD_DIR}/itarmybox-distress-autotune.service"
 ln -sf "${WEBUI_DIR}/systemd/itarmybox-distress-autotune.timer" "${SYSTEMD_DIR}/itarmybox-distress-autotune.timer"
+ln -sf "${WEBUI_DIR}/systemd/itarmybox-system-health.service" "${SYSTEMD_DIR}/itarmybox-system-health.service"
+ln -sf "${WEBUI_DIR}/systemd/itarmybox-system-health.timer" "${SYSTEMD_DIR}/itarmybox-system-health.timer"
 ln -sf "${WEBUI_DIR}/systemd/itarmybox-wifi-txpower.service" "${SYSTEMD_DIR}/itarmybox-wifi-txpower.service"
 ln -sf "${WEBUI_DIR}/systemd/distress.service.d/itarmybox-upload-cap.conf" "${DISTRESS_DROPIN_DIR}/itarmybox-upload-cap.conf"
 
@@ -53,6 +55,8 @@ systemctl enable itarmybox-distress-autotune-safety.timer
 systemctl restart itarmybox-distress-autotune-safety.timer
 systemctl enable itarmybox-distress-autotune.timer
 systemctl restart itarmybox-distress-autotune.timer
+systemctl enable itarmybox-system-health.timer
+systemctl restart itarmybox-system-health.timer
 systemctl enable itarmybox-wifi-txpower.service
 
 cleanup_legacy_webui_files

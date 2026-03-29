@@ -144,6 +144,13 @@ function dispatchRootHelperAction(string $action, array $request, array $modules
             return serviceRestart(rootHelperValidateModule($request['module'] ?? null, $modules));
         case 'system_reboot':
             return systemReboot();
+        case 'system_health_log':
+            return logSystemHealthSnapshot(
+                $modules,
+                isset($request['event']) && is_string($request['event']) && trim($request['event']) !== ''
+                    ? trim($request['event'])
+                    : 'timer_tick'
+            );
         case 'system_update_run':
             return runSystemUpdate(isset($request['branch']) && is_string($request['branch']) ? $request['branch'] : null);
         case 'webui_reset_defaults':

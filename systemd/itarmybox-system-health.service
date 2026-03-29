@@ -1,0 +1,8 @@
+[Unit]
+Description=IT Army Box system health snapshot logger
+After=itarmybox-root-helper.socket
+Wants=itarmybox-root-helper.socket
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env php /var/www/html/itarmybox-webui/system_health_log.php
