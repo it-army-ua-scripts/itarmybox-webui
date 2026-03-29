@@ -11,6 +11,32 @@ if (!function_exists('getDistressAutotuneSettings')) {
 }
 
 const DISTRESS_START_TASK_FILE = __DIR__ . '/../var/state/distress-start-task.json';
+const START_DEBUG_LOG_FILE = __DIR__ . '/../var/log/start-debug.log';
+
+function ensure_start_debug_directory(): bool
+{
+    $dir = dirname(START_DEBUG_LOG_FILE);
+    return is_dir($dir) || @mkdir($dir, 0775, true) || is_dir($dir);
+}
+
+function write_start_debug_log(string $event, array $context = []): void
+{
+    if (!ensure_start_debug_directory()) {
+        return;
+    }
+
+    $payload = [
+        'ts' => date('c'),
+        'event' => $event,
+    ] + $context;
+
+    $line = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($line)) {
+        return;
+    }
+
+    @file_put_contents(START_DEBUG_LOG_FILE, $line . PHP_EOL, FILE_APPEND);
+}
 
 function ensure_start_task_directory(): bool
 {
@@ -73,7 +99,7 @@ function write_start_task_state(array $state): bool
 
 function reset_start_task_state(string $daemon): bool
 {
-    return write_start_task_state([
+    $result = write_start_task_state([
         'status' => 'pending',
         'daemon' => $daemon,
         'messageKey' => null,
@@ -81,11 +107,18 @@ function reset_start_task_state(string $daemon): bool
         'startedAt' => time(),
         'finishedAt' => null,
     ]);
+
+    write_start_debug_log('start_task_reset', [
+        'daemon' => $daemon,
+        'ok' => $result,
+    ]);
+
+    return $result;
 }
 
 function complete_start_task_state(string $daemon, bool $ok, ?string $error = null): bool
 {
-    return write_start_task_state([
+    $result = write_start_task_state([
         'status' => $ok ? 'success' : 'failed',
         'daemon' => $daemon,
         'messageKey' => $ok ? 'start_requested' : 'start_failed',
@@ -93,14 +126,34 @@ function complete_start_task_state(string $daemon, bool $ok, ?string $error = nu
         'startedAt' => (int)(read_start_task_state()['startedAt'] ?? time()),
         'finishedAt' => time(),
     ]);
+
+    write_start_debug_log('start_task_completed', [
+        'daemon' => $daemon,
+        'ok' => $ok,
+        'error' => $error,
+        'stateWriteOk' => $result,
+    ]);
+
+    return $result;
 }
 
 function start_module_request(string $daemon, array $config): array
 {
-    $response = root_helper_request([
+    write_start_debug_log('start_module_request_begin', [
+        'daemon' => $daemon,
+        'modules' => array_values((array)($config['daemonNames'] ?? [])),
+    ]);
+
+    $payload = [
         'action' => 'service_activate_exclusive',
         'modules' => $config['daemonNames'],
         'selected' => $daemon,
+    ];
+    $response = root_helper_request($payload);
+    write_start_debug_log('start_module_request_end', [
+        'daemon' => $daemon,
+        'payload' => $payload,
+        'response' => $response,
     ]);
 
     return [
@@ -141,11 +194,17 @@ function spawn_distress_start_worker(): bool
 {
     $phpCli = find_php_cli_for_background_start();
     if ($phpCli === null) {
+        write_start_debug_log('spawn_worker_failed', [
+            'reason' => 'php_cli_not_found',
+        ]);
         return false;
     }
 
     $workerPath = realpath(__DIR__ . '/../start_worker.php');
     if (!is_string($workerPath) || $workerPath === '') {
+        write_start_debug_log('spawn_worker_failed', [
+            'reason' => 'worker_path_not_found',
+        ]);
         return false;
     }
 
@@ -156,5 +215,11 @@ function spawn_distress_start_worker(): bool
     );
 
     @exec('/bin/sh -c ' . escapeshellarg($command), $output, $code);
+    write_start_debug_log('spawn_worker_result', [
+        'phpCli' => $phpCli,
+        'workerPath' => $workerPath,
+        'code' => $code,
+        'output' => $output,
+    ]);
     return $code === 0;
 }

@@ -176,10 +176,19 @@ function render_distress_start_progress_page(string $daemon): void
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $daemon = (string)($_POST['daemon'] ?? '');
+    write_start_debug_log('start_php_post_received', [
+        'daemon' => $daemon,
+        'ajax' => isset($_GET['ajax']) && $_GET['ajax'] === '1',
+        'postKeys' => array_keys($_POST),
+    ]);
     if (in_array($daemon, $config['daemonNames'], true)) {
         if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
             header('Content-Type: application/json; charset=UTF-8');
             if (!reset_start_task_state($daemon) || !spawn_distress_start_worker()) {
+                write_start_debug_log('start_php_ajax_bootstrap_failed', [
+                    'daemon' => $daemon,
+                    'state' => read_start_task_state(),
+                ]);
                 echo json_encode([
                     'ok' => false,
                     'redirect' => url_with_lang('/status.php?msg=start_failed&ok=0'),
@@ -200,12 +209,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $result = start_module_request($daemon, $config);
+        write_start_debug_log('start_php_direct_result', [
+            'daemon' => $daemon,
+            'result' => $result,
+        ]);
         $messageKey = (string)($result['messageKey'] ?? 'start_failed');
         $messageOk = (($result['ok'] ?? false) === true);
         $target = '/status.php?msg=' . rawurlencode($messageKey) . '&ok=' . ($messageOk ? '1' : '0');
         header('Location: ' . url_with_lang($target));
         exit;
     }
+
+    write_start_debug_log('start_php_invalid_daemon', [
+        'daemon' => $daemon,
+        'allowed' => array_values((array)$config['daemonNames']),
+    ]);
 }
 
 if (isset($_GET['ajax']) && $_GET['ajax'] === '1' && isset($_GET['status']) && $_GET['status'] === '1') {
@@ -219,6 +237,12 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1' && isset($_GET['status']) && $
     $messageKey = (string)($state['messageKey'] ?? ($status === 'success' ? 'start_requested' : 'start_failed'));
     $messageOk = $status === 'success';
     $redirect = url_with_lang('/status.php?msg=' . rawurlencode($messageKey) . '&ok=' . ($messageOk ? '1' : '0'));
+    write_start_debug_log('start_php_ajax_status_poll', [
+        'daemon' => $daemon,
+        'status' => $status,
+        'state' => $state,
+        'redirect' => $redirect,
+    ]);
     echo json_encode([
         'ok' => true,
         'status' => $status,
