@@ -1828,11 +1828,6 @@ function distressAutotuneSafetyTick($loadAverage, $ramFreePercent): array
         return distressAutotuneError('invalid_ram_free_percent');
     }
 
-    $lockHandle = acquireDistressAutotuneLock();
-    if ($lockHandle === false) {
-        return distressAutotuneError('distress_autotune_lock_failed');
-    }
-
     $load = max(0.0, (float)$loadAverage);
     $freeRam = max(0.0, min(100.0, (float)$ramFreePercent));
     distressAutotuneDebugLog('safety_tick_start', [
@@ -1841,19 +1836,23 @@ function distressAutotuneSafetyTick($loadAverage, $ramFreePercent): array
     ]);
 
     $state = readDistressAutotuneState();
-    $state['lastLoadAverage'] = $load;
-    $state['lastRamFreePercent'] = $freeRam;
-
     if (($state['enabled'] ?? false) !== true) {
         distressAutotuneDebugLog('safety_tick_skip_manual_mode');
-        return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'manual_mode');
+        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'manual_mode'];
     }
 
     if (!serviceIsActive('distress')) {
         distressAutotuneDebugLog('safety_tick_skip_service_inactive');
-        return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'distress_inactive');
+        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'distress_inactive'];
     }
 
+    $lockHandle = acquireDistressAutotuneLock();
+    if ($lockHandle === false) {
+        return distressAutotuneError('distress_autotune_lock_failed');
+    }
+
+    $state['lastLoadAverage'] = $load;
+    $state['lastRamFreePercent'] = $freeRam;
     $configConcurrency = getDistressConfigConcurrency();
     $liveAppliedConcurrency = getDistressLiveAppliedConcurrency();
     $currentConcurrency = $liveAppliedConcurrency ?? $configConcurrency;
@@ -1981,11 +1980,6 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
         return distressAutotuneError('invalid_ram_free_percent');
     }
 
-    $lockHandle = acquireDistressAutotuneLock();
-    if ($lockHandle === false) {
-        return distressAutotuneError('distress_autotune_lock_failed');
-    }
-
     $load = max(0.0, (float)$loadAverage);
     $freeRam = max(0.0, min(100.0, (float)$ramFreePercent));
     distressAutotuneDebugLog('tick_start', [
@@ -1993,18 +1987,23 @@ function distressAutotuneTick($loadAverage, $ramFreePercent): array
         'ramFreePercent' => $freeRam,
     ]);
     $state = readDistressAutotuneState();
-    $state['lastLoadAverage'] = $load;
-    $state['lastRamFreePercent'] = $freeRam;
     if (($state['enabled'] ?? false) !== true) {
         distressAutotuneDebugLog('tick_skip_manual_mode');
-        return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'manual_mode');
+        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'manual_mode'];
     }
 
     if (!serviceIsActive('distress')) {
         distressAutotuneDebugLog('tick_skip_service_inactive');
-        return persistDistressAutotuneStateAndReturnStatus($state, $lockHandle, false, 'distress_inactive');
+        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'distress_inactive'];
     }
 
+    $lockHandle = acquireDistressAutotuneLock();
+    if ($lockHandle === false) {
+        return distressAutotuneError('distress_autotune_lock_failed');
+    }
+
+    $state['lastLoadAverage'] = $load;
+    $state['lastRamFreePercent'] = $freeRam;
     $configConcurrency = getDistressConfigConcurrency();
     $liveAppliedConcurrency = getDistressLiveAppliedConcurrency();
     $currentConcurrency = $liveAppliedConcurrency ?? $configConcurrency;

@@ -325,7 +325,7 @@ function harness_test_auto_mode_requires_timer(): void
     harness_assert(($result['error'] ?? '') === 'distress_autotune_timer_install_failed', 'auto mode should report timer install failure');
 }
 
-function harness_test_tick_manual_persists_telemetry(): void
+function harness_test_tick_manual_skips_without_writing_state(): void
 {
     harness_reset_runtime();
     writeDistressAutotuneState([
@@ -338,11 +338,11 @@ function harness_test_tick_manual_persists_telemetry(): void
     harness_assert(($result['reason'] ?? '') === 'manual_mode', 'manual tick should report manual_mode');
 
     $state = readDistressAutotuneState();
-    harness_assert(abs((float)($state['lastLoadAverage'] ?? 0.0) - 1.75) < 0.0001, 'manual tick should persist load average');
-    harness_assert(abs((float)($state['lastRamFreePercent'] ?? 0.0) - 42.0) < 0.0001, 'manual tick should persist free RAM');
+    harness_assert(($state['lastLoadAverage'] ?? null) === null, 'manual tick should not persist load average without lock');
+    harness_assert(($state['lastRamFreePercent'] ?? null) === null, 'manual tick should not persist free RAM without lock');
 }
 
-function harness_test_tick_inactive_persists_telemetry(): void
+function harness_test_tick_inactive_skips_without_writing_state(): void
 {
     harness_reset_runtime();
     writeDistressAutotuneState([
@@ -355,8 +355,28 @@ function harness_test_tick_inactive_persists_telemetry(): void
     harness_assert(($result['reason'] ?? '') === 'distress_inactive', 'inactive tick should report distress_inactive');
 
     $state = readDistressAutotuneState();
-    harness_assert(abs((float)($state['lastLoadAverage'] ?? 0.0) - 2.25) < 0.0001, 'inactive tick should persist load average');
-    harness_assert(abs((float)($state['lastRamFreePercent'] ?? 0.0) - 33.0) < 0.0001, 'inactive tick should persist free RAM');
+    harness_assert(($state['lastLoadAverage'] ?? null) === null, 'inactive tick should not persist load average without lock');
+    harness_assert(($state['lastRamFreePercent'] ?? null) === null, 'inactive tick should not persist free RAM without lock');
+}
+
+function harness_test_tick_inactive_does_not_require_lock(): void
+{
+    harness_reset_runtime();
+    writeDistressAutotuneState([
+        'enabled' => true,
+        'desiredConcurrency' => 2048,
+    ]);
+    @mkdir(dirname(DISTRESS_AUTOTUNE_LOCK_FILE), 0777, true);
+    $lockHandle = fopen(DISTRESS_AUTOTUNE_LOCK_FILE, 'c+');
+    harness_assert(is_resource($lockHandle), 'lock handle should be created');
+    harness_assert(flock($lockHandle, LOCK_EX | LOCK_NB), 'test should be able to acquire autotune lock');
+
+    $result = distressAutotuneTick(1.5, 44.0);
+    flock($lockHandle, LOCK_UN);
+    fclose($lockHandle);
+
+    harness_assert(($result['ok'] ?? false) === true, 'inactive tick should succeed even when autotune lock is busy');
+    harness_assert(($result['reason'] ?? '') === 'distress_inactive', 'inactive tick should still report distress_inactive');
 }
 
 function harness_test_restart_failure_path(): void
@@ -765,8 +785,9 @@ $tests = [
     'manual_mode_disables_timers' => 'harness_test_manual_mode_disables_timers',
     'auto_mode_enables_timers' => 'harness_test_auto_mode_enables_timers',
     'auto_mode_requires_timer' => 'harness_test_auto_mode_requires_timer',
-    'tick_manual_persists_telemetry' => 'harness_test_tick_manual_persists_telemetry',
-    'tick_inactive_persists_telemetry' => 'harness_test_tick_inactive_persists_telemetry',
+    'tick_manual_skips_without_writing_state' => 'harness_test_tick_manual_skips_without_writing_state',
+    'tick_inactive_skips_without_writing_state' => 'harness_test_tick_inactive_skips_without_writing_state',
+    'tick_inactive_does_not_require_lock' => 'harness_test_tick_inactive_does_not_require_lock',
     'restart_failure_path' => 'harness_test_restart_failure_path',
     'coarse_target_enters_refine_on_drop' => 'harness_test_coarse_target_enters_refine_on_drop',
     'coarse_target_holds_without_drop_window' => 'harness_test_coarse_target_holds_without_drop_window',
