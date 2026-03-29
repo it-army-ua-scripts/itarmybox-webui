@@ -496,13 +496,13 @@ function switchExclusiveModuleState(array $modules, ?string $selected, bool $for
     foreach ($modules as $module) {
         $service = escapeshellarg($module . '.service');
         if ($selected === null || $module !== $selected) {
-            runCommand("systemctl stop $service", $code);
-            if ($code === 0 && !waitForServiceInactive($module)) {
+            runCommand("systemctl stop $service", $stopCode);
+            if ($stopCode !== 0) {
+                return ['ok' => false, 'error' => 'service_switch_failed'];
+            }
+            if (!waitForServiceInactive($module)) {
                 return ['ok' => false, 'error' => 'service_stop_verification_failed'];
             }
-        }
-        if ($code !== 0) {
-            return ['ok' => false, 'error' => 'service_switch_failed'];
         }
     }
 
