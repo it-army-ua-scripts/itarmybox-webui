@@ -12,7 +12,9 @@ function root_helper_request_timeouts(?string $action): array
         'webui_reset_defaults' => 60,
         'time_sync_ensure' => 30,
         'service_activate_exclusive', 'schedule_activate' => 60,
+        'distress_service_prepare' => 60,
         'distress_autotune_set', 'distress_settings_set' => 15,
+        'system_health_log' => 15,
         'system_reboot' => 15,
         default => 3,
     };
