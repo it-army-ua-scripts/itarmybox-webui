@@ -970,6 +970,13 @@ function prepareDistressUploadCapBeforeStart(bool $forceRefresh = false): bool
 
 function prepareDistressUploadCapForServiceStart(): bool
 {
+    // When WebUI already prepared upload-cap state before `systemctl start`,
+    // the service pre-start hook must not try to reacquire the same lock.
+    if (consumeDistressUploadCapServicePrestartSkip()) {
+        distressAutotuneDebugLog('upload_cap_service_start_skip_consumed');
+        return true;
+    }
+
     $lockHandle = acquireDistressAutotuneLock();
     if ($lockHandle === false) {
         distressAutotuneDebugLog('upload_cap_lock_failed_before_service_start');
@@ -978,13 +985,6 @@ function prepareDistressUploadCapForServiceStart(): bool
 
     $state = readDistressAutotuneState();
     if (($state['enabled'] ?? false) !== true) {
-        consumeDistressUploadCapServicePrestartSkip();
-        releaseDistressAutotuneLock($lockHandle);
-        return true;
-    }
-
-    if (consumeDistressUploadCapServicePrestartSkip()) {
-        distressAutotuneDebugLog('upload_cap_service_start_skip_consumed');
         releaseDistressAutotuneLock($lockHandle);
         return true;
     }
