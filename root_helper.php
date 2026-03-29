@@ -1106,6 +1106,9 @@ function getX100Config(): ?string
 function setX100Config(string $content): bool
 {
     $envFile = '/opt/itarmy/x100-for-docker/put-your-ovpn-files-here/x100-config.txt';
+    if (!ensureParentDirectoryExists($envFile)) {
+        return false;
+    }
     $written = @file_put_contents($envFile, $content);
     return $written !== false;
 }
