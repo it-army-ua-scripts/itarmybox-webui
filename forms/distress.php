@@ -99,6 +99,33 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
         <div class="distress-autotune-panel" id="distress-autotune-panel"<?= $distressConcurrencyMode === 'auto' ? '' : ' hidden' ?>>
             <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars(t('distress_concurrency_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
             <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars(t('distress_autotune_status_label'), ENT_QUOTES, 'UTF-8') ?> <?= htmlspecialchars($distressAutotuneStatusText, ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="schedule-limit-hint distress-autotune-line" id="distress-upload-cap-status-line"><?= htmlspecialchars(t('distress_upload_cap_status_label'), ENT_QUOTES, 'UTF-8') ?> <span id="distress-upload-cap-status-text"><?= htmlspecialchars($distressUploadCapStatusText, ENT_QUOTES, 'UTF-8') ?></span></div>
+            <?php if ($distressUploadCapValueText !== null): ?>
+                <div class="schedule-limit-hint distress-autotune-line" id="distress-upload-cap-value-line"><?= htmlspecialchars($distressUploadCapValueText, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php else: ?>
+                <div class="schedule-limit-hint distress-autotune-line" id="distress-upload-cap-value-line" hidden></div>
+            <?php endif; ?>
+            <?php if ($distressUploadCapMeasuredAtText !== null): ?>
+                <div class="schedule-limit-hint distress-autotune-line" id="distress-upload-cap-measured-at-line"><?= htmlspecialchars($distressUploadCapMeasuredAtText, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php else: ?>
+                <div class="schedule-limit-hint distress-autotune-line" id="distress-upload-cap-measured-at-line" hidden></div>
+            <?php endif; ?>
+            <?php if ($distressUploadCapMethodText !== null): ?>
+                <div class="schedule-limit-hint distress-autotune-line" id="distress-upload-cap-method-line"><?= htmlspecialchars($distressUploadCapMethodText, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php else: ?>
+                <div class="schedule-limit-hint distress-autotune-line" id="distress-upload-cap-method-line" hidden></div>
+            <?php endif; ?>
+            <?php if ($distressUploadCapErrorText !== null): ?>
+                <div class="schedule-limit-hint distress-autotune-line" id="distress-upload-cap-error-line"><?= htmlspecialchars($distressUploadCapErrorText, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php else: ?>
+                <div class="schedule-limit-hint distress-autotune-line" id="distress-upload-cap-error-line" hidden></div>
+            <?php endif; ?>
+            <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars(t('distress_upload_cap_manual_only_hint'), ENT_QUOTES, 'UTF-8') ?></div>
+            <?php if (!$distressHasUploadCapMeasurement): ?>
+                <div class="schedule-limit-hint distress-autotune-line" id="distress-upload-cap-required-line"><?= htmlspecialchars(t('distress_upload_cap_required_for_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
+            <?php else: ?>
+                <div class="schedule-limit-hint distress-autotune-line" id="distress-upload-cap-required-line" hidden></div>
+            <?php endif; ?>
             <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars(t('distress_autotune_desired_value', ['value' => (string)$distressDesiredConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
             <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars(t('distress_autotune_config_value', ['value' => (string)$distressConfigConcurrency]), ENT_QUOTES, 'UTF-8') ?></div>
             <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars(t('distress_autotune_live_value', ['value' => $distressLiveAppliedConcurrency !== null ? (string)$distressLiveAppliedConcurrency : t('status_unavailable_short')]), ENT_QUOTES, 'UTF-8') ?></div>
@@ -118,33 +145,6 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
                 <div class="schedule-limit-hint distress-autotune-line"><?= htmlspecialchars($distressLastTargetCountText, ENT_QUOTES, 'UTF-8') ?></div>
             <?php endif; ?>
         </div>
-        <div class="schedule-limit-hint" id="distress-upload-cap-status-line"><?= htmlspecialchars(t('distress_upload_cap_status_label'), ENT_QUOTES, 'UTF-8') ?> <span id="distress-upload-cap-status-text"><?= htmlspecialchars($distressUploadCapStatusText, ENT_QUOTES, 'UTF-8') ?></span></div>
-        <?php if ($distressUploadCapValueText !== null): ?>
-            <div class="schedule-limit-hint" id="distress-upload-cap-value-line"><?= htmlspecialchars($distressUploadCapValueText, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php else: ?>
-            <div class="schedule-limit-hint" id="distress-upload-cap-value-line" hidden></div>
-        <?php endif; ?>
-        <?php if ($distressUploadCapMeasuredAtText !== null): ?>
-            <div class="schedule-limit-hint" id="distress-upload-cap-measured-at-line"><?= htmlspecialchars($distressUploadCapMeasuredAtText, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php else: ?>
-            <div class="schedule-limit-hint" id="distress-upload-cap-measured-at-line" hidden></div>
-        <?php endif; ?>
-        <?php if ($distressUploadCapMethodText !== null): ?>
-            <div class="schedule-limit-hint" id="distress-upload-cap-method-line"><?= htmlspecialchars($distressUploadCapMethodText, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php else: ?>
-            <div class="schedule-limit-hint" id="distress-upload-cap-method-line" hidden></div>
-        <?php endif; ?>
-        <?php if ($distressUploadCapErrorText !== null): ?>
-            <div class="schedule-limit-hint" id="distress-upload-cap-error-line"><?= htmlspecialchars($distressUploadCapErrorText, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php else: ?>
-            <div class="schedule-limit-hint" id="distress-upload-cap-error-line" hidden></div>
-        <?php endif; ?>
-        <div class="schedule-limit-hint"><?= htmlspecialchars(t('distress_upload_cap_manual_only_hint'), ENT_QUOTES, 'UTF-8') ?></div>
-        <?php if (!$distressHasUploadCapMeasurement): ?>
-            <div class="schedule-limit-hint" id="distress-upload-cap-required-line"><?= htmlspecialchars(t('distress_upload_cap_required_for_auto_hint'), ENT_QUOTES, 'UTF-8') ?></div>
-        <?php else: ?>
-            <div class="schedule-limit-hint" id="distress-upload-cap-required-line" hidden></div>
-        <?php endif; ?>
     </div>
     <div class="form-group">
         <label for="concurrency"><?= htmlspecialchars(t('number_task_creators'), ENT_QUOTES, 'UTF-8') ?></label>
@@ -250,6 +250,7 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
         const useMyIpEl = document.getElementById("use-my-ip");
         const concurrencyModeEl = document.getElementById("distress-concurrency-mode");
         const concurrencyEl = document.getElementById("concurrency");
+        const autotunePanelEl = document.getElementById("distress-autotune-panel");
         const gatedFields = [
             document.getElementById("enable-icmp-flood"),
             document.getElementById("enable-packet-flood"),
@@ -282,7 +283,11 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
             if (!concurrencyModeEl || !concurrencyEl) {
                 return;
             }
-            concurrencyEl.disabled = concurrencyModeEl.value === "auto";
+            const autoMode = concurrencyModeEl.value === "auto";
+            concurrencyEl.disabled = autoMode;
+            if (autotunePanelEl) {
+                autotunePanelEl.hidden = !autoMode;
+            }
         }
 
         if (useMyIpEl) {
