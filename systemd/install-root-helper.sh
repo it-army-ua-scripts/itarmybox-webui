@@ -32,6 +32,8 @@ ln -sf "${WEBUI_DIR}/systemd/itarmybox-root-helper.socket" "${SYSTEMD_DIR}/itarm
 ln -sf "${WEBUI_DIR}/systemd/itarmybox-root-helper@.service" "${SYSTEMD_DIR}/itarmybox-root-helper@.service"
 ln -sf "${WEBUI_DIR}/systemd/itarmybox-distress-bps-collector.service" "${SYSTEMD_DIR}/itarmybox-distress-bps-collector.service"
 ln -sf "${WEBUI_DIR}/systemd/itarmybox-distress-bps-collector.timer" "${SYSTEMD_DIR}/itarmybox-distress-bps-collector.timer"
+ln -sf "${WEBUI_DIR}/systemd/itarmybox-distress-autotune-safety.service" "${SYSTEMD_DIR}/itarmybox-distress-autotune-safety.service"
+ln -sf "${WEBUI_DIR}/systemd/itarmybox-distress-autotune-safety.timer" "${SYSTEMD_DIR}/itarmybox-distress-autotune-safety.timer"
 ln -sf "${WEBUI_DIR}/systemd/itarmybox-distress-autotune.service" "${SYSTEMD_DIR}/itarmybox-distress-autotune.service"
 ln -sf "${WEBUI_DIR}/systemd/itarmybox-distress-autotune.timer" "${SYSTEMD_DIR}/itarmybox-distress-autotune.timer"
 ln -sf "${WEBUI_DIR}/systemd/itarmybox-wifi-txpower.service" "${SYSTEMD_DIR}/itarmybox-wifi-txpower.service"
@@ -44,6 +46,8 @@ else
 fi
 systemctl enable itarmybox-distress-bps-collector.timer
 systemctl restart itarmybox-distress-bps-collector.timer
+systemctl enable itarmybox-distress-autotune-safety.timer
+systemctl restart itarmybox-distress-autotune-safety.timer
 systemctl enable itarmybox-distress-autotune.timer
 systemctl restart itarmybox-distress-autotune.timer
 systemctl enable itarmybox-wifi-txpower.service

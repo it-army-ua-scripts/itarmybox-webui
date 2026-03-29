@@ -16,8 +16,10 @@ const DISTRESS_AUTOTUNE_LITTLE_CORE_COUNT = 2;
 const DISTRESS_AUTOTUNE_LITTLE_CORE_WEIGHT = 0.6;
 const DISTRESS_AUTOTUNE_SYSTEM_CPU_RESERVE = 1.0;
 const DISTRESS_AUTOTUNE_CPU_TARGET_UTILIZATION = 0.85;
+const DISTRESS_AUTOTUNE_TARGET_LOAD = 3.1;
 const DISTRESS_AUTOTUNE_TARGET_LOAD_MIN = 1.0;
 const DISTRESS_AUTOTUNE_DEAD_ZONE_HALF_WIDTH = 0.4;
+const DISTRESS_AUTOTUNE_DEAD_ZONE_UPPER_LIMIT = 3.5;
 const DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT = 10.0;
 const DISTRESS_AUTOTUNE_RAM_RECOVERY_PERCENT = 15.0;
 const DISTRESS_AUTOTUNE_COOLDOWN_SECONDS = 360;
@@ -114,18 +116,7 @@ function getDistressAutotuneCpuCount(): int
 
 function getDistressAutotuneTargetLoad(): float
 {
-    $effectiveCpuCapacity =
-        (DISTRESS_AUTOTUNE_BIG_CORE_COUNT * DISTRESS_AUTOTUNE_BIG_CORE_WEIGHT) +
-        (DISTRESS_AUTOTUNE_LITTLE_CORE_COUNT * DISTRESS_AUTOTUNE_LITTLE_CORE_WEIGHT);
-    $usableLoad = max(
-        DISTRESS_AUTOTUNE_TARGET_LOAD_MIN,
-        $effectiveCpuCapacity - DISTRESS_AUTOTUNE_SYSTEM_CPU_RESERVE
-    );
-
-    return max(
-        DISTRESS_AUTOTUNE_TARGET_LOAD_MIN,
-        $usableLoad * DISTRESS_AUTOTUNE_CPU_TARGET_UTILIZATION
-    );
+    return max(DISTRESS_AUTOTUNE_TARGET_LOAD_MIN, DISTRESS_AUTOTUNE_TARGET_LOAD);
 }
 
 function getDistressAutotuneDeadZoneLower(float $targetLoad): float
@@ -135,7 +126,7 @@ function getDistressAutotuneDeadZoneLower(float $targetLoad): float
 
 function getDistressAutotuneDeadZoneUpper(float $targetLoad): float
 {
-    return $targetLoad + DISTRESS_AUTOTUNE_DEAD_ZONE_HALF_WIDTH;
+    return min(DISTRESS_AUTOTUNE_DEAD_ZONE_UPPER_LIMIT, $targetLoad + DISTRESS_AUTOTUNE_DEAD_ZONE_HALF_WIDTH);
 }
 
 function getDistressAutotuneMediumIncreaseThreshold(float $targetLoad): float
@@ -1043,6 +1034,110 @@ function shouldSkipDistressBpsEvaluationForSettle(array &$state): bool
         'remainingAfter' => $state['bpsSettleCyclesRemaining'],
     ]);
     return true;
+}
+
+function distressAutotuneSafetyTick($loadAverage, $ramFreePercent): array
+{
+    if (!is_numeric($loadAverage)) {
+        return ['ok' => false, 'error' => 'invalid_load_average'];
+    }
+    if (!is_numeric($ramFreePercent)) {
+        return ['ok' => false, 'error' => 'invalid_ram_free_percent'];
+    }
+
+    $lockHandle = acquireDistressAutotuneLock();
+    if ($lockHandle === false) {
+        return ['ok' => false, 'error' => 'distress_autotune_lock_failed'];
+    }
+
+    $load = max(0.0, (float)$loadAverage);
+    $freeRam = max(0.0, min(100.0, (float)$ramFreePercent));
+    distressAutotuneDebugLog('safety_tick_start', [
+        'loadAverage' => $load,
+        'ramFreePercent' => $freeRam,
+    ]);
+
+    $state = readDistressAutotuneState();
+    $state['lastLoadAverage'] = $load;
+    $state['lastRamFreePercent'] = $freeRam;
+
+    if (($state['enabled'] ?? false) !== true) {
+        distressAutotuneDebugLog('safety_tick_skip_manual_mode');
+        writeDistressAutotuneState($state);
+        releaseDistressAutotuneLock($lockHandle);
+        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'manual_mode'];
+    }
+
+    if (!serviceIsActive('distress')) {
+        distressAutotuneDebugLog('safety_tick_skip_service_inactive');
+        writeDistressAutotuneState($state);
+        releaseDistressAutotuneLock($lockHandle);
+        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'distress_inactive'];
+    }
+
+    $configConcurrency = getDistressConfigConcurrency();
+    $liveAppliedConcurrency = getDistressLiveAppliedConcurrency();
+    $currentConcurrency = $liveAppliedConcurrency ?? $configConcurrency;
+    $state['desiredConcurrency'] = $configConcurrency;
+
+    $targetConcurrency = calculateDistressSafetyTargetConcurrency($currentConcurrency, $load, $freeRam);
+    if ($targetConcurrency >= $currentConcurrency) {
+        distressAutotuneDebugLog('safety_tick_hold', [
+            'currentConcurrency' => $currentConcurrency,
+            'targetConcurrency' => $targetConcurrency,
+            'loadAverage' => $load,
+            'ramFreePercent' => $freeRam,
+        ]);
+        writeDistressAutotuneState($state);
+        releaseDistressAutotuneLock($lockHandle);
+        return getDistressAutotuneStatus() + ['changed' => false, 'reason' => 'within_safe_range'];
+    }
+
+    if (!setDistressConfigConcurrency($targetConcurrency)) {
+        distressAutotuneDebugLog('safety_tick_write_failed', [
+            'currentConcurrency' => $currentConcurrency,
+            'targetConcurrency' => $targetConcurrency,
+            'loadAverage' => $load,
+            'ramFreePercent' => $freeRam,
+        ]);
+        releaseDistressAutotuneLock($lockHandle);
+        return ['ok' => false, 'error' => 'distress_concurrency_write_failed'];
+    }
+
+    $restart = serviceRestart('distress');
+    if (($restart['ok'] ?? false) !== true) {
+        $rollbackConfigOk = setDistressConfigConcurrency($configConcurrency);
+        distressAutotuneDebugLog('safety_tick_restart_failed', [
+            'currentConcurrency' => $currentConcurrency,
+            'targetConcurrency' => $targetConcurrency,
+            'rollbackConfigOk' => $rollbackConfigOk,
+        ]);
+        releaseDistressAutotuneLock($lockHandle);
+        return ['ok' => false, 'error' => 'service_restart_failed'];
+    }
+
+    $state['desiredConcurrency'] = $targetConcurrency;
+    $state['lastAdjustedAt'] = time();
+    $state['lastBpsMbps'] = null;
+    $state['bpsSettleCyclesRemaining'] = DISTRESS_AUTOTUNE_BPS_SETTLE_CYCLES;
+    resetDistressProbeState($state, DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE);
+    if (!writeDistressAutotuneState($state)) {
+        distressAutotuneDebugLog('safety_tick_state_write_failed', [
+            'targetConcurrency' => $targetConcurrency,
+        ]);
+        releaseDistressAutotuneLock($lockHandle);
+        return ['ok' => false, 'error' => 'distress_autotune_state_write_failed'];
+    }
+
+    distressAutotuneDebugLog('safety_tick_changed', [
+        'previousConcurrency' => $currentConcurrency,
+        'targetConcurrency' => $targetConcurrency,
+        'loadAverage' => $load,
+        'ramFreePercent' => $freeRam,
+    ]);
+
+    releaseDistressAutotuneLock($lockHandle);
+    return getDistressAutotuneStatus() + ['changed' => true, 'reason' => 'safety_reduce'];
 }
 
 function distressAutotuneTick($loadAverage, $ramFreePercent): array
