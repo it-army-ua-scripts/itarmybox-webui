@@ -98,6 +98,8 @@ function render_distress_start_progress_page(string $daemon): void
     const stateEl = document.getElementById('start-progress-state');
     const spinnerEl = document.getElementById('start-progress-spinner');
     const actionsEl = document.getElementById('start-progress-actions');
+    const body = new URLSearchParams();
+    body.set('daemon', daemon);
 
     function fail(redirectUrl) {
         messageEl.textContent = ui.failed;
@@ -147,7 +149,23 @@ function render_distress_start_progress_page(string $daemon): void
         }
     }
 
-    window.setTimeout(poll, 1200);
+    fetch(ajaxUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: body.toString(),
+        credentials: 'same-origin'
+    })
+        .then(async (response) => {
+            const data = await response.json().catch(() => null);
+            if (!response.ok || !data || !data.ok) {
+                throw new Error((data && data.redirect) ? data.redirect : (statusUrl + '?msg=start_failed&ok=0'));
+            }
+            window.setTimeout(poll, 800);
+        })
+        .catch((error) => {
+            const redirectUrl = error && error.message ? error.message : (statusUrl + '?msg=start_failed&ok=0');
+            fail(redirectUrl);
+        });
 })();
 </script>
 <?= render_app_footer() ?>
@@ -177,10 +195,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (is_distress_auto_start($daemon)) {
-            if (!reset_start_task_state($daemon) || !spawn_distress_start_worker()) {
-                header('Location: ' . url_with_lang('/status.php?msg=start_failed&ok=0'));
-                exit;
-            }
             render_distress_start_progress_page($daemon);
             exit;
         }
