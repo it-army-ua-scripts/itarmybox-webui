@@ -181,16 +181,25 @@ function dispatchRootHelperAction(string $action, array $request, array $modules
             return setWifiApName($request['ssid'] ?? null);
         case 'distress_autotune_get':
             return getDistressAutotuneStatus();
+        case 'distress_config_get':
+            return getDistressConfigStatus();
         case 'distress_autotune_set':
             return setDistressAutotuneMode($request['enabled'] ?? null, $request['concurrency'] ?? null);
         case 'distress_upload_cap_measure':
             return measureDistressUploadCapManually();
         case 'distress_settings_set':
             $execStart = $request['execStart'] ?? null;
-            if (!is_string($execStart) || trim($execStart) === '') {
+            $params = $request['params'] ?? null;
+            if (!is_array($params) && (!is_string($execStart) || trim($execStart) === '')) {
                 fail('invalid_execstart');
             }
-            return saveDistressSettings(trim($execStart), $request['enabled'] ?? null, $request['concurrency'] ?? null);
+            return saveDistressSettings(
+                is_string($execStart) ? trim($execStart) : null,
+                $request['enabled'] ?? null,
+                $request['concurrency'] ?? null,
+                is_array($params) ? $params : null,
+                $request['manualConcurrency'] ?? null
+            );
         case 'distress_autotune_tick':
             return distressAutotuneTick($request['loadAverage'] ?? null, $request['ramFreePercent'] ?? null);
         case 'distress_autotune_safety_tick':

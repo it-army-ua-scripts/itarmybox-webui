@@ -254,6 +254,7 @@ function measureDistressCloudflareUploadCap(): ?float
 }
 
 require_once __DIR__ . '/../root_helper/distress_autotune.php';
+require_once __DIR__ . '/../root_helper/webui.php';
 
 function harness_reset_runtime(): void
 {
@@ -281,6 +282,8 @@ function harness_reset_runtime(): void
     @unlink(DISTRESS_AUTOTUNE_STATE_FILE);
     @unlink(DISTRESS_AUTOTUNE_STATE_FILE . '.tmp');
     @unlink(DISTRESS_AUTOTUNE_BPS_STATE_FILE);
+    @unlink(DISTRESS_CONFIG_STATE_FILE);
+    @unlink(DISTRESS_CONFIG_STATE_FILE . '.tmp');
     @unlink(DISTRESS_AUTOTUNE_DEBUG_LOG_FILE);
 }
 
@@ -391,6 +394,67 @@ function harness_test_auto_settings_save_requires_all_timers(): void
     $result = saveDistressSettings('ExecStart=/usr/bin/distress --concurrency 2048', true, 2048);
     harness_assert(($result['ok'] ?? false) === false, 'auto settings save should fail when not all timers are available');
     harness_assert(($result['error'] ?? '') === 'distress_autotune_timer_install_failed', 'auto settings save should report timer install failure');
+}
+
+function harness_test_structured_save_persists_distress_config_and_quotes(): void
+{
+    harness_reset_runtime();
+    $GLOBALS['distressHarness']['serviceExecStart'] = 'ExecStart=/usr/bin/distress --source adss --concurrency 2048 --proxies-path "/tmp/old proxies.txt"';
+
+    $result = saveDistressSettings(null, false, 4096, [
+        'use-my-ip' => '12',
+        'use-tor' => '4',
+        'enable-icmp-flood' => '1',
+        'enable-packet-flood' => '',
+        'disable-udp-flood' => '',
+        'udp-packet-size' => '1200',
+        'direct-udp-mixed-flood-packets-per-conn' => '7',
+        'proxies-path' => '/tmp/new proxies.txt',
+    ], 4096);
+
+    harness_assert(($result['ok'] ?? false) === true, 'structured distress save should succeed');
+    $config = readDistressConfig();
+    harness_assert(($config['mode'] ?? '') === 'manual', 'structured save should persist manual mode');
+    harness_assert((int)($config['manualConcurrency'] ?? 0) === 4096, 'structured save should persist manual concurrency');
+    harness_assert((string)($config['params']['proxies-path'] ?? '') === '/tmp/new proxies.txt', 'structured save should persist proxies path in canonical config');
+
+    $components = parseExecStartComponents((string)$GLOBALS['distressHarness']['serviceExecStart']);
+    $options = is_array($components['options'] ?? null) ? $components['options'] : [];
+    harness_assert((string)($options['proxies-path'] ?? '') === '/tmp/new proxies.txt', 'rendered ExecStart should preserve quoted proxies path');
+    harness_assert((string)($options['concurrency'] ?? '') === '4096', 'rendered ExecStart should use effective concurrency');
+}
+
+function harness_test_auto_mode_state_writes_canonical_config(): void
+{
+    harness_reset_runtime();
+    $result = setDistressAutotuneMode(true, 2048);
+
+    harness_assert(($result['ok'] ?? false) === true, 'auto mode should still enable successfully');
+    $config = readDistressConfig();
+    harness_assert(($config['mode'] ?? '') === 'auto', 'auto mode should be persisted in canonical config');
+    harness_assert((int)($config['manualConcurrency'] ?? 0) === 2048, 'auto mode should preserve manual concurrency fallback');
+}
+
+function harness_test_reset_distress_defaults_writes_canonical_manual_defaults(): void
+{
+    harness_reset_runtime();
+    $GLOBALS['distressHarness']['serviceExecStart'] = 'ExecStart=/usr/bin/distress --source adss --concurrency 2048 --use-tor 3 --proxies-path "/tmp/custom proxies.txt"';
+    writeDistressAutotuneState([
+        'enabled' => true,
+        'desiredConcurrency' => 2048,
+    ]);
+
+    harness_assert(rootHelperResetDistressDefaults() === true, 'distress reset should succeed');
+    $config = readDistressConfig();
+    harness_assert(($config['mode'] ?? '') === 'manual', 'reset should return distress config to manual mode');
+    harness_assert((int)($config['manualConcurrency'] ?? 0) === DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY, 'reset should restore default manual concurrency');
+    harness_assert((string)($config['params']['use-tor'] ?? '') === '', 'reset should clear use-tor');
+    harness_assert((string)($config['params']['proxies-path'] ?? '') === '', 'reset should clear proxies path');
+
+    $components = parseExecStartComponents((string)$GLOBALS['distressHarness']['serviceExecStart']);
+    $options = is_array($components['options'] ?? null) ? $components['options'] : [];
+    harness_assert((string)($options['concurrency'] ?? '') === (string)DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY, 'reset should rewrite ExecStart with default manual concurrency');
+    harness_assert(!array_key_exists('proxies-path', $options), 'reset should remove proxies path from ExecStart');
 }
 
 function harness_test_auto_mode_requires_timer(): void
@@ -985,6 +1049,9 @@ $tests = [
     'auto_mode_requires_timer' => 'harness_test_auto_mode_requires_timer',
     'manual_settings_save_ignores_timer_disable_failure' => 'harness_test_manual_settings_save_ignores_timer_disable_failure',
     'auto_settings_save_requires_all_timers' => 'harness_test_auto_settings_save_requires_all_timers',
+    'structured_save_persists_distress_config_and_quotes' => 'harness_test_structured_save_persists_distress_config_and_quotes',
+    'auto_mode_state_writes_canonical_config' => 'harness_test_auto_mode_state_writes_canonical_config',
+    'reset_distress_defaults_writes_canonical_manual_defaults' => 'harness_test_reset_distress_defaults_writes_canonical_manual_defaults',
     'tick_manual_skips_without_writing_state' => 'harness_test_tick_manual_skips_without_writing_state',
     'tick_inactive_skips_without_writing_state' => 'harness_test_tick_inactive_skips_without_writing_state',
     'tick_inactive_does_not_require_lock' => 'harness_test_tick_inactive_does_not_require_lock',

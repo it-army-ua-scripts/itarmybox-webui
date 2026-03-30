@@ -8,6 +8,33 @@ const DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY = 2048;
 const DISTRESS_MANUAL_DEFAULT_CONCURRENCY = 4096;
 const DISTRESS_MAX_CONCURRENCY = 30720;
 
+function getDistressSavedConfig(): array
+{
+    $config = require __DIR__ . '/../config/config.php';
+    $response = root_helper_request([
+        'action' => 'distress_config_get',
+        'modules' => $config['daemonNames'],
+    ]);
+
+    if (($response['ok'] ?? false) !== true) {
+        return [
+            'ok' => false,
+            'mode' => 'manual',
+            'manualConcurrency' => DISTRESS_MANUAL_DEFAULT_CONCURRENCY,
+            'params' => [],
+        ];
+    }
+
+    return [
+        'ok' => true,
+        'mode' => isset($response['mode']) && is_string($response['mode']) ? $response['mode'] : 'manual',
+        'manualConcurrency' => isset($response['manualConcurrency']) && is_numeric($response['manualConcurrency'])
+            ? (int)$response['manualConcurrency']
+            : DISTRESS_MANUAL_DEFAULT_CONCURRENCY,
+        'params' => isset($response['params']) && is_array($response['params']) ? $response['params'] : [],
+    ];
+}
+
 function normalizeDistressPostParams(array $params): array
 {
     $useMyIp = (int)($params['use-my-ip'] ?? 0);
@@ -31,6 +58,10 @@ function normalizeDistressPostParams(array $params): array
 function normalizeAndValidateDistressPostParams(array $params): array
 {
     $normalized = $params;
+    $savedConfig = getDistressSavedConfig();
+    $savedManualConcurrency = ($savedConfig['ok'] ?? false) === true
+        ? (int)($savedConfig['manualConcurrency'] ?? DISTRESS_MANUAL_DEFAULT_CONCURRENCY)
+        : DISTRESS_MANUAL_DEFAULT_CONCURRENCY;
 
     $concurrencyModeRaw = strtolower(trim((string)($params['distress-concurrency-mode'] ?? 'manual')));
     if (!in_array($concurrencyModeRaw, ['auto', 'manual'], true)) {
@@ -66,31 +97,25 @@ function normalizeAndValidateDistressPostParams(array $params): array
     }
 
     $concurrencyRaw = (string)($params['concurrency'] ?? '');
-    if ($concurrencyRaw === '') {
-        $autotuneSettings = getDistressAutotuneSettings();
-        if ($concurrencyModeRaw === 'auto') {
-            $normalized['concurrency'] = (string)(
-                (($autotuneSettings['ok'] ?? false) === true && ($autotuneSettings['enabled'] ?? false) === true)
-                    ? (int)($autotuneSettings['currentConcurrency'] ?? DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY)
-                    : DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY
-            );
-        } else {
-            $normalized['concurrency'] = (string)(
-                (($autotuneSettings['ok'] ?? false) === true)
-                    ? (int)($autotuneSettings['configConcurrency'] ?? DISTRESS_MANUAL_DEFAULT_CONCURRENCY)
-                    : DISTRESS_MANUAL_DEFAULT_CONCURRENCY
-            );
-        }
-    } else {
+    $parsedConcurrency = null;
+    if ($concurrencyRaw !== '') {
         if ($concurrencyRaw !== trim($concurrencyRaw) || preg_match('/^\d+$/', $concurrencyRaw) !== 1) {
             return ['ok' => false, 'error' => 'invalid_concurrency'];
         }
-        $concurrency = (int)$concurrencyRaw;
-        if ($concurrency < 64 || $concurrency > DISTRESS_MAX_CONCURRENCY) {
+        $parsedConcurrency = (int)$concurrencyRaw;
+        if ($parsedConcurrency < 64 || $parsedConcurrency > DISTRESS_MAX_CONCURRENCY) {
             return ['ok' => false, 'error' => 'invalid_concurrency'];
         }
-        $normalized['concurrency'] = (string)$concurrency;
     }
+    $manualConcurrency = $parsedConcurrency ?? $savedManualConcurrency;
+    $autotuneSettings = getDistressAutotuneSettings();
+    $effectiveConcurrency = $manualConcurrency;
+    if ($concurrencyModeRaw === 'auto') {
+        $effectiveConcurrency = (($autotuneSettings['ok'] ?? false) === true && ($autotuneSettings['enabled'] ?? false) === true)
+            ? (int)($autotuneSettings['currentConcurrency'] ?? DISTRESS_AUTOTUNE_INITIAL_CONCURRENCY)
+            : $manualConcurrency;
+    }
+    $normalized['concurrency'] = (string)$manualConcurrency;
 
     foreach ([
         'enable-icmp-flood',
@@ -111,7 +136,8 @@ function normalizeAndValidateDistressPostParams(array $params): array
         'ok' => true,
         'params' => $normalized,
         'autotuneEnabled' => ($concurrencyModeRaw === 'auto'),
-        'concurrencyValue' => (int)$normalized['concurrency'],
+        'manualConcurrencyValue' => $manualConcurrency,
+        'effectiveConcurrencyValue' => $effectiveConcurrency,
     ];
 }
 
@@ -236,15 +262,16 @@ function saveDistressAutotuneSettings(bool $enabled, int $concurrency): bool
     return ($response['ok'] ?? false) === true;
 }
 
-function saveDistressSettings(string $execStartLine, bool $enabled, int $concurrency): array
+function saveDistressSettings(array $params, bool $enabled, int $effectiveConcurrency, int $manualConcurrency): array
 {
     $config = require __DIR__ . '/../config/config.php';
     return root_helper_request([
         'action' => 'distress_settings_set',
         'modules' => $config['daemonNames'],
-        'execStart' => $execStartLine,
+        'params' => $params,
         'enabled' => $enabled,
-        'concurrency' => $concurrency,
+        'concurrency' => $effectiveConcurrency,
+        'manualConcurrency' => $manualConcurrency,
     ]);
 }
 

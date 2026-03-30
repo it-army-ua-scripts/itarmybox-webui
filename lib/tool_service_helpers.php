@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/root_helper_client.php';
+require_once __DIR__ . '/execstart_helpers.php';
 
 function getServiceLogs(string $serviceName): string
 {
@@ -34,7 +35,6 @@ function getConfigStringFromServiceFile(string $serviceName): string
 
 function getCurrentAdjustableParams(string $configString, array $adjustableParams, string $daemonName): array
 {
-    $configAsArray = str_getcsv($configString, ' ');
     $currentAdjustableParams = [];
     $aliases = [
         'ifaces' => ['bind'],
@@ -46,21 +46,8 @@ function getCurrentAdjustableParams(string $configString, array $adjustableParam
         'distress' => ['enable-icmp-flood', 'enable-packet-flood', 'disable-udp-flood'],
     ];
     $flagOnly = array_flip($flagOnlyByDaemon[$daemonName] ?? []);
-    $options = [];
-    for ($i = 1; $i < count($configAsArray); $i++) {
-        $token = $configAsArray[$i];
-        if (!str_starts_with($token, '--')) {
-            continue;
-        }
-        $key = substr($token, 2);
-        $next = $configAsArray[$i + 1] ?? null;
-        if ($next !== null && !str_starts_with($next, '--')) {
-            $options[$key] = $next;
-            $i++;
-        } else {
-            $options[$key] = true;
-        }
-    }
+    $components = parseExecStartComponents($configString);
+    $options = is_array($components['options'] ?? null) ? $components['options'] : [];
 
     foreach ($adjustableParams as $adjustableParam) {
         $candidateKeys = array_merge([$adjustableParam], $aliases[$adjustableParam] ?? []);
@@ -81,7 +68,6 @@ function getCurrentAdjustableParams(string $configString, array $adjustableParam
 
 function updateServiceConfigParams(string $configString, array $updatedParams, string $daemonName): array
 {
-    $configAsArray = str_getcsv($configString, ' ');
     $aliases = [
         'ifaces' => ['bind'],
         'bind' => ['ifaces'],
@@ -91,60 +77,20 @@ function updateServiceConfigParams(string $configString, array $updatedParams, s
     $flagOnlyByDaemon = [
         'distress' => ['enable-icmp-flood', 'enable-packet-flood', 'disable-udp-flood'],
     ];
-    $flagOnly = array_flip($flagOnlyByDaemon[$daemonName] ?? []);
-
-    $baseTokens = [];
-    $options = [];
-    foreach ($configAsArray as $idx => $token) {
-        if ($idx === 0) {
-            $baseTokens[] = $token;
-            continue;
-        }
-        if (!str_starts_with($token, '--')) {
-            continue;
-        }
-        $key = substr($token, 2);
-        $next = $configAsArray[$idx + 1] ?? null;
-        if ($next !== null && !str_starts_with($next, '--')) {
-            $options[$key] = $next;
-        } else {
-            $options[$key] = true;
-        }
-    }
-
+    $filteredParams = $updatedParams;
     if ($daemonName === 'distress') {
-        unset($options['distress-concurrency-mode']);
+        unset($filteredParams['distress-concurrency-mode']);
     }
 
-    foreach ($updatedParams as $updatedParamKey => $updatedParam) {
-        if ($updatedParamKey === 'distress-concurrency-mode') {
-            continue;
-        }
-        $updatedParam = trim((string)$updatedParam);
-        $allKeys = array_merge([$updatedParamKey], $aliases[$updatedParamKey] ?? []);
-        foreach ($allKeys as $optionKey) {
-            unset($options[$optionKey]);
-        }
+    $updatedExecStart = updateExecStartOptionsString(
+        $configString,
+        $filteredParams,
+        $aliases,
+        $flagOnlyByDaemon[$daemonName] ?? [],
+        in_array($daemonName, ['mhddos', 'distress'], true) ? ['source' => 'itarmybox'] : []
+    );
 
-        $isFlagOnly = isset($flagOnly[$updatedParamKey]);
-        if ($updatedParam === '' || $updatedParam === '0') {
-            continue;
-        }
-        $options[$updatedParamKey] = $isFlagOnly ? true : $updatedParam;
-    }
-
-    if (in_array($daemonName, ['mhddos', 'distress'], true)) {
-        $options['source'] = 'itarmybox';
-    }
-
-    $out = $baseTokens;
-    foreach ($options as $key => $value) {
-        $out[] = '--' . $key;
-        if ($value !== true) {
-            $out[] = $value;
-        }
-    }
-    return $out;
+    return tokenizeExecStartString($updatedExecStart ?? $configString);
 }
 
 function updateServiceFile(string $serviceName, array $updatedConfigParams): bool

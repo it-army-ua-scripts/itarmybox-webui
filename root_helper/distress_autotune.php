@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../lib/execstart_helpers.php';
+
 const DISTRESS_AUTOTUNE_TIMER_NAME = 'itarmybox-distress-autotune.timer';
 const DISTRESS_AUTOTUNE_SAFETY_TIMER_NAME = 'itarmybox-distress-autotune-safety.timer';
 const DISTRESS_BPS_COLLECTOR_TIMER_NAME = 'itarmybox-distress-bps-collector.timer';
@@ -42,6 +44,7 @@ const DISTRESS_AUTOTUNE_MIN_FREE_RAM_PERCENT = 10.0;
 const DISTRESS_AUTOTUNE_RAM_RECOVERY_PERCENT = 15.0;
 const DISTRESS_AUTOTUNE_COOLDOWN_SECONDS = 360;
 const DISTRESS_AUTOTUNE_BPS_STATE_FILE = ROOT_HELPER_STATE_DIR . '/distress-bps.json';
+const DISTRESS_CONFIG_STATE_FILE = ROOT_HELPER_STATE_DIR . '/distress-config.json';
 const DISTRESS_AUTOTUNE_BPS_BEST_IMPROVEMENT_RATIO = 1.01;
 const DISTRESS_AUTOTUNE_BPS_DEAD_ZONE_RATIO = 0.10;
 const DISTRESS_AUTOTUNE_SPEED_TOLERANCE_RATIO = 0.10;
@@ -52,6 +55,203 @@ const DISTRESS_AUTOTUNE_CONFIRMED_BEST_WINDOWS_REQUIRED = 4;
 const DISTRESS_AUTOTUNE_SEARCH_PHASE_COARSE = 'coarse';
 const DISTRESS_AUTOTUNE_SEARCH_PHASE_REFINE = 'refine';
 const DISTRESS_AUTOTUNE_SEARCH_PHASE_HOLD = 'hold';
+
+function distressConfigManagedKeys(): array
+{
+    return [
+        'use-my-ip',
+        'use-tor',
+        'concurrency',
+        'enable-icmp-flood',
+        'enable-packet-flood',
+        'disable-udp-flood',
+        'udp-packet-size',
+        'direct-udp-mixed-flood-packets-per-conn',
+        'proxies-path',
+    ];
+}
+
+function distressConfigFlagOnlyKeys(): array
+{
+    return [
+        'enable-icmp-flood',
+        'enable-packet-flood',
+        'disable-udp-flood',
+    ];
+}
+
+function distressConfigAliases(): array
+{
+    return [
+        'disable-udp-flood' => ['direct-udp-failover'],
+        'direct-udp-failover' => ['disable-udp-flood'],
+    ];
+}
+
+function distressConfigDefaultParams(): array
+{
+    return [
+        'use-my-ip' => '',
+        'use-tor' => '',
+        'enable-icmp-flood' => '',
+        'enable-packet-flood' => '',
+        'disable-udp-flood' => '',
+        'udp-packet-size' => '',
+        'direct-udp-mixed-flood-packets-per-conn' => '',
+        'proxies-path' => '',
+    ];
+}
+
+function distressConfigDefaults(): array
+{
+    return [
+        'mode' => 'manual',
+        'manualConcurrency' => DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY,
+        'params' => distressConfigDefaultParams(),
+    ];
+}
+
+function normalizeDistressConfigMode($value): string
+{
+    return strtolower(trim((string)$value)) === 'auto' ? 'auto' : 'manual';
+}
+
+function extractDistressParamsFromExecStart(string $execStartLine): array
+{
+    $defaults = distressConfigDefaultParams();
+    $components = parseExecStartComponents($execStartLine);
+    $options = is_array($components['options'] ?? null) ? $components['options'] : [];
+    $aliases = distressConfigAliases();
+    $flagOnly = array_flip(distressConfigFlagOnlyKeys());
+
+    $params = $defaults;
+    foreach (array_keys($defaults) as $key) {
+        foreach (array_merge([$key], $aliases[$key] ?? []) as $candidateKey) {
+            if (!array_key_exists($candidateKey, $options)) {
+                continue;
+            }
+
+            $value = $options[$candidateKey];
+            $params[$key] = isset($flagOnly[$key])
+                ? (($value === true) ? '1' : (string)$value)
+                : (($value === true) ? '' : (string)$value);
+            break;
+        }
+    }
+
+    return $params;
+}
+
+function buildDistressConfigFromExecStart(string $execStartLine, bool $enabled): array
+{
+    $params = extractDistressParamsFromExecStart($execStartLine);
+    $manualConcurrency = normalizeDistressConcurrency($params['concurrency'] ?? null)
+        ?? DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY;
+    unset($params['concurrency']);
+
+    return [
+        'mode' => $enabled ? 'auto' : 'manual',
+        'manualConcurrency' => $manualConcurrency,
+        'params' => distressConfigDefaultParams() + $params,
+    ];
+}
+
+function normalizeDistressConfig($rawConfig, ?array $fallback = null): array
+{
+    $defaults = is_array($fallback) ? $fallback : distressConfigDefaults();
+    $raw = is_array($rawConfig) ? $rawConfig : [];
+    $params = distressConfigDefaultParams();
+    $rawParams = is_array($raw['params'] ?? null) ? $raw['params'] : [];
+
+    foreach (array_keys($params) as $key) {
+        $value = $rawParams[$key] ?? ($defaults['params'][$key] ?? '');
+        $params[$key] = trim((string)$value);
+    }
+
+    return [
+        'mode' => normalizeDistressConfigMode($raw['mode'] ?? $defaults['mode'] ?? 'manual'),
+        'manualConcurrency' => normalizeDistressConcurrency($raw['manualConcurrency'] ?? null)
+            ?? normalizeDistressConcurrency($defaults['manualConcurrency'] ?? null)
+            ?? DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY,
+        'params' => $params,
+    ];
+}
+
+function writeDistressConfig(array $config): bool
+{
+    if (!ensureWebuiVarLayout() || !ensureParentDirectoryExists(DISTRESS_CONFIG_STATE_FILE)) {
+        return false;
+    }
+
+    $normalized = normalizeDistressConfig($config);
+    $payload = json_encode($normalized, JSON_UNESCAPED_SLASHES);
+    if (!is_string($payload)) {
+        return false;
+    }
+
+    $tmpPath = DISTRESS_CONFIG_STATE_FILE . '.tmp';
+    if (@file_put_contents($tmpPath, $payload) === false) {
+        return false;
+    }
+
+    if (!@rename($tmpPath, DISTRESS_CONFIG_STATE_FILE)) {
+        @unlink($tmpPath);
+        return false;
+    }
+
+    return true;
+}
+
+function readDistressConfig(): array
+{
+    ensureWebuiVarLayout();
+
+    $autotuneState = readDistressAutotuneState();
+    $enabled = ($autotuneState['enabled'] ?? false) === true;
+    $currentExecStart = readServiceExecStart('distress');
+    $fallback = is_string($currentExecStart) && $currentExecStart !== ''
+        ? buildDistressConfigFromExecStart($currentExecStart, $enabled)
+        : distressConfigDefaults();
+
+    $raw = @file_get_contents(DISTRESS_CONFIG_STATE_FILE);
+    if (!is_string($raw) || trim($raw) === '') {
+        return $fallback;
+    }
+
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        return $fallback;
+    }
+
+    return normalizeDistressConfig($data, $fallback);
+}
+
+function getDistressConfigStatus(): array
+{
+    $config = readDistressConfig();
+
+    return [
+        'ok' => true,
+        'mode' => $config['mode'],
+        'manualConcurrency' => $config['manualConcurrency'],
+        'params' => $config['params'],
+    ];
+}
+
+function buildDistressExecStartFromConfig(string $currentExecStart, array $config, int $effectiveConcurrency): ?string
+{
+    $normalizedConfig = normalizeDistressConfig($config);
+    $managedParams = $normalizedConfig['params'];
+    $managedParams['concurrency'] = (string)$effectiveConcurrency;
+
+    return updateExecStartOptionsString(
+        $currentExecStart,
+        $managedParams,
+        distressConfigAliases(),
+        distressConfigFlagOnlyKeys(),
+        ['source' => 'itarmybox']
+    );
+}
 
 function distressAutotuneDebugLog(string $event, array $context = []): void
 {
@@ -361,8 +561,9 @@ function setDistressConfigConcurrency(int $concurrency): bool
         return false;
     }
 
-    $updatedExecStart = replaceExecStartOptionValue($execStart, 'concurrency', (string)$concurrency);
-    if ($updatedExecStart === '') {
+    $config = readDistressConfig();
+    $updatedExecStart = buildDistressExecStartFromConfig($execStart, $config, $concurrency);
+    if (!is_string($updatedExecStart) || trim($updatedExecStart) === '') {
         return false;
     }
 
@@ -1038,10 +1239,30 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
         return distressAutotuneError('invalid_concurrency');
     }
 
+    $previousConfig = readDistressConfig();
     $previousConfigConcurrency = getDistressConfigConcurrency();
     $previousState = readDistressAutotuneState();
-    $configChanged = $previousConfigConcurrency !== $concurrency;
-    if ($configChanged && !setDistressConfigConcurrency($concurrency)) {
+    $currentExecStart = readServiceExecStart('distress');
+    if (!is_string($currentExecStart) || $currentExecStart === '') {
+        releaseDistressAutotuneLock($lockHandle);
+        return distressAutotuneError('execstart_read_failed');
+    }
+
+    $nextConfig = $previousConfig;
+    $nextConfig['mode'] = $enabled ? 'auto' : 'manual';
+    $nextConfig['manualConcurrency'] = $concurrency;
+    $nextExecStart = buildDistressExecStartFromConfig($currentExecStart, $nextConfig, $concurrency);
+    if (!is_string($nextExecStart) || trim($nextExecStart) === '') {
+        releaseDistressAutotuneLock($lockHandle);
+        return distressAutotuneError('distress_concurrency_write_failed');
+    }
+    $configChanged = $currentExecStart !== $nextExecStart;
+    if (!writeDistressConfig($nextConfig)) {
+        releaseDistressAutotuneLock($lockHandle);
+        return distressAutotuneError('distress_autotune_state_write_failed');
+    }
+    if ($configChanged && !updateServiceExecStart('distress', $nextExecStart)) {
+        writeDistressConfig($previousConfig);
         releaseDistressAutotuneLock($lockHandle);
         return distressAutotuneError('distress_concurrency_write_failed');
     }
@@ -1049,7 +1270,8 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
     $state = $previousState;
     applyDistressAutotuneModeState($state, $enabled, $concurrency, true);
     if (!writeDistressAutotuneState($state)) {
-        $rollbackConfigOk = !$configChanged || setDistressConfigConcurrency($previousConfigConcurrency);
+        $rollbackConfigOk = writeDistressConfig($previousConfig)
+            && (!$configChanged || updateServiceExecStart('distress', $currentExecStart));
         releaseDistressAutotuneLock($lockHandle);
         return distressAutotuneError('distress_autotune_state_write_failed', [
             'rollbackConfigOk' => $rollbackConfigOk,
@@ -1066,7 +1288,8 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
             releaseDistressAutotuneLock($lockHandle);
             return getDistressAutotuneStatus();
         }
-        $rollbackConfigOk = !$configChanged || setDistressConfigConcurrency($previousConfigConcurrency);
+        $rollbackConfigOk = writeDistressConfig($previousConfig)
+            && (!$configChanged || updateServiceExecStart('distress', $currentExecStart));
         writeDistressAutotuneState($previousState);
         releaseDistressAutotuneLock($lockHandle);
         return distressAutotuneError('distress_autotune_timer_state_sync_failed', [
@@ -1078,15 +1301,11 @@ function setDistressAutotuneMode($enabledValue, $concurrencyValue): array
     return getDistressAutotuneStatus();
 }
 
-function saveDistressSettings(string $execStartLine, $enabledValue, $concurrencyValue): array
+function saveDistressSettings($execStartLine, $enabledValue, $concurrencyValue, ?array $params = null, $manualConcurrencyValue = null): array
 {
     $enabled = normalizeDistressAutotuneEnabled($enabledValue);
     if ($enabled && !ensureDistressAutotuneTimersInstalled()) {
         return distressAutotuneError('distress_autotune_timer_install_failed');
-    }
-
-    if (!str_starts_with($execStartLine, 'ExecStart=')) {
-        return distressAutotuneError('invalid_execstart');
     }
 
     $concurrency = normalizeDistressConcurrency($concurrencyValue);
@@ -1105,9 +1324,40 @@ function saveDistressSettings(string $execStartLine, $enabledValue, $concurrency
         return distressAutotuneError('execstart_read_failed');
     }
 
+    $previousConfig = readDistressConfig();
+    $nextConfig = $previousConfig;
+    if (is_array($params)) {
+        $nextConfig['mode'] = $enabled ? 'auto' : 'manual';
+        $nextConfig['manualConcurrency'] = normalizeDistressConcurrency($manualConcurrencyValue)
+            ?? $previousConfig['manualConcurrency']
+            ?? DISTRESS_AUTOTUNE_MANUAL_DEFAULT_CONCURRENCY;
+        $normalizedParams = distressConfigDefaultParams();
+        foreach (array_keys($normalizedParams) as $key) {
+            $normalizedParams[$key] = trim((string)($params[$key] ?? ''));
+        }
+        $nextConfig['params'] = $normalizedParams;
+        $nextExecStart = buildDistressExecStartFromConfig($previousExecStart, $nextConfig, $concurrency);
+    } else {
+        if (!is_string($execStartLine) || !str_starts_with($execStartLine, 'ExecStart=')) {
+            releaseDistressAutotuneLock($lockHandle);
+            return distressAutotuneError('invalid_execstart');
+        }
+        $nextExecStart = $execStartLine;
+        $nextConfig = buildDistressConfigFromExecStart($nextExecStart, $enabled);
+    }
+    if (!is_string($nextExecStart) || trim($nextExecStart) === '') {
+        releaseDistressAutotuneLock($lockHandle);
+        return distressAutotuneError('distress_concurrency_write_failed');
+    }
+
     $previousState = readDistressAutotuneState();
-    $configChanged = $previousExecStart !== $execStartLine;
-    if ($configChanged && !updateServiceExecStart('distress', $execStartLine)) {
+    $configChanged = $previousExecStart !== $nextExecStart;
+    if (!writeDistressConfig($nextConfig)) {
+        releaseDistressAutotuneLock($lockHandle);
+        return distressAutotuneError('distress_autotune_state_write_failed');
+    }
+    if ($configChanged && !updateServiceExecStart('distress', $nextExecStart)) {
+        writeDistressConfig($previousConfig);
         releaseDistressAutotuneLock($lockHandle);
         return distressAutotuneError('distress_concurrency_write_failed');
     }
@@ -1115,7 +1365,8 @@ function saveDistressSettings(string $execStartLine, $enabledValue, $concurrency
     $state = $previousState;
     applyDistressAutotuneModeState($state, $enabled, $concurrency);
     if (!writeDistressAutotuneState($state)) {
-        $rollbackConfigOk = !$configChanged || updateServiceExecStart('distress', $previousExecStart);
+        $rollbackConfigOk = writeDistressConfig($previousConfig)
+            && (!$configChanged || updateServiceExecStart('distress', $previousExecStart));
         releaseDistressAutotuneLock($lockHandle);
         return distressAutotuneError('distress_autotune_state_write_failed', [
             'rollbackConfigOk' => $rollbackConfigOk,
@@ -1131,7 +1382,8 @@ function saveDistressSettings(string $execStartLine, $enabledValue, $concurrency
             releaseDistressAutotuneLock($lockHandle);
             return getDistressAutotuneStatus();
         }
-        $rollbackConfigOk = !$configChanged || updateServiceExecStart('distress', $previousExecStart);
+        $rollbackConfigOk = writeDistressConfig($previousConfig)
+            && (!$configChanged || updateServiceExecStart('distress', $previousExecStart));
         writeDistressAutotuneState($previousState);
         releaseDistressAutotuneLock($lockHandle);
         return distressAutotuneError('distress_autotune_timer_state_sync_failed', [

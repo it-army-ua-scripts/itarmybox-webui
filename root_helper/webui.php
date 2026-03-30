@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../lib/version.php';
+require_once __DIR__ . '/../lib/execstart_helpers.php';
 
 const ROOT_HELPER_WEBUI_DEFAULT_TRAFFIC_PERCENT = 31;
 const ROOT_HELPER_WEBUI_DEFAULT_TIMEZONE = 'Europe/Kyiv';
@@ -172,11 +173,6 @@ function rootHelperResetFailure(string $error, array &$log, array $rollbackStack
 
 function rootHelperExecStartUpdateOptions(string $execStartLine, array $updatedParams, string $daemonName): ?string
 {
-    $configAsArray = str_getcsv($execStartLine, ' ');
-    if (!is_array($configAsArray) || $configAsArray === []) {
-        return null;
-    }
-
     $aliases = [
         'ifaces' => ['bind'],
         'bind' => ['ifaces'],
@@ -186,63 +182,18 @@ function rootHelperExecStartUpdateOptions(string $execStartLine, array $updatedP
     $flagOnlyByDaemon = [
         'distress' => ['enable-icmp-flood', 'enable-packet-flood', 'disable-udp-flood'],
     ];
-    $flagOnly = array_flip($flagOnlyByDaemon[$daemonName] ?? []);
-
-    $baseTokens = [];
-    $options = [];
-    foreach ($configAsArray as $idx => $token) {
-        if ($idx === 0) {
-            $baseTokens[] = $token;
-            continue;
-        }
-        if (!is_string($token) || !str_starts_with($token, '--')) {
-            continue;
-        }
-        $key = substr($token, 2);
-        $next = $configAsArray[$idx + 1] ?? null;
-        if (is_string($next) && !str_starts_with($next, '--')) {
-            $options[$key] = $next;
-        } else {
-            $options[$key] = true;
-        }
-    }
-
+    $filteredParams = $updatedParams;
     if ($daemonName === 'distress') {
-        unset($options['distress-concurrency-mode']);
+        unset($filteredParams['distress-concurrency-mode']);
     }
 
-    foreach ($updatedParams as $updatedParamKey => $updatedParam) {
-        if ($updatedParamKey === 'distress-concurrency-mode') {
-            continue;
-        }
-
-        $updatedValue = trim((string)$updatedParam);
-        $allKeys = array_merge([$updatedParamKey], $aliases[$updatedParamKey] ?? []);
-        foreach ($allKeys as $optionKey) {
-            unset($options[$optionKey]);
-        }
-
-        $isFlagOnly = isset($flagOnly[$updatedParamKey]);
-        if ($updatedValue === '' || $updatedValue === '0') {
-            continue;
-        }
-
-        $options[$updatedParamKey] = $isFlagOnly ? true : $updatedValue;
-    }
-
-    if (in_array($daemonName, ['mhddos', 'distress'], true)) {
-        $options['source'] = 'itarmybox';
-    }
-
-    $out = $baseTokens;
-    foreach ($options as $key => $value) {
-        $out[] = '--' . $key;
-        if ($value !== true) {
-            $out[] = (string)$value;
-        }
-    }
-
-    return implode(' ', $out);
+    return updateExecStartOptionsString(
+        $execStartLine,
+        $filteredParams,
+        $aliases,
+        $flagOnlyByDaemon[$daemonName] ?? [],
+        in_array($daemonName, ['mhddos', 'distress'], true) ? ['source' => 'itarmybox'] : []
+    );
 }
 
 function rootHelperWriteServiceDefaults(string $module, array $params, string $daemonName): bool

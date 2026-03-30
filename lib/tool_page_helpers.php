@@ -111,14 +111,13 @@ function tool_handle_post(array $config, string $daemonName, array $post, bool $
                 $paramsToSave = (array)$mhddosValidation['params'];
             }
         }
-        $currentConfigString = getConfigStringFromServiceFile($daemonName);
-        if ($saveError === '' && $currentConfigString !== '') {
-            $updatedConfigParams = updateServiceConfigParams($currentConfigString, $paramsToSave, $daemonName);
-            if ($daemonName === 'distress') {
+        if ($daemonName === 'distress') {
+            if ($saveError === '') {
                 $saveResponse = saveDistressSettings(
-                    implode(' ', $updatedConfigParams),
+                    $paramsToSave,
                     (($distressValidation['autotuneEnabled'] ?? false) === true),
-                    (int)($distressValidation['concurrencyValue'] ?? 0)
+                    (int)($distressValidation['effectiveConcurrencyValue'] ?? 0),
+                    (int)($distressValidation['manualConcurrencyValue'] ?? 0)
                 );
                 $saveOk = (($saveResponse['ok'] ?? false) === true);
                 if (!$saveOk && $saveError === '') {
@@ -127,7 +126,11 @@ function tool_handle_post(array $config, string $daemonName, array $post, bool $
                         ? $saveResponseError
                         : 'settings_not_saved';
                 }
-            } else {
+            }
+        } else {
+            $currentConfigString = getConfigStringFromServiceFile($daemonName);
+            if ($saveError === '' && $currentConfigString !== '') {
+                $updatedConfigParams = updateServiceConfigParams($currentConfigString, $paramsToSave, $daemonName);
                 $saveOk = updateServiceFile($daemonName, $updatedConfigParams);
             }
         }
@@ -172,6 +175,15 @@ function tool_current_adjustable_params(array $config, string $daemonName): arra
 {
     if ($daemonName === 'x100') {
         return getX100ConfigValues();
+    }
+
+    if ($daemonName === 'distress') {
+        $savedConfig = getDistressSavedConfig();
+        if (($savedConfig['ok'] ?? false) === true) {
+            $params = is_array($savedConfig['params'] ?? null) ? $savedConfig['params'] : [];
+            $params['concurrency'] = (string)((int)($savedConfig['manualConcurrency'] ?? DISTRESS_MANUAL_DEFAULT_CONCURRENCY));
+            return $params;
+        }
     }
 
     return getCurrentAdjustableParams(

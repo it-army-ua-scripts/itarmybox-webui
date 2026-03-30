@@ -322,7 +322,8 @@ $distressLastTargetCountText = isset($distressAutotune['lastTargetCount']) && is
                 return;
             }
             const autoMode = concurrencyModeEl.value === "auto";
-            concurrencyEl.readOnly = autoMode;
+            concurrencyEl.readOnly = false;
+            concurrencyEl.disabled = autoMode;
             concurrencyEl.setAttribute("aria-disabled", autoMode ? "true" : "false");
             if (autotunePanelEl) {
                 autotunePanelEl.hidden = !autoMode;
