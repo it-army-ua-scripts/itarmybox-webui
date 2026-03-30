@@ -1602,6 +1602,10 @@ function readDistressBpsState(): array
         'updatedAt' => null,
         'cycleId' => null,
         'cycleStartedAt' => null,
+        'startedConcurrency' => null,
+        'runStartedAt' => null,
+        'runEndedAt' => null,
+        'scoreMethod' => null,
         'hasFreshSamples' => false,
     ];
 
@@ -1645,6 +1649,18 @@ function readDistressBpsState(): array
             : null,
         'cycleStartedAt' => isset($data['cycleStartedAt']) && is_numeric($data['cycleStartedAt'])
             ? (int)$data['cycleStartedAt']
+            : null,
+        'startedConcurrency' => isset($data['startedConcurrency']) && is_numeric($data['startedConcurrency'])
+            ? max(DISTRESS_AUTOTUNE_MIN_CONCURRENCY, (int)$data['startedConcurrency'])
+            : null,
+        'runStartedAt' => isset($data['runStartedAt']) && is_numeric($data['runStartedAt'])
+            ? (int)$data['runStartedAt']
+            : null,
+        'runEndedAt' => isset($data['runEndedAt']) && is_numeric($data['runEndedAt'])
+            ? (int)$data['runEndedAt']
+            : null,
+        'scoreMethod' => isset($data['scoreMethod']) && is_string($data['scoreMethod']) && $data['scoreMethod'] !== ''
+            ? $data['scoreMethod']
             : null,
         'hasFreshSamples' => ($data['hasFreshSamples'] ?? false) === true,
     ];

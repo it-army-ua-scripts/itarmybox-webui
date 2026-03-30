@@ -697,6 +697,71 @@ function harness_test_bps_is_capped_at_upper_speed_tolerance(): void
     harness_assert(abs((float)$normalized - 110.0) < 0.0001, 'BPS above the acceptable speed ceiling should be capped at speed plus tolerance');
 }
 
+function harness_test_bps_state_reads_run_metadata(): void
+{
+    harness_reset_runtime();
+    $now = time();
+    $payload = [
+        'movingAverageMbps' => 100.0,
+        'latestBpsMbps' => 102.0,
+        'latestSampleAt' => $now,
+        'latestTargetCount' => 120,
+        'sampleCount' => 4,
+        'staleAfterSeconds' => 900,
+        'minSamples' => 3,
+        'updatedAt' => $now,
+        'cycleId' => 'targets:120',
+        'cycleStartedAt' => $now - 180,
+        'startedConcurrency' => 4096,
+        'runStartedAt' => $now - 180,
+        'runEndedAt' => $now - 10,
+        'scoreMethod' => 'completed_run_core_average',
+        'hasFreshSamples' => true,
+    ];
+    harness_assert(@file_put_contents(DISTRESS_AUTOTUNE_BPS_STATE_FILE, json_encode($payload, JSON_UNESCAPED_SLASHES)) !== false, 'BPS state fixture should be written');
+
+    $state = readDistressBpsState();
+    harness_assert((int)($state['startedConcurrency'] ?? 0) === 4096, 'readDistressBpsState should expose startedConcurrency');
+    harness_assert((int)($state['runStartedAt'] ?? 0) === $payload['runStartedAt'], 'readDistressBpsState should expose runStartedAt');
+    harness_assert((int)($state['runEndedAt'] ?? 0) === $payload['runEndedAt'], 'readDistressBpsState should expose runEndedAt');
+    harness_assert(($state['scoreMethod'] ?? '') === 'completed_run_core_average', 'readDistressBpsState should expose scoreMethod');
+}
+
+function harness_test_tick_holds_on_bps_concurrency_mismatch(): void
+{
+    harness_reset_runtime();
+    $GLOBALS['distressHarness']['serviceActive'] = true;
+    writeDistressAutotuneState([
+        'enabled' => true,
+        'desiredConcurrency' => 2048,
+        'lastAdjustedAt' => 0,
+    ]);
+
+    $now = time();
+    $payload = [
+        'movingAverageMbps' => 100.0,
+        'latestBpsMbps' => 102.0,
+        'latestSampleAt' => $now,
+        'latestTargetCount' => 120,
+        'sampleCount' => 4,
+        'staleAfterSeconds' => 900,
+        'minSamples' => 3,
+        'updatedAt' => $now,
+        'cycleId' => 'targets:120',
+        'cycleStartedAt' => $now - 180,
+        'startedConcurrency' => 4096,
+        'runStartedAt' => $now - 180,
+        'runEndedAt' => $now - 10,
+        'scoreMethod' => 'completed_run_core_average',
+        'hasFreshSamples' => true,
+    ];
+    harness_assert(@file_put_contents(DISTRESS_AUTOTUNE_BPS_STATE_FILE, json_encode($payload, JSON_UNESCAPED_SLASHES)) !== false, 'BPS state fixture should be written');
+
+    $result = distressAutotuneTick(1.5, 44.0);
+    harness_assert(($result['ok'] ?? false) === true, 'tick should succeed when BPS comes from a mismatched concurrency');
+    harness_assert(($result['reason'] ?? '') === 'bps_concurrency_mismatch', 'tick should refuse BPS from a different concurrency');
+}
+
 function harness_test_probe_score_uses_recent_window_median(): void
 {
     harness_reset_runtime();
@@ -941,6 +1006,8 @@ $tests = [
     'bps_is_normalized_to_speed_within_tolerance_below_speed' => 'harness_test_bps_is_normalized_to_speed_within_tolerance_below_speed',
     'bps_is_normalized_to_speed_within_tolerance_above_speed' => 'harness_test_bps_is_normalized_to_speed_within_tolerance_above_speed',
     'bps_is_capped_at_upper_speed_tolerance' => 'harness_test_bps_is_capped_at_upper_speed_tolerance',
+    'bps_state_reads_run_metadata' => 'harness_test_bps_state_reads_run_metadata',
+    'tick_holds_on_bps_concurrency_mismatch' => 'harness_test_tick_holds_on_bps_concurrency_mismatch',
     'probe_score_uses_recent_window_median' => 'harness_test_probe_score_uses_recent_window_median',
     'settle_counter_decrements_and_blocks_bps_evaluation' => 'harness_test_settle_counter_decrements_and_blocks_bps_evaluation',
     'settle_counter_allows_bps_evaluation_when_zero' => 'harness_test_settle_counter_allows_bps_evaluation_when_zero',
