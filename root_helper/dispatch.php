@@ -144,6 +144,13 @@ function dispatchRootHelperAction(string $action, array $request, array $modules
             return serviceRestart(rootHelperValidateModule($request['module'] ?? null, $modules));
         case 'system_reboot':
             return systemReboot();
+        case 'system_health_log':
+            return logSystemHealthSnapshot(
+                $modules,
+                isset($request['event']) && is_string($request['event']) && trim($request['event']) !== ''
+                    ? trim($request['event'])
+                    : 'timer_tick'
+            );
         case 'system_update_run':
             return runSystemUpdate(isset($request['branch']) && is_string($request['branch']) ? $request['branch'] : null);
         case 'webui_reset_defaults':
@@ -174,10 +181,29 @@ function dispatchRootHelperAction(string $action, array $request, array $modules
             return setWifiApName($request['ssid'] ?? null);
         case 'distress_autotune_get':
             return getDistressAutotuneStatus();
+        case 'distress_config_get':
+            return getDistressConfigStatus();
         case 'distress_autotune_set':
             return setDistressAutotuneMode($request['enabled'] ?? null, $request['concurrency'] ?? null);
+        case 'distress_upload_cap_measure':
+            return measureDistressUploadCapManually();
+        case 'distress_settings_set':
+            $execStart = $request['execStart'] ?? null;
+            $params = $request['params'] ?? null;
+            if (!is_array($params) && (!is_string($execStart) || trim($execStart) === '')) {
+                fail('invalid_execstart');
+            }
+            return saveDistressSettings(
+                is_string($execStart) ? trim($execStart) : null,
+                $request['enabled'] ?? null,
+                $request['concurrency'] ?? null,
+                is_array($params) ? $params : null,
+                $request['manualConcurrency'] ?? null
+            );
         case 'distress_autotune_tick':
             return distressAutotuneTick($request['loadAverage'] ?? null, $request['ramFreePercent'] ?? null);
+        case 'distress_autotune_safety_tick':
+            return distressAutotuneSafetyTick($request['loadAverage'] ?? null, $request['ramFreePercent'] ?? null);
         case 'service_logs':
             $lines = (int)($request['lines'] ?? 80);
             $module = rootHelperValidateModule($request['module'] ?? null, $modules);

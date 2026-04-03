@@ -10,6 +10,7 @@ const TRAFFIC_LIMIT_STATE_FILE = '/tmp/itarmybox-traffic-limit.json';
 const ROOT_HELPER_WEBUI_DIR = '/var/www/html/itarmybox-webui';
 const ROOT_HELPER_VAR_DIR = ROOT_HELPER_WEBUI_DIR . '/var';
 const ROOT_HELPER_STATE_DIR = ROOT_HELPER_VAR_DIR . '/state';
+const ROOT_HELPER_LOG_DIR = ROOT_HELPER_VAR_DIR . '/log';
 const ROOT_HELPER_SCRIPT_PATH = ROOT_HELPER_WEBUI_DIR . '/root_helper.php';
 const WIFI_TXPOWER_MIN_CENTIDBM = 100;
 const WIFI_TXPOWER_MAX_CENTIDBM = 3100;
@@ -126,7 +127,18 @@ function migrateLegacyFileIfNeeded(string $legacyPath, string $targetPath): bool
 
 function ensureWebuiVarLayout(): bool
 {
-    return ensureDirectoryExists(ROOT_HELPER_STATE_DIR);
+    return ensureDirectoryExists(ROOT_HELPER_STATE_DIR)
+        && ensureDirectoryExists(ROOT_HELPER_LOG_DIR);
+}
+
+function writeDebugLogLine(string $filePath, string $message): void
+{
+    if (!ensureParentDirectoryExists($filePath)) {
+        return;
+    }
+
+    $timestamp = date('Y-m-d H:i:s');
+    @file_put_contents($filePath, '[' . $timestamp . '] ' . $message . "\n", FILE_APPEND);
 }
 
 function repairRootHelperAccess(): bool
@@ -484,21 +496,36 @@ function switchExclusiveModuleState(array $modules, ?string $selected): array
     foreach ($modules as $module) {
         $service = escapeshellarg($module . '.service');
         if ($selected === null || $module !== $selected) {
-            runCommand("systemctl stop $service", $code);
-            if ($code === 0 && !waitForServiceInactive($module)) {
+            runCommand("systemctl stop $service", $stopCode);
+            if ($stopCode !== 0) {
+                return ['ok' => false, 'error' => 'service_switch_failed'];
+            }
+            if (!waitForServiceInactive($module)) {
                 return ['ok' => false, 'error' => 'service_stop_verification_failed'];
             }
-        }
-        if ($code !== 0) {
-            return ['ok' => false, 'error' => 'service_switch_failed'];
         }
     }
 
     if ($selected !== null) {
+        $distressAutotuneEnabledForStart = false;
+        $distressHasUploadCapMeasurement = true;
+        if ($selected === 'distress') {
+            $distressAutotuneState = readDistressAutotuneState();
+            $distressAutotuneEnabledForStart = (($distressAutotuneState['enabled'] ?? false) === true);
+            $distressHasUploadCapMeasurement = hasDistressUploadCapMeasurement($distressAutotuneState);
+        }
+        if ($selected === 'distress' && $distressAutotuneEnabledForStart && !$distressHasUploadCapMeasurement) {
+            return ['ok' => false, 'error' => 'distress_upload_cap_required_for_auto'];
+        }
         $selectedService = escapeshellarg($selected . '.service');
         runCommand("systemctl start $selectedService", $code);
         if ($code !== 0) {
             return ['ok' => false, 'error' => 'service_switch_failed'];
+        }
+        $startAttempts = $selected === 'distress' ? 180 : 25;
+        $startSleepMicroseconds = $selected === 'distress' ? 500000 : 200000;
+        if (!waitForServiceActive($selected, $startAttempts, $startSleepMicroseconds)) {
+            return ['ok' => false, 'error' => 'service_start_verification_failed'];
         }
     }
 
@@ -656,6 +683,18 @@ function serviceIsActive(string $module): bool
     return $code === 0;
 }
 
+function getServiceMainPid(string $module): ?int
+{
+    $service = escapeshellarg($module . '.service');
+    $pidRaw = trim(runCommand("systemctl show -p MainPID --value $service", $code));
+    if ($code !== 0 || preg_match('/^\d+$/', $pidRaw) !== 1) {
+        return null;
+    }
+
+    $pid = (int)$pidRaw;
+    return $pid > 0 ? $pid : null;
+}
+
 function waitForServiceInactive(string $module, int $attempts = 25, int $sleepMicroseconds = 200000): bool
 {
     for ($attempt = 0; $attempt < $attempts; $attempt++) {
@@ -666,6 +705,47 @@ function waitForServiceInactive(string $module, int $attempts = 25, int $sleepMi
     }
 
     return !serviceIsActive($module);
+}
+
+function waitForServiceActive(string $module, int $attempts = 25, int $sleepMicroseconds = 200000): bool
+{
+    for ($attempt = 0; $attempt < $attempts; $attempt++) {
+        if (serviceIsActive($module)) {
+            return true;
+        }
+        usleep($sleepMicroseconds);
+    }
+
+    return serviceIsActive($module);
+}
+
+function verifyServiceExecStartOptionValue(string $module, string $option, string $expectedValue): bool
+{
+    $pid = getServiceMainPid($module);
+    if ($pid === null || $pid <= 0) {
+        return false;
+    }
+
+    $cmdlineRaw = @file_get_contents('/proc/' . $pid . '/cmdline');
+    if (!is_string($cmdlineRaw) || $cmdlineRaw === '') {
+        return false;
+    }
+
+    $tokens = preg_split('/\0+/', rtrim($cmdlineRaw, "\0"));
+    if (!is_array($tokens) || $tokens === []) {
+        return false;
+    }
+
+    foreach ($tokens as $idx => $token) {
+        if ($token !== '--' . $option) {
+            continue;
+        }
+
+        $next = $tokens[$idx + 1] ?? null;
+        return is_string($next) && trim($next) === $expectedValue;
+    }
+
+    return false;
 }
 
 function getActiveModules(array $modules): array
@@ -859,6 +939,11 @@ function serviceRestart(string $module): array
     if (!serviceIsActive($module)) {
         return ['ok' => true, 'restarted' => false];
     }
+
+    $previousPid = getServiceMainPid($module);
+    $expectedExecStart = readServiceExecStart($module);
+    $expectedConcurrency = $module === 'distress' ? getExecStartOptionValue((string)$expectedExecStart, 'concurrency') : null;
+
     runCommand('systemctl daemon-reload', $reloadCode);
     if ($reloadCode !== 0) {
         return ['ok' => false, 'error' => 'daemon_reload_failed'];
@@ -868,7 +953,38 @@ function serviceRestart(string $module): array
     if ($restartCode !== 0) {
         return ['ok' => false, 'error' => 'service_restart_failed'];
     }
-    return ['ok' => true, 'restarted' => true];
+
+    if (!waitForServiceActive($module)) {
+        return ['ok' => false, 'error' => 'service_restart_activation_failed'];
+    }
+
+    $currentPid = getServiceMainPid($module);
+    if ($previousPid !== null && $currentPid !== null && $currentPid === $previousPid) {
+        return [
+            'ok' => false,
+            'error' => 'service_restart_pid_unchanged',
+            'previousPid' => $previousPid,
+            'currentPid' => $currentPid,
+        ];
+    }
+
+    if ($module === 'distress' && is_string($expectedConcurrency) && $expectedConcurrency !== '') {
+        if (!verifyServiceExecStartOptionValue($module, 'concurrency', $expectedConcurrency)) {
+            return [
+                'ok' => false,
+                'error' => 'service_restart_concurrency_mismatch',
+                'expectedConcurrency' => $expectedConcurrency,
+                'currentPid' => $currentPid,
+            ];
+        }
+    }
+
+    return [
+        'ok' => true,
+        'restarted' => true,
+        'previousPid' => $previousPid,
+        'currentPid' => $currentPid,
+    ];
 }
 
 function statusSnapshot(array $modules, int $lines): array
@@ -1002,6 +1118,9 @@ function getX100Config(): ?string
 function setX100Config(string $content): bool
 {
     $envFile = '/opt/itarmy/x100-for-docker/put-your-ovpn-files-here/x100-config.txt';
+    if (!ensureParentDirectoryExists($envFile)) {
+        return false;
+    }
     $written = @file_put_contents($envFile, $content);
     return $written !== false;
 }

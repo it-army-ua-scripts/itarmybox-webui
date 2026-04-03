@@ -800,6 +800,67 @@ h1 {
     background: #1a252f;
 }
 
+.distress-form-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.distress-form-action {
+    margin: 0;
+}
+
+.distress-autotune-panel {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(167, 188, 211, 0.42);
+    background: linear-gradient(180deg, rgba(245, 249, 253, 0.96) 0%, rgba(237, 244, 250, 0.98) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    text-align: left;
+}
+
+.distress-autotune-line {
+    text-align: left;
+    line-height: 1.45;
+}
+
+.menu a.distress-start-link.is-ready {
+    background: linear-gradient(180deg, #16a34a 0%, #15803d 100%);
+    border-color: rgba(21, 128, 61, 0.42);
+    box-shadow: 0 14px 28px rgba(21, 128, 61, 0.22);
+}
+
+.menu a.distress-start-link.is-ready:hover {
+    background: linear-gradient(180deg, #18b350 0%, #166534 100%);
+}
+
+.menu a.distress-start-link.is-blocked {
+    background: linear-gradient(180deg, #fca5a5 0%, #ef4444 100%);
+    border-color: rgba(220, 38, 38, 0.34);
+    color: #ffffff;
+    box-shadow: 0 14px 28px rgba(220, 38, 38, 0.18);
+    cursor: not-allowed;
+}
+
+.menu a.distress-start-link.is-blocked:hover {
+    background: linear-gradient(180deg, #fca5a5 0%, #ef4444 100%);
+    transform: none;
+}
+
+.distress-start-gate-hint.is-ready {
+    color: #166534;
+    font-weight: 700;
+}
+
+.distress-start-gate-hint.is-blocked {
+    color: #b91c1c;
+    font-weight: 700;
+}
+
 .branch-switch-actions {
     display: flex;
     flex-direction: column;
@@ -1105,6 +1166,68 @@ h1 {
 
 .status-page .menu {
     margin-top: 25px;
+    margin-bottom: 0;
+}
+
+.distress-measure-modal-card {
+    width: min(100%, 520px);
+    max-width: calc(100vw - 24px);
+    height: auto;
+    min-height: 0;
+}
+
+.distress-measure-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    text-align: center;
+    padding: 4px 6px 8px;
+}
+
+.distress-measure-modal-text {
+    margin: 0;
+    color: #4d6478;
+    line-height: 1.5;
+}
+
+.distress-measure-modal-detail {
+    font-size: 0.93rem;
+}
+
+.distress-measure-progress-shell {
+    width: 100%;
+    height: 14px;
+    overflow: hidden;
+    border-radius: 999px;
+    border: 1px solid rgba(151, 175, 204, 0.45);
+    background: linear-gradient(180deg, #eef4fb 0%, #dde8f3 100%);
+    box-shadow: inset 0 2px 4px rgba(44, 62, 80, 0.08);
+}
+
+.distress-measure-progress-bar {
+    height: 100%;
+    width: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #3b82f6 0%, #1d4ed8 100%);
+    box-shadow: 0 6px 16px rgba(29, 78, 216, 0.22);
+    transition: width 0.28s ease, background 0.22s ease;
+}
+
+.distress-measure-progress-bar.is-success {
+    background: linear-gradient(90deg, #16a34a 0%, #15803d 100%);
+}
+
+.distress-measure-progress-bar.is-failed {
+    background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+}
+
+.distress-measure-progress-percent {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #20364a;
+}
+
+.distress-measure-result {
     margin-bottom: 0;
 }
 
@@ -1502,10 +1625,16 @@ html[data-theme="dark"] .power-status,
 html[data-theme="dark"] .schedule-limit-hint,
 html[data-theme="dark"] .autostart-link-body,
 html[data-theme="dark"] .copy-bot-hint,
+html[data-theme="dark"] .modal-scroll-box,
 html[data-theme="dark"] .modal-card p,
 html[data-theme="dark"] .form-group label,
 html[data-theme="dark"] .power-scale {
     color: #9fb2c7;
+}
+
+html[data-theme="dark"] .modal-scroll-box {
+    background: rgba(18, 29, 42, 0.92);
+    border-color: rgba(100, 122, 148, 0.3);
 }
 
 html[data-theme="dark"] .header-stat-label {
@@ -1714,10 +1843,61 @@ html[data-theme="dark"] .status-log-modal-close:hover {
     background: linear-gradient(180deg, #243549 0%, #192534 100%);
 }
 
+html[data-theme="dark"] .distress-measure-modal-text {
+    color: #b9c9da;
+}
+
+html[data-theme="dark"] .distress-measure-progress-shell {
+    border-color: rgba(100, 122, 148, 0.34);
+    background: linear-gradient(180deg, #14202d 0%, #101923 100%);
+    box-shadow: inset 0 2px 6px rgba(2, 8, 23, 0.24);
+}
+
+html[data-theme="dark"] .distress-measure-progress-percent {
+    color: #e5edf7;
+}
+
 html[data-theme="dark"] .copy-bot-btn {
     background: linear-gradient(180deg, #16304c 0%, #11253a 100%);
     border-color: rgba(96, 165, 250, 0.34);
     color: #bfdbfe;
+}
+
+html[data-theme="dark"] .menu a.distress-start-link.is-ready {
+    background: linear-gradient(180deg, #1e9f53 0%, #166534 100%);
+    border-color: rgba(74, 222, 128, 0.3);
+    box-shadow: 0 14px 28px rgba(21, 128, 61, 0.28);
+}
+
+html[data-theme="dark"] .menu a.distress-start-link.is-ready:hover {
+    background: linear-gradient(180deg, #23b35d 0%, #1a7f46 100%);
+}
+
+html[data-theme="dark"] .menu a.distress-start-link.is-blocked {
+    background: linear-gradient(180deg, #7f1d1d 0%, #b91c1c 100%);
+    border-color: rgba(248, 113, 113, 0.28);
+    color: #fee2e2;
+    box-shadow: 0 14px 28px rgba(127, 29, 29, 0.3);
+}
+
+html[data-theme="dark"] .distress-autotune-panel {
+    border-color: rgba(100, 122, 148, 0.3);
+    background: linear-gradient(180deg, rgba(24, 34, 49, 0.98) 0%, rgba(16, 24, 36, 0.98) 100%);
+    box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.06);
+}
+
+html[data-theme="dark"] .distress-start-gate-hint.is-ready {
+    color: #86efac;
+}
+
+html[data-theme="dark"] .distress-start-gate-hint.is-blocked {
+    color: #fca5a5;
+}
+
+@media (min-width: 640px) {
+    .distress-form-actions {
+        grid-template-columns: 1fr 1fr;
+    }
 }
 
 html[data-theme="dark"] .copy-bot-btn:hover {
@@ -1880,6 +2060,20 @@ html[data-theme="dark"] .copy-bot-btn.copied {
     color: #44576b;
     font-size: 1.12rem;
     line-height: 1.65;
+}
+
+.modal-scroll-box {
+    margin-top: 10px;
+    max-height: min(52vh, 360px);
+    overflow-y: auto;
+    padding: 14px 16px;
+    border-radius: 18px;
+    background: rgba(239, 244, 249, 0.9);
+    border: 1px solid rgba(151, 175, 204, 0.35);
+    color: #44576b;
+    font-size: 1.04rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
 }
 
 .copy-bot-row {

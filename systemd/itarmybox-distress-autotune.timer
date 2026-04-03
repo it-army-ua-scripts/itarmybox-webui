@@ -3,7 +3,7 @@ Description=Run IT Army Box Distress autotune periodically
 
 [Timer]
 OnBootSec=45s
-OnUnitActiveSec=300s
+OnUnitActiveSec=360s
 Unit=itarmybox-distress-autotune.service
 Persistent=true
 

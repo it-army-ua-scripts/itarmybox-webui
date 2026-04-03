@@ -1,14 +1,25 @@
 <?php
 
-require_once __DIR__ . '/root_helper_client.php';
+if (!function_exists('root_helper_request')) {
+    require_once __DIR__ . '/root_helper_client.php';
+}
 require_once __DIR__ . '/tool_helpers.php';
 
 function render_module_action_form(string $path, string $daemonName, string $label): string
 {
-    return '<div class="menu"><form method="post" action="' . htmlspecialchars(url_with_lang($path), ENT_QUOTES, 'UTF-8') . '">'
+    $actionUrl = url_with_lang($path . '?daemon=' . rawurlencode($daemonName) . '&source=tool_action');
+    return '<div class="menu"><form method="post" action="' . htmlspecialchars($actionUrl, ENT_QUOTES, 'UTF-8') . '">'
         . '<input type="hidden" name="daemon" value="' . htmlspecialchars($daemonName, ENT_QUOTES, 'UTF-8') . '">'
         . '<button type="submit">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</button>'
         . '</form></div>';
+}
+
+function render_module_action_link(string $path, string $daemonName, string $label, string $source = 'tool_action'): string
+{
+    $href = url_with_lang($path . '?daemon=' . rawurlencode($daemonName) . '&source=' . rawurlencode($source));
+    return '<div class="menu"><a href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '">'
+        . htmlspecialchars($label, ENT_QUOTES, 'UTF-8')
+        . '</a></div>';
 }
 
 function build_tool_url(string $daemonName, array $params = []): string
@@ -24,6 +35,18 @@ function tool_allowed_flash_keys(): array
         'settings_saved_and_restarted',
         'settings_saved_restart_failed',
         'settings_not_saved',
+        'distress_upload_cap_measure_success',
+        'distress_upload_cap_measure_failed',
+        'distress_upload_cap_required_for_auto',
+        'distress_autotune_timer_install_failed',
+        'distress_autotune_timer_state_sync_failed',
+        'distress_autotune_lock_failed',
+        'distress_concurrency_write_failed',
+        'distress_autotune_state_write_failed',
+        'service_restart_failed',
+        'service_restart_activation_failed',
+        'service_restart_pid_unchanged',
+        'service_restart_concurrency_mismatch',
         'invalid_distress_settings',
         'invalid_mhddos_settings',
         'invalid_use_my_ip_digits',
@@ -48,6 +71,19 @@ function tool_service_info(array $daemonNames, string $daemonName): array
 
 function tool_handle_post(array $config, string $daemonName, array $post, bool $wasActiveBeforeSave): array
 {
+    if ($daemonName === 'distress' && (($post['distress-action'] ?? '') === 'measure-upload-cap')) {
+        $measureResponse = measureDistressUploadCap();
+        return [
+            'flash' => (($measureResponse['ok'] ?? false) === true) ? 'distress_upload_cap_measure_success' : 'distress_upload_cap_measure_failed',
+            'flashClass' => (($measureResponse['ok'] ?? false) === true) ? 'active' : 'inactive',
+            'flashSecondary' => (($measureResponse['ok'] ?? false) === true)
+                ? ''
+                : ((string)($measureResponse['error'] ?? '') === 'distress_upload_cap_measure_failed'
+                    ? ''
+                    : (string)($measureResponse['error'] ?? '')),
+        ];
+    }
+
     $saveOk = false;
     $saveError = '';
     $restartError = '';
@@ -59,7 +95,7 @@ function tool_handle_post(array $config, string $daemonName, array $post, bool $
         $allowedParamKeys = array_flip($config['adjustableParams'][$daemonName] ?? []);
         $paramsToSave = array_intersect_key($post, $allowedParamKeys);
         if ($daemonName === 'distress') {
-            $paramsToSave['distress-concurrency-mode'] = $post['distress-concurrency-mode'] ?? 'auto';
+            $paramsToSave['distress-concurrency-mode'] = $post['distress-concurrency-mode'] ?? 'manual';
             $distressValidation = normalizeAndValidateDistressPostParams($paramsToSave);
             if (($distressValidation['ok'] ?? false) !== true) {
                 $saveError = (string)($distressValidation['error'] ?? 'invalid_distress_settings');
@@ -75,19 +111,27 @@ function tool_handle_post(array $config, string $daemonName, array $post, bool $
                 $paramsToSave = (array)$mhddosValidation['params'];
             }
         }
-        $currentConfigString = getConfigStringFromServiceFile($daemonName);
-        if ($saveError === '' && $currentConfigString !== '') {
-            $updatedConfigParams = updateServiceConfigParams($currentConfigString, $paramsToSave, $daemonName);
-            $saveOk = updateServiceFile($daemonName, $updatedConfigParams);
-            if ($saveOk && $daemonName === 'distress') {
-                $saveOk = saveDistressAutotuneSettings(
+        if ($daemonName === 'distress') {
+            if ($saveError === '') {
+                $saveResponse = saveDistressSettings(
+                    $paramsToSave,
                     (($distressValidation['autotuneEnabled'] ?? false) === true),
-                    (int)($distressValidation['concurrencyValue'] ?? 0)
+                    (int)($distressValidation['effectiveConcurrencyValue'] ?? 0),
+                    (int)($distressValidation['manualConcurrencyValue'] ?? 0)
                 );
+                $saveOk = (($saveResponse['ok'] ?? false) === true);
                 if (!$saveOk && $saveError === '') {
-                    updateServiceExecStartString($daemonName, $currentConfigString);
-                    $saveError = 'settings_not_saved';
+                    $saveResponseError = (string)($saveResponse['error'] ?? '');
+                    $saveError = in_array($saveResponseError, tool_allowed_flash_keys(), true)
+                        ? $saveResponseError
+                        : 'settings_not_saved';
                 }
+            }
+        } else {
+            $currentConfigString = getConfigStringFromServiceFile($daemonName);
+            if ($saveError === '' && $currentConfigString !== '') {
+                $updatedConfigParams = updateServiceConfigParams($currentConfigString, $paramsToSave, $daemonName);
+                $saveOk = updateServiceFile($daemonName, $updatedConfigParams);
             }
         }
     }
@@ -99,7 +143,10 @@ function tool_handle_post(array $config, string $daemonName, array $post, bool $
             'module' => $daemonName,
         ]);
         if (($restartResponse['ok'] ?? false) !== true) {
-            $restartError = 'settings_saved_restart_failed';
+            $restartResponseError = (string)($restartResponse['error'] ?? '');
+            $restartError = in_array($restartResponseError, tool_allowed_flash_keys(), true)
+                ? $restartResponseError
+                : 'settings_saved_restart_failed';
         }
     }
 
@@ -128,6 +175,15 @@ function tool_current_adjustable_params(array $config, string $daemonName): arra
 {
     if ($daemonName === 'x100') {
         return getX100ConfigValues();
+    }
+
+    if ($daemonName === 'distress') {
+        $savedConfig = getDistressSavedConfig();
+        if (($savedConfig['ok'] ?? false) === true) {
+            $params = is_array($savedConfig['params'] ?? null) ? $savedConfig['params'] : [];
+            $params['concurrency'] = (string)((int)($savedConfig['manualConcurrency'] ?? DISTRESS_MANUAL_DEFAULT_CONCURRENCY));
+            return $params;
+        }
     }
 
     return getCurrentAdjustableParams(

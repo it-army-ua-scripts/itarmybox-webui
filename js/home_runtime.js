@@ -42,11 +42,19 @@
         copyBotNameEl: document.getElementById("copy-bot-name"),
         copyBotHintEl: document.getElementById("copy-bot-hint"),
         userIdModalSkipEl: document.getElementById("user-id-modal-skip"),
-        userIdModalSkipLabelEl: document.getElementById("user-id-modal-skip-label")
+        userIdModalSkipLabelEl: document.getElementById("user-id-modal-skip-label"),
+        teamNoticeModalEl: document.getElementById("team-notice-modal"),
+        teamNoticeModalBadgeEl: document.getElementById("team-notice-modal-badge"),
+        teamNoticeModalTitleEl: document.getElementById("team-notice-modal-title"),
+        teamNoticeModalTextEl: document.getElementById("team-notice-modal-text"),
+        teamNoticeModalCloseEl: document.getElementById("team-notice-modal-close"),
+        teamNoticeModalSkipEl: document.getElementById("team-notice-modal-skip"),
+        teamNoticeModalSkipLabelEl: document.getElementById("team-notice-modal-skip-label")
     };
     app.keys = {
         userIdModalPreferenceKey: "itarmybox-hide-userid-modal",
         userIdModalSnoozeKey: "itarmybox-userid-snooze-until",
+        teamNoticeModalSnoozeKey: "itarmybox-team-notice-snooze-until",
         appLangStorageKey: "itarmybox-lang",
         trafficDesiredKey: "itarmybox-traffic-desired"
     };
@@ -69,7 +77,8 @@
         powerAppliedSeq: 0,
         powerCommitStamp: 0,
         powerCommitValue: null,
-        powerAbortController: null
+        powerAbortController: null,
+        userIdModalDeferred: false
     };
 
     app.getText = function getText() {
@@ -196,6 +205,11 @@
         els.userIdModalLinkEl.textContent = text.openUserIdSettings;
         els.copyBotHintEl.textContent = text.copyBotHint;
         els.userIdModalSkipLabelEl.textContent = text.skipUserIdModal;
+        els.teamNoticeModalBadgeEl.textContent = text.teamNoticeBadge;
+        els.teamNoticeModalTitleEl.textContent = text.teamNoticeTitle;
+        els.teamNoticeModalTextEl.textContent = text.teamNoticeText;
+        els.teamNoticeModalCloseEl.textContent = text.closeModal;
+        els.teamNoticeModalSkipLabelEl.textContent = text.skipTeamNoticeModal;
         app.shared.setBooleanClass(els.langEnBtn, "active", state.activeLang === "en");
         app.shared.setBooleanClass(els.langUkBtn, "active", state.activeLang === "uk");
         app.updateLinks(state.activeLang);

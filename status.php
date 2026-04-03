@@ -73,7 +73,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     <?php
     $messageKey = $_GET['msg'] ?? '';
     $messageOk = ($_GET['ok'] ?? '') === '1';
-    $allowedMessages = ['start_requested', 'start_failed', 'stop_requested', 'stop_failed'];
+    $allowedMessages = ['start_requested', 'start_failed', 'stop_requested', 'stop_failed', 'distress_upload_cap_required_for_auto'];
     if (is_string($messageKey) && in_array($messageKey, $allowedMessages, true)) {
         $messageClass = $messageOk ? 'status active' : 'status inactive';
         echo '<div class="form-message ' . htmlspecialchars($messageClass, ENT_QUOTES, 'UTF-8') . '">'

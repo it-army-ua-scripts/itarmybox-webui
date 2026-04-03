@@ -1,0 +1,11 @@
+[Unit]
+Description=Run IT Army Box system health logging every 15 seconds
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=15s
+Unit=itarmybox-system-health.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

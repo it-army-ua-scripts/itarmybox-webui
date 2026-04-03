@@ -5,6 +5,127 @@ require_once 'lib/footer.php';
 $config = require 'config/config.php';
 
 $daemonName = $_GET['daemon'] ?? '';
+$isAjaxRequest = (($_GET['ajax'] ?? '') === '1');
+
+$allowedFlashKeys = [];
+$info = [];
+$wasActiveBeforeSave = false;
+$currentAdjustableParams = [];
+
+if (in_array($daemonName, $config['daemonNames'], true)) {
+    $allowedFlashKeys = tool_allowed_flash_keys();
+    $info = tool_service_info($config['daemonNames'], $daemonName);
+    $wasActiveBeforeSave = (($info['ok'] ?? false) === true) ? (bool)($info['active'] ?? false) : false;
+
+    if ($isAjaxRequest && $daemonName === 'distress' && (($_GET['measureStatus'] ?? '') === '1')) {
+        $measureStatus = getDistressAutotuneSettings();
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode([
+            'ok' => (($measureStatus['ok'] ?? false) === true),
+            'uploadCapStatus' => (string)($measureStatus['uploadCapStatus'] ?? 'idle'),
+            'uploadCapProgressPercent' => isset($measureStatus['uploadCapProgressPercent']) && is_numeric($measureStatus['uploadCapProgressPercent'])
+                ? max(0, min(100, (int)$measureStatus['uploadCapProgressPercent']))
+                : 0,
+            'uploadCapProgressAttempt' => isset($measureStatus['uploadCapProgressAttempt']) && is_numeric($measureStatus['uploadCapProgressAttempt'])
+                ? (int)$measureStatus['uploadCapProgressAttempt']
+                : null,
+            'uploadCapProgressTotal' => isset($measureStatus['uploadCapProgressTotal']) && is_numeric($measureStatus['uploadCapProgressTotal'])
+                ? (int)$measureStatus['uploadCapProgressTotal']
+                : null,
+            'uploadCapProgressPhase' => isset($measureStatus['uploadCapProgressPhase']) && is_string($measureStatus['uploadCapProgressPhase'])
+                ? $measureStatus['uploadCapProgressPhase']
+                : 'idle',
+            'uploadCapMeasureCooldownRemaining' => isset($measureStatus['uploadCapMeasureCooldownRemaining']) && is_numeric($measureStatus['uploadCapMeasureCooldownRemaining'])
+                ? max(0, (int)$measureStatus['uploadCapMeasureCooldownRemaining'])
+                : 0,
+            'uploadCapBlockedByActiveModules' => isset($measureStatus['uploadCapBlockedByActiveModules']) && is_array($measureStatus['uploadCapBlockedByActiveModules'])
+                ? array_values(array_filter($measureStatus['uploadCapBlockedByActiveModules'], 'is_string'))
+                : [],
+            'uploadCapMbps' => isset($measureStatus['uploadCapMbps']) && is_numeric($measureStatus['uploadCapMbps'])
+                ? (float)$measureStatus['uploadCapMbps']
+                : null,
+            'uploadCapMeasuredAt' => isset($measureStatus['uploadCapMeasuredAt']) && is_numeric($measureStatus['uploadCapMeasuredAt'])
+                ? (int)$measureStatus['uploadCapMeasuredAt']
+                : null,
+            'uploadCapLastMethod' => isset($measureStatus['uploadCapLastMethod']) && is_string($measureStatus['uploadCapLastMethod'])
+                ? $measureStatus['uploadCapLastMethod']
+                : '',
+            'uploadCapLastError' => isset($measureStatus['uploadCapLastError']) && is_string($measureStatus['uploadCapLastError'])
+                ? trim($measureStatus['uploadCapLastError'])
+                : '',
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if (!empty($_POST)) {
+        if ($isAjaxRequest && $daemonName === 'distress' && (string)($_POST['distress-action'] ?? '') === 'measure-upload-cap') {
+            $measureResponse = measureDistressUploadCap();
+            $measureOk = (($measureResponse['ok'] ?? false) === true);
+            $flashKey = $measureOk ? 'distress_upload_cap_measure_success' : 'distress_upload_cap_measure_failed';
+            $secondaryKey = $measureOk
+                ? ''
+                : ((string)($measureResponse['error'] ?? '') === 'distress_upload_cap_measure_failed'
+                    ? ''
+                    : (string)($measureResponse['error'] ?? ''));
+            $flashText = $flashKey === 'distress_upload_cap_measure_failed'
+                ? match ((string)($measureResponse['error'] ?? '')) {
+                    'distress_upload_cap_measure_cooldown' => t('distress_upload_cap_measure_cooldown', [
+                        'seconds' => (string)max(0, (int)($measureResponse['retryAfterSeconds'] ?? 0)),
+                    ]),
+                    'distress_upload_cap_measure_requires_idle' => t('distress_upload_cap_measure_requires_idle'),
+                    default => t($flashKey),
+                }
+                : t($flashKey);
+            header('Content-Type: application/json; charset=UTF-8');
+            echo json_encode([
+                'ok' => $measureOk,
+                'flashKey' => $flashKey,
+                'flashText' => $flashText,
+                'flashClass' => $measureOk ? 'status active' : 'status inactive',
+                'secondaryKey' => $secondaryKey,
+                'secondaryText' => ($secondaryKey !== '' && in_array($secondaryKey, $allowedFlashKeys, true)) ? t($secondaryKey) : '',
+                'uploadCapStatus' => (string)($measureResponse['uploadCapStatus'] ?? 'idle'),
+                'uploadCapProgressPercent' => isset($measureResponse['uploadCapProgressPercent']) && is_numeric($measureResponse['uploadCapProgressPercent'])
+                    ? max(0, min(100, (int)$measureResponse['uploadCapProgressPercent']))
+                    : 0,
+                'uploadCapProgressAttempt' => isset($measureResponse['uploadCapProgressAttempt']) && is_numeric($measureResponse['uploadCapProgressAttempt'])
+                    ? (int)$measureResponse['uploadCapProgressAttempt']
+                    : null,
+                'uploadCapProgressTotal' => isset($measureResponse['uploadCapProgressTotal']) && is_numeric($measureResponse['uploadCapProgressTotal'])
+                    ? (int)$measureResponse['uploadCapProgressTotal']
+                    : null,
+                'uploadCapProgressPhase' => isset($measureResponse['uploadCapProgressPhase']) && is_string($measureResponse['uploadCapProgressPhase'])
+                    ? $measureResponse['uploadCapProgressPhase']
+                    : 'idle',
+                'uploadCapMeasureCooldownRemaining' => isset($measureResponse['uploadCapMeasureCooldownRemaining']) && is_numeric($measureResponse['uploadCapMeasureCooldownRemaining'])
+                    ? max(0, (int)$measureResponse['uploadCapMeasureCooldownRemaining'])
+                    : 0,
+                'uploadCapBlockedByActiveModules' => isset($measureResponse['uploadCapBlockedByActiveModules']) && is_array($measureResponse['uploadCapBlockedByActiveModules'])
+                    ? array_values(array_filter($measureResponse['uploadCapBlockedByActiveModules'], 'is_string'))
+                    : [],
+                'uploadCapMbps' => isset($measureResponse['uploadCapMbps']) && is_numeric($measureResponse['uploadCapMbps'])
+                    ? (float)$measureResponse['uploadCapMbps']
+                    : null,
+                'uploadCapMeasuredAt' => isset($measureResponse['uploadCapMeasuredAt']) && is_numeric($measureResponse['uploadCapMeasuredAt'])
+                    ? (int)$measureResponse['uploadCapMeasuredAt']
+                    : null,
+                'uploadCapLastMethod' => isset($measureResponse['uploadCapLastMethod']) && is_string($measureResponse['uploadCapLastMethod'])
+                    ? $measureResponse['uploadCapLastMethod']
+                    : '',
+                'uploadCapLastError' => isset($measureResponse['uploadCapLastError']) && is_string($measureResponse['uploadCapLastError'])
+                    ? trim($measureResponse['uploadCapLastError'])
+                    : '',
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
+
+        $redirectParams = tool_handle_post($config, $daemonName, $_POST, $wasActiveBeforeSave);
+        header('Location: ' . build_tool_url($daemonName, $redirectParams));
+        exit;
+    }
+
+    $currentAdjustableParams = tool_current_adjustable_params($config, $daemonName);
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?= htmlspecialchars(app_lang(), ENT_QUOTES, 'UTF-8') ?>">
@@ -22,15 +143,6 @@ $daemonName = $_GET['daemon'] ?? '';
     <div class="content">
         <?php
         if (in_array($daemonName, $config['daemonNames'], true)) {
-            $allowedFlashKeys = tool_allowed_flash_keys();
-            $info = tool_service_info($config['daemonNames'], $daemonName);
-            $wasActiveBeforeSave = (($info['ok'] ?? false) === true) ? (bool)($info['active'] ?? false) : false;
-            if (!empty($_POST)) {
-                $redirectParams = tool_handle_post($config, $daemonName, $_POST, $wasActiveBeforeSave);
-                header('Location: ' . build_tool_url($daemonName, $redirectParams));
-                exit;
-            }
-
             $flashKey = (string)($_GET['flash'] ?? '');
             $flashClass = ((string)($_GET['flashClass'] ?? '') === 'active') ? 'status active' : 'status inactive';
             $flashSecondaryKey = (string)($_GET['flashSecondary'] ?? '');
@@ -42,8 +154,15 @@ $daemonName = $_GET['daemon'] ?? '';
             if (in_array($flashSecondaryKey, $allowedFlashKeys, true)) {
                 echo '<div class="form-message status inactive">' . htmlspecialchars(t($flashSecondaryKey), ENT_QUOTES, 'UTF-8') . '</div>';
             }
-
-            $currentAdjustableParams = tool_current_adjustable_params($config, $daemonName);
+            $distressStartMode = 'manual';
+            $distressHasUploadCapMeasurement = false;
+            if ($daemonName === 'distress') {
+                $distressStartSettings = getDistressAutotuneSettings();
+                $distressStartMode = (($distressStartSettings['enabled'] ?? false) === true) ? 'auto' : 'manual';
+                $distressHasUploadCapMeasurement =
+                    isset($distressStartSettings['uploadCapMeasuredAt']) && is_numeric($distressStartSettings['uploadCapMeasuredAt']) && (int)$distressStartSettings['uploadCapMeasuredAt'] > 0
+                    && isset($distressStartSettings['uploadCapMbps']) && is_numeric($distressStartSettings['uploadCapMbps']) && (float)$distressStartSettings['uploadCapMbps'] > 0.0;
+            }
             ?>
             <h1><?= htmlspecialchars(t('settings_for', ['module' => $daemonName]), ENT_QUOTES, 'UTF-8') ?></h1>
             <h2><?= htmlspecialchars(t('status_label'), ENT_QUOTES, 'UTF-8') ?></h2>
@@ -54,7 +173,42 @@ $daemonName = $_GET['daemon'] ?? '';
                 echo render_module_action_form('/stop.php', $daemonName, t('stop'));
             } else {
                 echo htmlspecialchars(t('module_not_running', ['module' => $daemonName]), ENT_QUOTES, 'UTF-8');
-                echo render_module_action_form('/start.php', $daemonName, t('start'));
+                if ($daemonName === 'distress') {
+                    $startHref = url_with_lang('/start.php?daemon=' . rawurlencode($daemonName) . '&source=tool_action');
+                    $startLinkClasses = ['distress-start-link'];
+                    $startHintText = '';
+                    if ($distressStartMode === 'auto' && !$distressHasUploadCapMeasurement) {
+                        $startLinkClasses[] = 'is-blocked';
+                        $startHintText = t('distress_start_auto_blocked');
+                    } elseif ($distressStartMode === 'auto') {
+                        $startLinkClasses[] = 'is-ready';
+                        $startHintText = t('distress_start_auto_ready');
+                    } else {
+                        $startLinkClasses[] = 'is-manual';
+                    }
+
+                    echo '<div class="menu distress-start-menu"><a'
+                        . ' id="distress-start-link"'
+                        . ' class="' . htmlspecialchars(implode(' ', $startLinkClasses), ENT_QUOTES, 'UTF-8') . '"'
+                        . ' href="' . htmlspecialchars($startHref, ENT_QUOTES, 'UTF-8') . '"'
+                        . ' data-start-href="' . htmlspecialchars($startHref, ENT_QUOTES, 'UTF-8') . '"'
+                        . ' data-mode="' . htmlspecialchars($distressStartMode, ENT_QUOTES, 'UTF-8') . '"'
+                        . ' data-has-measurement="' . ($distressHasUploadCapMeasurement ? '1' : '0') . '"'
+                        . ' aria-disabled="' . (($distressStartMode === 'auto' && !$distressHasUploadCapMeasurement) ? 'true' : 'false') . '"'
+                        . '>'
+                        . htmlspecialchars(t('start'), ENT_QUOTES, 'UTF-8')
+                        . '</a></div>';
+                    echo '<div'
+                        . ' class="schedule-limit-hint distress-start-gate-hint'
+                        . (($distressStartMode === 'auto' && !$distressHasUploadCapMeasurement) ? ' is-blocked' : (($distressStartMode === 'auto') ? ' is-ready' : ''))
+                        . '" id="distress-start-gate-hint"'
+                        . ($startHintText === '' ? ' hidden' : '')
+                        . '>'
+                        . htmlspecialchars($startHintText, ENT_QUOTES, 'UTF-8')
+                        . '</div>';
+                } else {
+                    echo render_module_action_link('/start.php', $daemonName, t('start'));
+                }
             }
 
             $statusText = trim((string)($info['statusText'] ?? ''));
