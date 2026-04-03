@@ -11,6 +11,7 @@
         app.refreshMainStatusIndicator();
         app.refreshTrafficLimit();
         app.refreshSystemMonitor();
+        app.notifyTeamNotice();
         app.notifyIfUserIdMissing();
 
         window.setInterval(app.refreshMainStatusIndicator, 5000);
@@ -22,6 +23,14 @@
         if (typeof app.initPowerControls === "function") {
             app.initPowerControls();
         }
+        app.els.teamNoticeModalCloseEl.addEventListener("click", app.closeTeamNoticeModalFromAction);
+        app.els.teamNoticeModalCloseEl.addEventListener("pointerup", app.closeTeamNoticeModalFromAction);
+        app.els.teamNoticeModalCloseEl.addEventListener("touchend", app.closeTeamNoticeModalFromAction, { passive: false });
+        app.els.teamNoticeModalEl.addEventListener("click", (event) => {
+            if (event.target === app.els.teamNoticeModalEl) {
+                app.hideTeamNoticeModal();
+            }
+        });
         app.els.userIdModalCloseEl.addEventListener("click", app.closeUserIdModalFromAction);
         app.els.userIdModalCloseEl.addEventListener("pointerup", app.closeUserIdModalFromAction);
         app.els.userIdModalCloseEl.addEventListener("touchend", app.closeUserIdModalFromAction, { passive: false });
@@ -32,6 +41,10 @@
             }
         });
         document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && !app.els.teamNoticeModalEl.hidden) {
+                app.hideTeamNoticeModal();
+                return;
+            }
             if (event.key === "Escape" && !app.els.userIdModalEl.hidden) {
                 app.hideUserIdModal();
             }

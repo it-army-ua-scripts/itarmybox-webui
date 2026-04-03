@@ -84,10 +84,15 @@
             const snoozeUntil = app.getUserIdSnoozeUntil();
             const shouldSnooze = snoozeUntil > Date.now();
             if (data && data.ok === true && data.userIdConfigured === false && !app.getUserIdModalHiddenPreference() && !shouldSnooze) {
-                app.showUserIdModal();
+                if (typeof app.isAnyHomeModalOpen === "function" && app.isAnyHomeModalOpen()) {
+                    app.state.userIdModalDeferred = true;
+                } else {
+                    app.showUserIdModal();
+                }
             } else if (data && data.ok === true && data.userIdConfigured === true) {
                 app.setUserIdModalHiddenPreference(false);
                 app.clearUserIdSnooze();
+                app.state.userIdModalDeferred = false;
             }
         } catch (e) {
         }
