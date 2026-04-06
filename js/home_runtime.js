@@ -54,7 +54,7 @@
     app.keys = {
         userIdModalPreferenceKey: "itarmybox-hide-userid-modal",
         userIdModalSnoozeKey: "itarmybox-userid-snooze-until",
-        teamNoticeModalSnoozeKey: "itarmybox-team-notice-snooze-until",
+        teamNoticeModalSnoozeKey: "itarmybox-team-notice-snooze-until-2026-04-07",
         appLangStorageKey: "itarmybox-lang",
         trafficDesiredKey: "itarmybox-traffic-desired"
     };
